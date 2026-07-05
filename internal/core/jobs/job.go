@@ -15,30 +15,76 @@ import (
 	"time"
 )
 
-// Job is the subset of a job listing that the core logic reads. The full
-// persisted row (see ARCHITECTURE.md §2.3) is a superset of this; the pure
-// functions here only ever touch these fields.
+// Job is the canonical job-listing record — a faithful port of the persisted
+// job_listings row (see ARCHITECTURE.md §2.3 / internal/store/schema.sql). The pure
+// logic in this package only ever touches a subset (status, salary, the JD text,
+// the morale timestamps, and the geo/company signals); the remaining fields are
+// carried so the store, CLI, API and MCP layers share one model with no mapping.
 type Job struct {
-	ID    int64
-	Title string
+	ID      int64
+	Title   string
+	Company string
+	URL     string
+	Location string
 
 	Status  string // saved / waiting / applied / interview / offer / closed
-	Salary  string
-	Summary string // jd_summary
-	FullJD  string // jd_full
-	AISummary string // jd_ai_summary
+	Pinned  bool
+	Keep    bool
+	Notes   string
 
-	// Timestamps used by the morale clock. Any may be empty.
-	ExpiresAt      string // the expires_at grammar value (see parseExpiry)
-	DraftStatusAt  string
+	Salary    string
+	Skills    string // comma-separated
+	Summary   string // jd_summary
+	AISummary string // jd_ai_summary
+	FullJD    string // jd_full
+
+	DiscoverySource string // topcv/vietnamworks/joboko/careerlink/serpapi/linkedin/paste
+
+	// Scoring (top-level, mirrors the winning A/B model's row).
+	Score          float64
+	HasScore       bool // distinguishes score 0 from "not scored"
+	ScoreLetter    string
+	ScoreStatus    string // pending/scored/failed
+	ScoreReasoning string
+
+	// Apply pipeline.
+	ApplyMethod    string // email/platform
+	ApplyState     string // queued/filling/cooldown/failed/applied
+	ApplyNextAt    string
+	ApplyDetail    string
 	ApplyUpdatedAt string
+
+	// CV generation.
+	CVPath        string
+	CVStatus      string
+	CVVersion     int
+	CVGeneratedAt string
+
+	// Email draft.
+	DraftEmail    string
+	DraftStatus   string
+	DraftStatusAt string
+	DraftNotes    string
+	ContactEmail  string
+
+	// Timestamps / lifecycle.
+	ExpiresAt      string // the expires_at grammar value (see parseExpiry)
+	FollowupSentAt string
 	SavedAt        string
+	CreatedAt      string
+	UpdatedAt      string
+
+	// Per-platform recruiter-view status sync.
+	TopcvStatus string
+	VnwStatus   string
 
 	// Geo/company signals used by geoDealbreakers. Resolve async on pin.
-	CompanyGeoStatus  string  // "" / pending / ok / no_address / geocode_failed
-	CompanyDistanceKM float64 // meaningful only when CompanyGeoStatus == "ok"
-	HasDistance       bool    // distinguishes 0 km from "not set"
-	CompanyActiveDate string  // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
+	CompanyActiveDate   string  // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
+	CompanyDistanceKM   float64 // meaningful only when CompanyGeoStatus == "ok"
+	HasDistance         bool    // distinguishes 0 km from "not set"
+	CompanyGeoStatus    string  // "" / pending / ok / no_address / geocode_failed
+	CompanyMasothueURL  string
+	CompanyMasothueName string
 }
 
 // parseTime decodes the timestamp formats that appear across the DB: full
