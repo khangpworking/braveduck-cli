@@ -94,8 +94,9 @@ CREATE TABLE IF NOT EXISTS keywords (      -- crawler keyword lists, per source
   PRIMARY KEY (source, keyword, kind)
 );
 
-CREATE TABLE IF NOT EXISTS rating_config (  -- single-row config: default model + A/B set
+CREATE TABLE IF NOT EXISTS rating_config (  -- single-row A/B rater config
   id            INTEGER PRIMARY KEY CHECK (id = 1),
-  default_model TEXT,
-  ab_models     TEXT                        -- comma-separated model ids
+  ab_enabled    INTEGER NOT NULL DEFAULT 0, -- 0/1: run challengers or just the default
+  models        TEXT NOT NULL DEFAULT '',   -- comma-separated selected rater ids (1..3)
+  default_model TEXT NOT NULL DEFAULT ''     -- ∈ models; owns the board badge
 );
