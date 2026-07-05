@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Career Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Brand & Accent */
+      --primary: #181d26;
+      --primary-active: #0d1218;
+      
+      /* Surfaces */
+      --canvas: #ffffff;
+      --surface-soft: #f8fafc;
+      --surface-strong: #e0e2e6;
+      --surface-dark: #181d26;
+      --surface-dark-elevated: #1d1f25;
+      
+      /* Ink & Text */
+      --ink: #181d26;
+      --body: #333840;
+      --muted: #41454d;
+      --hairline: #dddddd;
+      --border-strong: #9297a0;
+      --on-primary: #ffffff;
+      --on-dark: #ffffff;
+      
+      /* Semantic & Links */
+      --link: #1b61c9;
+      --link-active: #1a3866;
+      --info: #254fad;
+      --info-border: #458fff;
+      --success: #006400;
+      --success-border: #39bf45;
+      
+      /* Signature Cards */
+      --signature-coral: #aa2d00;
+      --signature-forest: #0a2e0e;
+      --signature-cream: #f5e9d4;
+      --signature-peach: #fcab79;
+      --signature-mint: #a8d8c4;
+      --signature-yellow: #f4d35e;
+      --signature-mustard: #d9a441;
+      
+      /* Radius */
+      --radius-xs: 2px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 12px;
+      --radius-pill: 9999px;
+      --radius-full: 50%;
+      
+      /* Spacing */
+      --spacing-xxs: 4px;
+      --spacing-xs: 8px;
+      --spacing-sm: 12px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      --spacing-xxl: 48px;
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background-color: var(--canvas);
+      color: var(--body);
+      line-height: 1.4;
+      padding-bottom: 40px; /* Space for system log */
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background-color: var(--primary);
+      color: var(--on-primary);
+      border: none;
+      border-radius: var(--radius-lg);
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn-primary:hover { background-color: var(--primary-active); }
+    .btn-primary.btn-sm { padding: 8px 16px; font-size: 14px; }
+
+    .btn-secondary {
+      background-color: var(--canvas);
+      color: var(--ink);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-lg);
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover {
+      background-color: var(--surface-soft);
+      border-color: var(--border-strong);
+    }
+    .btn-secondary.btn-sm { padding: 8px 16px; font-size: 14px; }
+
+    .btn-text {
+      background: none;
+      border: none;
+      color: var(--link);
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .btn-text:hover { text-decoration: underline; }
+
+    .icon-btn-sm {
+      background: none;
+      border: none;
+      font-size: 14px;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: var(--radius-xs);
+    }
+    .icon-btn-sm:hover { background: var(--surface-soft); color: var(--ink); }
+
+    /* Top Nav */
+    .top-nav {
+      height: 64px;
+      background-color: var(--canvas);
+      color: var(--ink);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 var(--spacing-xxl);
+      border-bottom: 1px solid var(--hairline);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .nav-left { display: flex; align-items: center; gap: var(--spacing-xl); }
+    .nav-title { font-size: 20px; font-weight: 500; margin: 0; }
+    .stat-pills { display: flex; gap: var(--spacing-sm); }
+    .stat-pill {
+      font-size: 14px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+    }
+    .stat-pill strong { color: var(--ink); font-weight: 600; margin-left: 4px; }
+
+    /* Dashboard layout */
+    .widgets-row {
+      padding: var(--spacing-xl) var(--spacing-xxl);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-lg);
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .widget {
+      border-radius: var(--radius-md);
+      padding: var(--spacing-lg);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: var(--spacing-sm);
+    }
+    .cream-callout { background-color: var(--signature-cream); color: var(--ink); }
+    .soft-card { background-color: var(--surface-soft); border: 1px solid var(--hairline); }
+    
+    .morale-rate { font-size: 48px; font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; }
+    .morale-subline { font-size: 14px; color: var(--body); margin-bottom: var(--spacing-sm); }
+    .morale-message { font-size: 18px; font-weight: 500; }
+    
+    .widget-title { font-size: 18px; font-weight: 500; margin: 0; }
+    .chips { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); margin-top: var(--spacing-sm); }
+    .chip {
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chip.unhealthy { background: var(--surface-strong); color: var(--ink); border-color: transparent; }
+
+    /* Toolbar */
+    .toolbar {
+      padding: 0 var(--spacing-xxl) var(--spacing-md);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .filters { display: flex; gap: var(--spacing-md); }
+    .filter-cb { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .toolbar-actions { display: flex; gap: var(--spacing-sm); }
+
+    /* Board */
+    .board-container {
+      padding: 0 var(--spacing-xxl) var(--spacing-xl);
+      overflow-x: auto;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .board-container::-webkit-scrollbar { height: 8px; }
+    .board-container::-webkit-scrollbar-track { background: transparent; }
+    .board-container::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+    
+    .board {
+      display: flex;
+      gap: var(--spacing-lg);
+      width: max-content;
+      min-height: 65vh;
+    }
+    .column {
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+    }
+    .column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: var(--spacing-xs);
+      border-bottom: 2px solid var(--surface-strong);
+    }
+    .column-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); margin: 0; }
+    .column-count {
+      font-size: 14px; font-weight: 500; color: var(--muted);
+      background: var(--surface-soft); padding: 2px 8px; border-radius: var(--radius-pill);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      padding: var(--spacing-md);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-sm);
+      transition: border-color 0.2s ease;
+    }
+    .card:hover { border-color: var(--border-strong); }
+    .card.pinned { border-left: 4px solid var(--signature-mustard); }
+    .card.has-sent { border-left: 4px solid var(--success-border); }
+    
+    .card-badges { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); margin-bottom: 4px; }
+    .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-xs); }
+    .badge.dealbreaker { background: var(--signature-coral); color: var(--on-primary); }
+
+    .card-top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--spacing-xs); }
+    .card-title-group { display: flex; flex-direction: column; gap: 4px; max-width: 210px; }
+    .card-title { font-size: 16px; font-weight: 600; color: var(--link); text-decoration: none; line-height: 1.3; }
+    .card-title:hover { text-decoration: underline; color: var(--link-active); }
+    .card-company { font-size: 14px; color: var(--ink); font-weight: 500; }
+    
+    .card-actions-group { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+    .score-badge { font-size: 14px; font-weight: 600; padding: 4px 8px; border-radius: var(--radius-sm); color: var(--on-primary); }
+    .score-a { background: var(--success); }
+    .score-b { background: var(--info); }
+    .score-c { background: var(--signature-mustard); }
+    .score-f { background: var(--signature-coral); }
+    
+    .quick-actions { display: flex; gap: 4px; }
+
+    .card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+    .salary-chip {
+      font-size: 13px; font-weight: 500; background: var(--surface-soft); color: var(--ink);
+      padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--hairline);
+    }
+    .intel-badge { font-size: 13px; color: var(--muted); font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+    
+    .card-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 4px; padding-top: var(--spacing-sm); border-top: 1px solid var(--surface-soft);
+    }
+    .footer-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .age-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .expiry-badge { font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: var(--radius-xs); }
+    .expiry-badge.amber { background: var(--signature-yellow); color: var(--ink); }
+    .expiry-badge.red { background: var(--signature-coral); color: var(--on-primary); }
+    
+    .apply-badge {
+      font-size: 12px; font-weight: 500; padding: 2px 6px; border-radius: var(--radius-xs);
+      background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline);
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .apply-badge.tailoring { background: var(--signature-cream); border-color: transparent; }
+    .apply-badge.queued { background: var(--surface-strong); border-color: transparent; }
+    .apply-badge.sent { background: var(--success-border); color: var(--on-primary); border-color: transparent; }
+
+    .icon-btn {
+      background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--radius-full);
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--ink); font-size: 14px; transition: all 0.2s;
+    }
+    .icon-btn:hover { background: var(--surface-soft); border-color: var(--border-strong); }
+
+    .card-detail {
+      padding-top: var(--spacing-sm); border-top: 1px dashed var(--hairline);
+      margin-top: var(--spacing-xs); display: none; flex-direction: column; gap: var(--spacing-sm);
+    }
+    .card-detail.open { display: flex; }
+    .detail-section { display: flex; flex-direction: column; gap: 6px; }
+    .detail-title { font-size: 13px; font-weight: 600; color: var(--ink); text-transform: uppercase; letter-spacing: 0.5px; }
+    .assessment-list { margin: 0; padding-left: 20px; font-size: 13px; color: var(--body); line-height: 1.5; }
+    .assessment-list li { margin-bottom: 4px; }
+    
+    .model-compare { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .skills-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .skill-pill {
+      background: var(--surface-soft); border: 1px solid var(--hairline);
+      padding: 2px 8px; border-radius: var(--radius-sm); font-size: 12px; color: var(--body);
+    }
+    
+    .text-input {
+      background: var(--canvas); color: var(--ink); font-family: 'Inter', sans-serif;
+      font-size: 14px; border-radius: var(--radius-sm); padding: 8px 12px; border: 1px solid var(--hairline);
+    }
+    .text-input:focus { outline: none; border-color: var(--info-border); }
+    .textarea-input {
+      background: var(--canvas); color: var(--ink); font-family: 'Inter', sans-serif;
+      font-size: 14px; border-radius: var(--radius-sm); padding: var(--spacing-sm);
+      border: 1px solid var(--hairline); resize: vertical;
+    }
+    .textarea-input:focus { outline: none; border-color: var(--info-border); }
+
+    .divider { display: flex; align-items: center; text-align: center; color: var(--muted); font-size: 12px; font-weight: 500; margin: 4px 0; }
+    .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--hairline); }
+    .divider::before { margin-right: 8px; }
+    .divider::after { margin-left: 8px; }
+
+    /* Drawer */
+    .drawer-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(24, 29, 38, 0.4); z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed; top: 0; right: -480px; width: 480px; height: 100vh;
+      background: var(--canvas); box-shadow: -4px 0 24px rgba(0,0,0,0.1);
+      z-index: 201; transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column;
+    }
+    .drawer.open { right: 0; }
+    .drawer-header {
+      padding: var(--spacing-lg) var(--spacing-xl); border-bottom: 1px solid var(--hairline);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .drawer-title { font-size: 20px; font-weight: 500; color: var(--ink); margin: 0; }
+    .btn-close { background: none; border: none; font-size: 24px; color: var(--muted); cursor: pointer; line-height: 1; padding: 0; }
+    .btn-close:hover { color: var(--ink); }
+    .drawer-body { padding: var(--spacing-xl); flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--spacing-md); }
+
+    /* System Log */
+    .system-log {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 40px;
+      background: var(--surface-dark); color: var(--on-dark); display: flex; align-items: center;
+      padding: 0 var(--spacing-xxl); font-size: 13px; z-index: 100; font-family: 'Inter', monospace; gap: var(--spacing-lg);
+    }
+    .log-item { display: flex; align-items: center; gap: 8px; }
+    .log-time { color: var(--border-strong); }
+
+    @media (max-width: 768px) {
+      .widgets-row { grid-template-columns: 1fr; padding: var(--spacing-lg); }
+      .top-nav { padding: 0 var(--spacing-lg); }
+      .board-container { padding: 0 var(--spacing-lg) var(--spacing-xl); }
+      .toolbar { padding: 0 var(--spacing-lg) var(--spacing-md); flex-direction: column; align-items: flex-start; gap: var(--spacing-md); }
+      .drawer { width: 100%; right: -100%; }
+      .system-log { padding: 0 var(--spacing-lg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Drawer -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <div class="drawer" id="addJobDrawer">
+    <div class="drawer-header">
+      <h2 class="drawer-title">Add Job</h2>
+      <button class="btn-close" id="closeDrawerBtn">×</button>
+    </div>
+    <div class="drawer-body">
+      <p style="font-size: 14px; color: var(--body); margin:0;">Paste a job link or full job description text.</p>
+      <textarea class="textarea-input" style="height: 240px;" placeholder="https://topcv.vn/...&#10;&#10;OR&#10;&#10;We are looking for a Performance Marketing Manager..."></textarea>
+      <button class="btn-primary" style="width: 100%;">Extract & Add</button>
+      <div style="margin-top: 8px; padding: 12px; background: var(--surface-soft); border-radius: var(--radius-sm); border: 1px solid var(--hairline); display: flex; align-items: flex-start; gap: 12px;">
+        <span style="font-size:16px; line-height: 1.2;">✨</span>
+        <p style="font-size:13px; margin:0; color:var(--body); line-height: 1.5;">AI nanobot will extract company, role, salary, contact, and skills automatically.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="top-nav">
+    <div class="nav-left">
+      <h1 class="nav-title">Career</h1>
+      <div class="stat-pills">
+        <span class="stat-pill">Saved <strong>12</strong></span>
+        <span class="stat-pill">Applied <strong>4</strong></span>
+        <span class="stat-pill">Interview <strong>2</strong></span>
+        <span class="stat-pill">Offer <strong>1</strong></span>
+      </div>
+    </div>
+    <div class="nav-right">
+      <button class="btn-primary" id="openDrawerBtn">+ Add Job</button>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <!-- Top Widgets -->
+    <section class="widgets-row">
+      <div class="widget cream-callout">
+        <div class="morale-rate">33%</div>
+        <div class="morale-subline">interviews / resolved answered · 5 pending</div>
+        <div class="morale-message">You're getting solid traction. Keep pushing.</div>
+      </div>
+      <div class="widget soft-card">
+        <h3 class="widget-title">📥 12 new jobs found · Today</h3>
+        <div class="chips">
+          <span class="chip">TopCV <strong style="color:var(--ink)">8</strong></span>
+          <span class="chip">LinkedIn <strong style="color:var(--ink)">4</strong></span>
+        </div>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline);">
+          <span class="chip unhealthy">VietnamWorks (Failed 2d ago) <button class="btn-text">Retry ⟳</button></span>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Toolbar -->
+    <section class="toolbar">
+      <div class="filters">
+        <label class="filter-cb"><input type="checkbox" checked> All</label>
+        <label class="filter-cb"><input type="checkbox" checked> TopCV</label>
+        <label class="filter-cb"><input type="checkbox" checked> LinkedIn</label>
+        <label class="filter-cb"><input type="checkbox" checked> VNW</label>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn-secondary btn-sm">⚙ Keywords</button>
+        <button class="btn-secondary btn-sm">⚙ Rating</button>
+      </div>
+    </section>
+
+    <!-- Board -->
+    <section class="board-container">
+      <div class="board">
+        
+        <!-- Column 1: Saved -->
+        <div class="column">
+          <div class="column-header">
+            <h2 class="column-title">Saved</h2>
+            <span class="column-count">3</span>
+          </div>
+          <div style="font-size:12px; color:var(--link); text-align:right; cursor:pointer; margin-bottom: -4px;">Most recent ▾</div>
+          
+          <div class="card pinned">
+            <div class="card-header">
+              <div class="card-top-row">
+                <div class="card-title-group">
+                  <a href="#" class="card-title">Performance Marketing Manager</a>
+                  <div class="card-company">ZaloPay (VNG)</div>
+                </div>
+                <div class="card-actions-group">
+                  <span class="score-badge score-a">A 95</span>
+                  <div class="quick-actions">
+                    <button class="icon-btn-sm" title="View">↗</button>
+                    <button class="icon-btn-sm" title="Unpin">📌</button>
+                    <button class="icon-btn-sm" title="Delete" style="color:var(--signature-coral);">✕</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 40 - 60 triệu</span>
+              <span class="intel-badge">📅 2012</span>
+              <span class="intel-badge">✅ 3km</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">1d · LinkedIn</span>
+                <span class="expiry-badge amber">⚠ 3d left</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            
+            <div class="card-detail">
+              <div class="detail-section">
+                <div class="detail-title">AI Assessment</div>
+                <ul class="assessment-list">
+                  <li>Strong match for your background in performance marketing and growth.</li>
+                  <li>Salary range (40-60M) exceeds your baseline.</li>
+                  <li>Close proximity (3km) is ideal.</li>
+                </ul>
+              </div>
+              <div class="detail-section">
+                <div class="detail-title">Other Models</div>
+                <div class="model-compare">
+                  <span class="score-badge score-a" style="font-size:12px">GPT-4o: A 96</span>
+                  <span class="score-badge score-b" style="font-size:12px">Claude 3.5: B 89</span>
+                  <button class="btn-text" style="font-size:12px; margin-left: 4px;">+ Ask another model</button>
+                </div>
+              </div>
+              <div class="detail-section" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--surface-soft);">
+                <div class="detail-title">Email Apply Draft</div>
+                <div style="margin-top: 4px;">
+                  <input type="text" value="recruitment@zalopay.vn" class="text-input" style="width: 100%; margin-bottom: 8px;" />
+                  <textarea class="textarea-input" style="height: 100px; width:100%;">Kính gửi bộ phận Tuyển dụng ZaloPay,
+Tôi xin ứng tuyển vị trí Performance Marketing Manager...</textarea>
+                  <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="btn-primary btn-sm">Approve & Send</button>
+                    <button class="btn-secondary btn-sm">Re-draft</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="divider"><span>2 more unpinned</span></div>
+          
+          <div class="card">
+            <div class="card-badges">
+              <span class="badge dealbreaker">⛔ Làm T7</span>
+            </div>
+            <div class="card-top-row">
+              <div class="card-title-group">
+                <a href="#" class="card-title">Chuyên Viên Chạy Quảng Cáo</a>
+                <div class="card-company">Highlands Coffee</div>
+              </div>
+              <div class="card-actions-group">
+                <span class="score-badge score-b">B 82</span>
+                <div class="quick-actions">
+                  <button class="icon-btn-sm" title="View">↗</button>
+                  <button class="icon-btn-sm" title="Pin">📍</button>
+                  <button class="icon-btn-sm" title="Delete" style="color:var(--signature-coral);">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 15 - 25 triệu</span>
+              <span class="intel-badge">📅 1999</span>
+              <span class="intel-badge">📍 8km</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">3h · TopCV</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            <div class="card-detail"><div class="detail-section"><ul class="assessment-list"><li>Saturday work required.</li></ul></div></div>
+          </div>
+        </div>
+
+        <!-- Column 2: Waiting to apply -->
+        <div class="column">
+          <div class="column-header">
+            <h2 class="column-title">Waiting to apply</h2>
+            <span class="column-count">1</span>
+          </div>
+          <div class="card">
+            <div class="card-top-row">
+              <div class="card-title-group">
+                <a href="#" class="card-title">Data Analyst (Marketing)</a>
+                <div class="card-company">MoMo</div>
+              </div>
+              <div class="card-actions-group">
+                <span class="score-badge score-a">A 90</span>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 25 - 40 triệu</span>
+              <span class="intel-badge">✅ 5km</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">2d · Email</span>
+                <span class="apply-badge tailoring">✍️ Tailoring CV (01:20)</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            <div class="card-detail"><div class="detail-section"><p style="font-size:13px; margin:0; color:var(--body);">Generating tailored CV based on JD...</p></div></div>
+          </div>
+        </div>
+
+        <!-- Column 3: Applied -->
+        <div class="column">
+          <div class="column-header">
+            <h2 class="column-title">Applied</h2>
+            <span class="column-count">1</span>
+          </div>
+          <div class="card">
+            <div class="card-badges">
+              <span class="badge dealbreaker">⛔ Xa 15km</span>
+            </div>
+            <div class="card-top-row">
+              <div class="card-title-group">
+                <a href="#" class="card-title">Digital Growth Lead</a>
+                <div class="card-company">Shopee Vietnam</div>
+              </div>
+              <div class="card-actions-group">
+                <span class="score-badge score-b">B 78</span>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 Up to 50 triệu</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">4d · TopCV</span>
+                <span class="apply-badge queued">🕒 queued</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            <div class="card-detail"><div class="detail-section"><p style="font-size:13px; margin:0; color:var(--body);">Waiting on automated apply engine to process...</p></div></div>
+          </div>
+        </div>
+
+        <!-- Column 4: Interview -->
+        <div class="column">
+          <div class="column-header">
+            <h2 class="column-title">Interview</h2>
+            <span class="column-count">1</span>
+          </div>
+          <div class="card has-sent">
+            <div class="card-top-row">
+              <div class="card-title-group">
+                <a href="#" class="card-title">Head of Digital Marketing</a>
+                <div class="card-company">Techcombank</div>
+              </div>
+              <div class="card-actions-group">
+                <span class="score-badge score-a">A 98</span>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 60 - 80 triệu</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">10d · LinkedIn</span>
+                <span class="apply-badge sent">📨 followup</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            <div class="card-detail">
+              <div class="detail-section">
+                <div class="detail-title">Notes</div>
+                <p style="font-size:13px; margin:0; color:var(--body);">First round scheduled for Friday.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 5: Offer -->
+        <div class="column">
+          <div class="column-header">
+            <h2 class="column-title">Offer</h2>
+            <span class="column-count">1</span>
+          </div>
+          <div class="card">
+            <div class="card-top-row">
+              <div class="card-title-group">
+                <a href="#" class="card-title">Marketing Analytics Lead</a>
+                <div class="card-company">FPT Play</div>
+              </div>
+              <div class="card-actions-group">
+                <span class="score-badge score-a">A 91</span>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 45 triệu</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">14d · Direct</span>
+                <span class="apply-badge sent">✓ replied</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            <div class="card-detail"><div class="detail-section"><ul class="assessment-list"><li>Final offer received.</li></ul></div></div>
+          </div>
+        </div>
+
+        <!-- Column 6: Closed -->
+        <div class="column">
+          <div class="column-header">
+            <h2 class="column-title">Closed</h2>
+            <span class="column-count">1</span>
+          </div>
+          <div class="card">
+            <div class="card-top-row">
+              <div class="card-title-group">
+                <a href="#" class="card-title">Brand Manager</a>
+                <div class="card-company">Masan Group</div>
+              </div>
+              <div class="card-actions-group">
+                <span class="score-badge score-c">C 70</span>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span class="salary-chip">💰 30 triệu</span>
+            </div>
+            <div class="card-footer">
+              <div class="footer-left">
+                <span class="age-label">21d · TopCV</span>
+                <span class="expiry-badge red">⛔ closed</span>
+              </div>
+              <button class="icon-btn expand-btn" title="Expand">▾</button>
+            </div>
+            <div class="card-detail"><div class="detail-section"><ul class="assessment-list"><li>Role filled internally.</li></ul></div></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <div class="system-log">
+    <div class="log-item">
+      <span class="log-time">10:42:15</span>
+      <span>✅ Auto-apply successful for <strong style="color:var(--on-dark)">VinBigData</strong></span>
+    </div>
+    <div class="log-item">
+      <span class="log-time">10:35:02</span>
+      <span>🔄 Scoring completed for <strong style="color:var(--on-dark)">Shopee Vietnam</strong></span>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Toggle Drawer
+      const drawer = document.getElementById('addJobDrawer');
+      const overlay = document.getElementById('drawerOverlay');
+      const openBtn = document.getElementById('openDrawerBtn');
+      const closeBtn = document.getElementById('closeDrawerBtn');
+
+      function openDrawer() {
+        drawer.classList.add('open');
+        overlay.classList.add('open');
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove('open');
+        overlay.classList.remove('open');
+      }
+
+      openBtn.addEventListener('click', openDrawer);
+      closeBtn.addEventListener('click', closeDrawer);
+      overlay.addEventListener('click', closeDrawer);
+
+      // Toggle Card Details
+      document.querySelectorAll('.expand-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const card = e.target.closest('.card');
+          const detail = card.querySelector('.card-detail');
+          if (detail) {
+            detail.classList.toggle('open');
+            e.target.innerHTML = detail.classList.contains('open') ? '▴' : '▾';
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

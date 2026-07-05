@@ -1,0 +1,26 @@
+# Binaries
+/braveduck
+/dist/
+*.exe
+*.test
+*.out
+
+# Go
+/vendor/
+go.work
+go.work.sum
+
+# Local data / secrets — never commit
+*.db
+*.db-journal
+.braveduck/
+.env
+.env.*
+*.local
+
+# Web build intermediates
+/web/node_modules/
+/web/.vite/
+
+# OS
+.DS_Store
