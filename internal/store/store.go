@@ -12,6 +12,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -267,6 +268,10 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 	}
 	return affectedOne(res)
 }
+
+// IsNotFound reports whether err is the store's "no such row" error, so callers
+// (the API/MCP faces) can map it without importing database/sql.
+func IsNotFound(err error) bool { return errors.Is(err, sql.ErrNoRows) }
 
 // affectedOne turns a zero-row write into sql.ErrNoRows so callers can tell
 // "no such id" apart from success.

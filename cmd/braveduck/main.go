@@ -40,8 +40,11 @@ Keywords (crawler filter lists — start empty)
   keywords rm  <list> <term>...  remove terms from a list
   keywords check <id>            test a stored job against the filter
 
+Web board
+  serve      run the local web board + JSON API   (--addr, --no-open)
+
 Not in this build (need a live browser/LLM)
-  cv, draft, apply, crawl, sync, serve, mcp
+  cv, draft, apply, crawl, sync, mcp
 
 Other
   doctor     environment + database health check
@@ -101,7 +104,9 @@ func run(args []string) error {
 		return cmdRateConfig(ctx, st, rest)
 	case "keywords", "kw":
 		return cmdKeywords(ctx, st, rest)
-	case "rate", "cv", "draft", "apply", "crawl", "sync", "serve", "mcp":
+	case "serve":
+		return cmdServe(ctx, st, rest)
+	case "rate", "cv", "draft", "apply", "crawl", "sync", "mcp":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)

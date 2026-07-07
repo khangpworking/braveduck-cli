@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>braveduck</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#e6edf3;
+         font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:22px 26px; border-bottom:1px solid #21262d; display:flex;
+           align-items:center; gap:10px; }
+  h1 { font-size:18px; margin:0; font-weight:600; }
+  .tag { font-size:12px; color:#7d8590; background:#161b22; padding:2px 8px;
+         border-radius:999px; border:1px solid #21262d; }
+  main { padding:26px; max-width:900px; }
+  .note { color:#7d8590; font-size:14px; }
+  table { width:100%; border-collapse:collapse; margin-top:18px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid #21262d;
+          font-size:14px; }
+  th { color:#7d8590; font-weight:500; }
+  .lane { font-size:12px; color:#7ee787; }
+  code { background:#161b22; padding:1px 6px; border-radius:5px; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🦆 braveduck</h1>
+  <span class="tag">local board</span>
+</header>
+<main>
+  <p class="note">Placeholder board — the real UI ships here later. Live data
+    below, straight from <code>GET /api/jobs</code>.</p>
+  <table>
+    <thead><tr><th>#</th><th>Title</th><th>Company</th><th>Lane</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="4" class="note">loading…</td></tr></tbody>
+  </table>
+</main>
+<script>
+  fetch("/api/jobs").then(r => r.json()).then(jobs => {
+    const rows = document.getElementById("rows");
+    if (!jobs.length) {
+      rows.innerHTML = '<tr><td colspan="4" class="note">No jobs yet. Add one with '
+        + '<code>braveduck add</code>.</td></tr>';
+      return;
+    }
+    rows.innerHTML = jobs.map(j =>
+      `<tr><td>${j.id}</td><td>${esc(j.title)}</td>`
+      + `<td>${esc(j.company)}</td><td class="lane">${esc(j.status)}</td></tr>`
+    ).join("");
+  }).catch(e => {
+    document.getElementById("rows").innerHTML =
+      `<tr><td colspan="4" class="note">error: ${esc(String(e))}</td></tr>`;
+  });
+  function esc(s){return (s||"").replace(/[&<>"]/g,c=>(
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+</script>
+</body>
+</html>

@@ -21,70 +21,70 @@ import (
 // the morale timestamps, and the geo/company signals); the remaining fields are
 // carried so the store, CLI, API and MCP layers share one model with no mapping.
 type Job struct {
-	ID      int64
-	Title   string
-	Company string
-	URL     string
-	Location string
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Company  string `json:"company"`
+	URL      string `json:"url"`
+	Location string `json:"location"`
 
-	Status  string // saved / waiting / applied / interview / offer / closed
-	Pinned  bool
-	Keep    bool
-	Notes   string
+	Status string `json:"status"` // saved / waiting / applied / interview / offer / closed
+	Pinned bool   `json:"pinned"`
+	Keep   bool   `json:"keep"`
+	Notes  string `json:"notes"`
 
-	Salary    string
-	Skills    string // comma-separated
-	Summary   string // jd_summary
-	AISummary string // jd_ai_summary
-	FullJD    string // jd_full
+	Salary    string `json:"salary"`
+	Skills    string `json:"skills"`     // comma-separated
+	Summary   string `json:"summary"`    // jd_summary
+	AISummary string `json:"ai_summary"` // jd_ai_summary
+	FullJD    string `json:"full_jd"`    // jd_full
 
-	DiscoverySource string // topcv/vietnamworks/joboko/careerlink/serpapi/linkedin/paste
+	DiscoverySource string `json:"discovery_source"` // topcv/vietnamworks/joboko/careerlink/serpapi/linkedin/paste
 
 	// Scoring (top-level, mirrors the winning A/B model's row).
-	Score          float64
-	HasScore       bool // distinguishes score 0 from "not scored"
-	ScoreLetter    string
-	ScoreStatus    string // pending/scored/failed
-	ScoreReasoning string
+	Score          float64 `json:"score"`
+	HasScore       bool    `json:"-"` // distinguishes score 0 from "not scored"
+	ScoreLetter    string  `json:"score_letter"`
+	ScoreStatus    string  `json:"score_status"` // pending/scored/failed
+	ScoreReasoning string  `json:"score_reasoning"`
 
 	// Apply pipeline.
-	ApplyMethod    string // email/platform
-	ApplyState     string // queued/filling/cooldown/failed/applied
-	ApplyNextAt    string
-	ApplyDetail    string
-	ApplyUpdatedAt string
+	ApplyMethod    string `json:"apply_method"` // email/platform
+	ApplyState     string `json:"apply_state"`  // queued/filling/cooldown/failed/applied
+	ApplyNextAt    string `json:"apply_next_at"`
+	ApplyDetail    string `json:"apply_detail"`
+	ApplyUpdatedAt string `json:"apply_updated_at"`
 
 	// CV generation.
-	CVPath        string
-	CVStatus      string
-	CVVersion     int
-	CVGeneratedAt string
+	CVPath        string `json:"cv_path"`
+	CVStatus      string `json:"cv_status"`
+	CVVersion     int    `json:"cv_version"`
+	CVGeneratedAt string `json:"cv_generated_at"`
 
 	// Email draft.
-	DraftEmail    string
-	DraftStatus   string
-	DraftStatusAt string
-	DraftNotes    string
-	ContactEmail  string
+	DraftEmail    string `json:"draft_email"`
+	DraftStatus   string `json:"draft_status"`
+	DraftStatusAt string `json:"draft_status_at"`
+	DraftNotes    string `json:"draft_notes"`
+	ContactEmail  string `json:"contact_email"`
 
 	// Timestamps / lifecycle.
-	ExpiresAt      string // the expires_at grammar value (see parseExpiry)
-	FollowupSentAt string
-	SavedAt        string
-	CreatedAt      string
-	UpdatedAt      string
+	ExpiresAt      string `json:"expires_at"` // the expires_at grammar value (see parseExpiry)
+	FollowupSentAt string `json:"followup_sent_at"`
+	SavedAt        string `json:"saved_at"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 
 	// Per-platform recruiter-view status sync.
-	TopcvStatus string
-	VnwStatus   string
+	TopcvStatus string `json:"topcv_status"`
+	VnwStatus   string `json:"vnw_status"`
 
 	// Geo/company signals used by geoDealbreakers. Resolve async on pin.
-	CompanyActiveDate   string  // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
-	CompanyDistanceKM   float64 // meaningful only when CompanyGeoStatus == "ok"
-	HasDistance         bool    // distinguishes 0 km from "not set"
-	CompanyGeoStatus    string  // "" / pending / ok / no_address / geocode_failed
-	CompanyMasothueURL  string
-	CompanyMasothueName string
+	CompanyActiveDate   string  `json:"company_active_date"`  // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
+	CompanyDistanceKM   float64 `json:"company_distance_km"`  // meaningful only when CompanyGeoStatus == "ok"
+	HasDistance         bool    `json:"-"`                    // distinguishes 0 km from "not set"
+	CompanyGeoStatus    string  `json:"company_geo_status"`   // "" / pending / ok / no_address / geocode_failed
+	CompanyMasothueURL  string  `json:"company_masothue_url"`
+	CompanyMasothueName string  `json:"company_masothue_name"`
 }
 
 // parseTime decodes the timestamp formats that appear across the DB: full
