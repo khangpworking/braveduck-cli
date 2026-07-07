@@ -99,3 +99,12 @@ CREATE TABLE IF NOT EXISTS rating_config (  -- single-row A/B rater config
   models        TEXT NOT NULL DEFAULT '',   -- comma-separated selected rater ids (1..3)
   default_model TEXT NOT NULL DEFAULT ''     -- ∈ models; owns the board badge
 );
+
+CREATE TABLE IF NOT EXISTS events (  -- append-only activity feed (add/move/remove/...)
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  type       TEXT NOT NULL,           -- added/moved/removed/...
+  message    TEXT NOT NULL,           -- human-readable line for the board
+  created_at TEXT NOT NULL            -- ISO-8601 UTC
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);

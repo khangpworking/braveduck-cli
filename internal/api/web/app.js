@@ -290,7 +290,14 @@ const APIClient = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: pasteContent })
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // Map backend status to the banner's expected codes (400→too-short,
+        // 409→duplicate); anything else surfaces the server's message verbatim.
+        if (res.status === 400) throw new Error("too-short");
+        if (res.status === 409) throw new Error("duplicate");
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "add-failed");
+      }
       return res.json();
     }
   },
@@ -631,6 +638,21 @@ const APIClient = {
     }
   },
 
+  async getActivity() {
+    if (USE_MOCK) {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVITY)) || [];
+    } else {
+      const res = await fetch(`${API_BASE}/activity`);
+      if (!res.ok) return [];
+      const events = await res.json();
+      // Server timestamps are ISO; the feed renders a plain clock like the mock.
+      return (events || []).map(e => ({
+        ...e,
+        timestamp: new Date(e.timestamp).toLocaleTimeString('vi-VN', { hour12: false })
+      }));
+    }
+  },
+
   async retryCrawl(sourceName) {
     if (USE_MOCK) {
       const status = JSON.parse(localStorage.getItem(STORAGE_KEYS.CRAWL_STATUS));
@@ -763,8 +785,8 @@ async function refreshAppState() {
   AppState.jobs = await APIClient.getJobs();
   AppState.ratingConfig = await APIClient.getRatingConfig();
   AppState.crawlStatus = await APIClient.getCrawlStatus();
-  AppState.activity = JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVITY)) || [];
-  
+  AppState.activity = await APIClient.getActivity();
+
   renderAll();
 }
 
@@ -886,16 +908,25 @@ async function triggerCrawlerRetry(sourceName) {
   const flash = document.getElementById("retryFlash");
   flash.style.display = "block";
   flash.innerText = `⟳ Restarting ${sourceName} crawler...`;
-  
+
   showToast(`Restarting crawler ${sourceName}...`, "info");
-  
-  await APIClient.retryCrawl(sourceName);
-  
-  setTimeout(() => {
-    flash.style.display = "none";
+
+  let result;
+  try {
+    result = await APIClient.retryCrawl(sourceName);
+  } catch (e) {
+    result = { ok: false, message: String(e) };
+  }
+
+  flash.style.display = "none";
+  // The real backend returns {ok:false, message} until crawlers are wired in;
+  // surface that truth rather than a canned success. (Mock returns no `ok`.)
+  if (result && result.ok === false) {
+    showToast(result.message || `Couldn't retry ${sourceName}`, "error");
+  } else {
     showToast(`Crawler ${sourceName} recovered successfully!`, "success");
-    refreshAppState();
-  }, 3000);
+  }
+  refreshAppState();
 }
 
 function renderPlatformFilters() {

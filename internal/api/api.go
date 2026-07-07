@@ -12,12 +12,15 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
@@ -33,12 +36,15 @@ func Handler(st *store.Store) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/jobs", s.listJobs)
+	mux.HandleFunc("POST /api/jobs", s.createJob)
 	mux.HandleFunc("GET /api/jobs/{id}", s.getJob)
 	mux.HandleFunc("PATCH /api/jobs/{id}", s.patchJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
 	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
+	mux.HandleFunc("GET /api/activity", s.getActivity)
+	mux.HandleFunc("POST /api/crawl/{source}/retry", s.retryCrawl)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -65,6 +71,82 @@ func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 		list = []jobs.Job{}
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// createReq is the Extract & Add payload: a single pasted string that is either
+// a listing URL or free-text JD.
+type createReq struct {
+	Content string `json:"content"`
+}
+
+// createJob is "Extract & Add", done without any AI. A pasted URL is fetched and
+// its schema.org/JobPosting JSON-LD lifted verbatim; free text falls back to
+// line/regex heuristics. Fields we can't read stay empty rather than guessed.
+func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
+	var req createReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	content := strings.TrimSpace(req.Content)
+	if len(content) < 5 {
+		writeErr(w, http.StatusBadRequest, errors.New("paste a job URL or description"))
+		return
+	}
+
+	var jp scrape.JobPosting
+	var srcURL, source string
+	if strings.HasPrefix(content, "http://") || strings.HasPrefix(content, "https://") {
+		srcURL = content
+		source = scrape.SourceFor(srcURL)
+		dup, err := s.st.ExistsByURL(r.Context(), srcURL)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if dup {
+			writeErr(w, http.StatusConflict, errors.New("this job is already on the board"))
+			return
+		}
+		// Best-effort: a blocked/JS-only page just yields a bare-URL card.
+		jp, _, _ = scrape.FetchJobPosting(r.Context(), srcURL)
+	} else {
+		jp = scrape.ParsePastedJD(content)
+		source = "paste"
+	}
+
+	title := jp.Title
+	if title == "" {
+		title = "Untitled listing"
+	}
+	j := jobs.Job{
+		Title:           title,
+		Company:         jp.Company,
+		URL:             srcURL,
+		Location:        jp.Location,
+		Status:          "saved",
+		Salary:          jp.Salary,
+		Skills:          strings.Join(jp.Skills, ", "),
+		FullJD:          jp.Description,
+		ContactEmail:    jp.Email,
+		DiscoverySource: source,
+	}
+	if jp.Deadline != "" {
+		j.ExpiresAt = jobs.ExpirePrefix + jp.Deadline
+	}
+
+	id, err := s.st.Add(r.Context(), j, now())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	saved, err := s.st.Get(r.Context(), id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	s.logEvent(r.Context(), "added", fmt.Sprintf("Added %q", saved.Title))
+	writeJSON(w, http.StatusCreated, saved)
 }
 
 func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +187,7 @@ func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	moved := p.Status != nil && *p.Status != j.Status
 	if p.Status != nil {
 		j.Status = *p.Status
 	}
@@ -117,6 +200,9 @@ func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.Update(r.Context(), j, now()); err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	if moved {
+		s.logEvent(r.Context(), "moved", fmt.Sprintf("Moved %q to %s", j.Title, j.Status))
 	}
 	// Re-read so the caller gets the persisted row (incl. bumped updated_at).
 	j, err = s.st.Get(r.Context(), id)
@@ -132,9 +218,14 @@ func (s *server) deleteJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Read the title first so the activity line is meaningful; absent job is fine.
+	j, _ := s.st.Get(r.Context(), id)
 	if err := s.st.Delete(r.Context(), id); err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	if j.Title != "" {
+		s.logEvent(r.Context(), "removed", fmt.Sprintf("Removed %q", j.Title))
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
@@ -159,6 +250,40 @@ func (s *server) getCrawlStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
+}
+
+// getActivity returns the recent activity feed (server-backed, so it survives a
+// browser change and captures every client's actions). Newest first, capped.
+func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
+	events, err := s.st.RecentEvents(r.Context(), 20)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+// retryCrawl is an honest not-implemented stub: crawlers aren't ported into
+// braveduck-cli yet (they need the captured-session/browser layer), so there's
+// no run to re-trigger. Returns 501 with a clear message rather than faking
+// success, so the board can tell the user the truth.
+func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
+	source := r.PathValue("source")
+	writeJSON(w, http.StatusNotImplemented, map[string]any{
+		"ok":      false,
+		"source":  source,
+		"message": "crawlers aren't wired into braveduck-cli yet — nothing to retry",
+	})
+}
+
+// logEvent records an activity-feed entry best-effort: a logging failure must
+// never fail the mutation that triggered it, so the error is swallowed. A
+// cancelled request context is ignored too.
+func (s *server) logEvent(ctx context.Context, typ, message string) {
+	if ctx.Err() != nil {
+		ctx = context.Background()
+	}
+	_ = s.st.LogEvent(ctx, typ, message, now())
 }
 
 func (s *server) getKeywords(w http.ResponseWriter, r *http.Request) {
