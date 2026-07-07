@@ -16,6 +16,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -130,34 +132,76 @@ func ParsePastedJD(text string) JobPosting {
 	return jp
 }
 
-// FetchJobPosting fetches a listing over plain HTTP and extracts its JobPosting.
-// Returns ok=false (no error) when the page is blocked or has no JobPosting —
-// the caller still adds the job from the bare URL.
+// FetchJobPosting fetches a listing and extracts its JobPosting. It tries plain
+// HTTP first (cheap, no browser); if that finds no JobPosting AND an external
+// browser fetcher is configured (BRAVEDUCK_BROWSER_FETCHER), it escalates once to
+// that fetcher for Cloudflare/JS-gated pages like TopCV. ok is false when neither
+// tier finds a JobPosting — the caller still adds the job from the bare URL. Both
+// tiers are best-effort, so the error is always nil (kept for signature stability).
 func FetchJobPosting(ctx context.Context, u string) (JobPosting, bool, error) {
+	if page := httpFetchPage(ctx, u); page != "" {
+		if jp, ok := ExtractJobPosting(page); ok {
+			return jp, true, nil
+		}
+	}
+	if page := browserFetchPage(ctx, u); page != "" {
+		if jp, ok := ExtractJobPosting(page); ok {
+			return jp, true, nil
+		}
+	}
+	return JobPosting{}, false, nil
+}
+
+// httpFetchPage GETs a page over plain HTTP, returning its body on 200 or ""
+// on any error / non-200 (blocked, not found). Same request shape as FetchDeadline.
+func httpFetchPage(ctx context.Context, u string) string {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return JobPosting{}, false, err
+		return ""
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept-Language", "vi,en;q=0.9")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return JobPosting{}, false, err
+		return ""
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return JobPosting{}, false, nil // blocked / not found → add bare URL
+		return ""
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4 MiB cap
 	if err != nil {
-		return JobPosting{}, false, err
+		return ""
 	}
-	jp, ok := ExtractJobPosting(string(body))
-	return jp, ok, nil
+	return string(body)
+}
+
+// browserFetchPage runs the opt-in external browser fetcher for pages that block
+// plain HTTP. The command comes from BRAVEDUCK_BROWSER_FETCHER (run via `sh -c`),
+// with the target URL passed in BRAVEDUCK_FETCH_URL — not string-interpolated, so
+// there's no shell-injection surface. The command must print the rendered HTML to
+// stdout. Returns "" when unconfigured or on any failure, keeping braveduck a
+// dependency-free binary that degrades to bare-URL adds. The browser stack
+// (CloakBrowser, Playwright, …) lives entirely in that external script.
+func browserFetchPage(ctx context.Context, u string) string {
+	cmdStr := strings.TrimSpace(os.Getenv("BRAVEDUCK_BROWSER_FETCHER"))
+	if cmdStr == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd.Env = append(os.Environ(), "BRAVEDUCK_FETCH_URL="+u)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 // SourceFor maps a listing URL to the board's discovery_source tag.
