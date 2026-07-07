@@ -29,6 +29,18 @@ const STATUS_UI_TO_API = {
   "Interview": "interview", "Offer": "offer", "Closed": "closed"
 };
 
+// The store's expires_at is a tagged grammar ("expire:YYYY-MM-DD",
+// "applied:YYYY-MM-DD", "unknown", ""); the UI just wants a plain deadline it
+// can new Date(). Keep only the real scraped deadline; blank the rest so the
+// card badge never renders "Invalid Date". (The applied: anchor is Go's
+// apply-silence clock, not a display deadline.)
+function decodeExpiresAt(raw) {
+  if (!raw || raw === "unknown") return "";
+  if (raw.startsWith("expire:")) return raw.slice("expire:".length);
+  if (raw.startsWith("applied:")) return "";
+  return raw; // legacy bare ISO
+}
+
 function normalizeJob(j) {
   return {
     ...j,
@@ -39,6 +51,7 @@ function normalizeJob(j) {
       : (typeof j.skills === "string" && j.skills
           ? j.skills.split(",").map(s => s.trim()).filter(Boolean)
           : []),
+    expires_at: decodeExpiresAt(j.expires_at),
     ratings: j.ratings || {}
   };
 }

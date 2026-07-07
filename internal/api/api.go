@@ -139,10 +139,8 @@ func (s *server) deleteJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
-// getRatingConfig and getCrawlStatus are placeholder endpoints the board needs
-// to boot (its init() awaits both). They return valid, inert shapes until the
-// scoring and crawler subsystems are ported — see docs/web-board-brief.md.
-
+// getRatingConfig is a placeholder the board awaits at boot; it returns an inert
+// shape until the scoring subsystem is ported — see docs/web-board-brief.md.
 func (s *server) getRatingConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"default_model": "",
@@ -151,12 +149,16 @@ func (s *server) getRatingConfig(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *server) getCrawlStatus(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"newJobsToday": 0,
-		"date":         "—",
-		"sources":      []any{},
-	})
+// getCrawlStatus reports per-source crawl health and today's find count. The
+// source rows come from crawl_runs (empty until a crawler is ported); the
+// today-count is real from the jobs table regardless.
+func (s *server) getCrawlStatus(w http.ResponseWriter, r *http.Request) {
+	view, err := s.st.CrawlStatus(r.Context(), now())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (s *server) getKeywords(w http.ResponseWriter, r *http.Request) {
