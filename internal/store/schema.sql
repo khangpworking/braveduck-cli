@@ -87,11 +87,10 @@ CREATE TABLE IF NOT EXISTS crawl_runs (
   last_run_at       TEXT
 );
 
-CREATE TABLE IF NOT EXISTS keywords (      -- crawler keyword lists, per source
-  source  TEXT NOT NULL,                   -- topcv/vietnamworks/serpapi/...
-  keyword TEXT NOT NULL,
-  kind    TEXT NOT NULL DEFAULT 'include', -- include/exclude (negative keywords)
-  PRIMARY KEY (source, keyword, kind)
+CREATE TABLE IF NOT EXISTS keyword_terms ( -- crawler keyword filter lists
+  list_key TEXT NOT NULL,                  -- search_queries/positive_title/negative_*
+  term     TEXT NOT NULL,                  -- stored as the user entered it (case/accents kept)
+  PRIMARY KEY (list_key, term)
 );
 
 CREATE TABLE IF NOT EXISTS rating_config (  -- single-row A/B rater config

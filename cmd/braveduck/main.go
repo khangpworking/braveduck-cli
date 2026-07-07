@@ -34,6 +34,12 @@ Rating
   rate-config [--ab] [--models a,b,c] [--default a]   show or set the A/B rater config
   rate <id>            (stub — needs a rater harness)
 
+Keywords (crawler filter lists — start empty)
+  keywords                       show every list and its terms
+  keywords add <list> <term>...  add terms to a list
+  keywords rm  <list> <term>...  remove terms from a list
+  keywords check <id>            test a stored job against the filter
+
 Not in this build (need a live browser/LLM)
   cv, draft, apply, crawl, sync, serve, mcp
 
@@ -93,6 +99,8 @@ func run(args []string) error {
 		return cmdDelete(ctx, st, rest)
 	case "rate-config":
 		return cmdRateConfig(ctx, st, rest)
+	case "keywords", "kw":
+		return cmdKeywords(ctx, st, rest)
 	case "rate", "cv", "draft", "apply", "crawl", "sync", "serve", "mcp":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:

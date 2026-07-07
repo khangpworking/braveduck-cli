@@ -2,7 +2,10 @@ module github.com/khangpworking/braveduck-cli
 
 go 1.25.0
 
-require modernc.org/sqlite v1.53.0
+require (
+	golang.org/x/text v0.39.0
+	modernc.org/sqlite v1.53.0
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
