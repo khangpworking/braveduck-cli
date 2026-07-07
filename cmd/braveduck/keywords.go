@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
@@ -39,13 +40,105 @@ func keywordsShow(ctx context.Context, st *store.Store) error {
 		}
 		fmt.Printf("%-18s %s\n", l.Key, l.Label)
 		if len(terms) == 0 {
-			fmt.Printf("  (empty)\n")
+			printGuide(l.Key)
 		} else {
 			fmt.Printf("  %s\n", strings.Join(terms, ", "))
 		}
 	}
 	return nil
 }
+
+// listGuide is the first-run help shown (dimmed) under an empty list: what
+// adding a term does, the matching rules, and three worked examples so a brand
+// new user knows what a good keyword looks like without reading docs.
+type listGuide struct {
+	what     string
+	rule     string
+	examples []string
+}
+
+var guides = map[string]listGuide{
+	"search_queries": {
+		what: "Phrases the crawler types into job-site search boxes. Not a filter.",
+		rule: "Write them like you'd search a job board.",
+		examples: []string{
+			`marketing executive     — a phrase crawlers will search for`,
+			`content creator hcm     — mix role + city`,
+			`nhân viên kinh doanh    — Vietnamese phrases work too`,
+		},
+	},
+	"positive_title": {
+		what: "Keep a job only if its TITLE contains one of these words.",
+		rule: "Case-insensitive; Vietnamese accents optional.",
+		examples: []string{
+			`marketing   — matches "Marketing Executive", "Digital Marketing"`,
+			`content     — matches "Content Creator", "content lead"`,
+			`nhân sự     — matches "Nhan Su" and "nhân sự" (accents optional)`,
+		},
+	},
+	"negative_title": {
+		what: "Drop a job if its TITLE contains any of these words.",
+		rule: "Case-insensitive; Vietnamese accents optional.",
+		examples: []string{
+			`intern      — drops "Marketing Intern"`,
+			`senior      — drops "Senior Developer"`,
+			`thực tập    — drops "Thuc Tap Sinh" (accents optional)`,
+		},
+	},
+	"negative_content": {
+		what: "Drop a job if its title OR description mentions any of these.",
+		rule: "Case-insensitive; Vietnamese accents optional.",
+		examples: []string{
+			`commission only  — drops jobs that say it anywhere in the post`,
+			`đa cấp           — drops "da cap" / "đa cấp" (MLM)`,
+			`call center      — drops call-center roles`,
+		},
+	},
+	"negative_company": {
+		what: "Drop a job if the COMPANY name contains any of these.",
+		rule: "Case-insensitive; Vietnamese accents optional.",
+		examples: []string{
+			`nha khoa    — drops dental clinics`,
+			`bảo hiểm    — drops "Bao Hiem" / "bảo hiểm" (insurance)`,
+			`spa         — drops spa businesses`,
+		},
+	},
+}
+
+// printGuide renders the dimmed first-run instructions for an empty list.
+func printGuide(key string) {
+	g, ok := guides[key]
+	if !ok {
+		fmt.Println(dim("  (empty)"))
+		return
+	}
+	fmt.Println(dim("  # " + g.what))
+	fmt.Println(dim("  # " + g.rule))
+	fmt.Println(dim("  # examples:"))
+	for _, ex := range g.examples {
+		fmt.Println(dim("  #   " + ex))
+	}
+}
+
+// dim wraps text in ANSI grey when stdout is an interactive terminal (and
+// NO_COLOR is unset), so piped/redirected output stays clean.
+func dim(s string) string {
+	if !colorEnabled {
+		return s
+	}
+	return "\033[90m" + s + "\033[0m"
+}
+
+var colorEnabled = func() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if os.Getenv("CLICOLOR_FORCE") != "" {
+		return true
+	}
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}()
 
 func keywordsMutate(ctx context.Context, st *store.Store, args []string, add bool) error {
 	verb := "rm"

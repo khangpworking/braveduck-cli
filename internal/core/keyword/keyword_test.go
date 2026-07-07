@@ -42,6 +42,18 @@ func TestFilterPositiveGate(t *testing.T) {
 	}
 }
 
+func TestFilterPositiveGateFolded(t *testing.T) {
+	// positive_title is diacritic-folded: an accented required term matches an
+	// unaccented title and vice versa.
+	sets := Sets{"positive_title": {"nhân sự"}}
+	if d := Filter(Job{Title: "Nhan Su Executive"}, sets); !d.Keep {
+		t.Errorf("accents-optional positive match should pass: %+v", d)
+	}
+	if d := Filter(Job{Title: "Backend Engineer"}, sets); d.Keep {
+		t.Errorf("unrelated title should still be gated out: %+v", d)
+	}
+}
+
 func TestFilterEmptyPositiveMeansNoGate(t *testing.T) {
 	// No positive_title list → everything passes stage 1.
 	if d := Filter(Job{Title: "Anything At All"}, Sets{}); !d.Keep {

@@ -41,7 +41,7 @@ type List struct {
 // search_queries feeds the (browser-backed) crawlers.
 var Lists = []List{
 	{"search_queries", "Search queries (terms crawlers fetch)", false, TargetFetch, false},
-	{"positive_title", "Title must match one of these", false, TargetTitle, false},
+	{"positive_title", "Title must match one of these", true, TargetTitle, false},
 	{"negative_title", "Reject if in title", true, TargetTitle, true},
 	{"negative_content", "Reject if in title or description", true, TargetContent, true},
 	{"negative_company", "Reject if in company name", true, TargetCompany, true},
