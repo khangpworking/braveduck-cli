@@ -35,7 +35,10 @@ func Handler(st *store.Store) http.Handler {
 	mux.HandleFunc("GET /api/jobs", s.listJobs)
 	mux.HandleFunc("GET /api/jobs/{id}", s.getJob)
 	mux.HandleFunc("PATCH /api/jobs/{id}", s.patchJob)
+	mux.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
+	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
+	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -122,6 +125,38 @@ func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, j)
+}
+
+func (s *server) deleteJob(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.st.Delete(r.Context(), id); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+// getRatingConfig and getCrawlStatus are placeholder endpoints the board needs
+// to boot (its init() awaits both). They return valid, inert shapes until the
+// scoring and crawler subsystems are ported — see docs/web-board-brief.md.
+
+func (s *server) getRatingConfig(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"default_model": "",
+		"ab_mode":       false,
+		"models":        []string{},
+	})
+}
+
+func (s *server) getCrawlStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"newJobsToday": 0,
+		"date":         "—",
+		"sources":      []any{},
+	})
 }
 
 func (s *server) getKeywords(w http.ResponseWriter, r *http.Request) {

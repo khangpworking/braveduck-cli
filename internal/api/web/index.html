@@ -1,59 +1,185 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="vi">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>braveduck</title>
-<style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0d1117; color:#e6edf3;
-         font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  header { padding:22px 26px; border-bottom:1px solid #21262d; display:flex;
-           align-items:center; gap:10px; }
-  h1 { font-size:18px; margin:0; font-weight:600; }
-  .tag { font-size:12px; color:#7d8590; background:#161b22; padding:2px 8px;
-         border-radius:999px; border:1px solid #21262d; }
-  main { padding:26px; max-width:900px; }
-  .note { color:#7d8590; font-size:14px; }
-  table { width:100%; border-collapse:collapse; margin-top:18px; }
-  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid #21262d;
-          font-size:14px; }
-  th { color:#7d8590; font-weight:500; }
-  .lane { font-size:12px; color:#7ee787; }
-  code { background:#161b22; padding:1px 6px; border-radius:5px; font-size:13px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Career Command Center</title>
+  <!-- Offline/buildless: no web fonts. app.css falls back to a system font stack. -->
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header>
-  <h1>🦆 braveduck</h1>
-  <span class="tag">local board</span>
-</header>
-<main>
-  <p class="note">Placeholder board — the real UI ships here later. Live data
-    below, straight from <code>GET /api/jobs</code>.</p>
-  <table>
-    <thead><tr><th>#</th><th>Title</th><th>Company</th><th>Lane</th></tr></thead>
-    <tbody id="rows"><tr><td colspan="4" class="note">loading…</td></tr></tbody>
-  </table>
-</main>
-<script>
-  fetch("/api/jobs").then(r => r.json()).then(jobs => {
-    const rows = document.getElementById("rows");
-    if (!jobs.length) {
-      rows.innerHTML = '<tr><td colspan="4" class="note">No jobs yet. Add one with '
-        + '<code>braveduck add</code>.</td></tr>';
-      return;
-    }
-    rows.innerHTML = jobs.map(j =>
-      `<tr><td>${j.id}</td><td>${esc(j.title)}</td>`
-      + `<td>${esc(j.company)}</td><td class="lane">${esc(j.status)}</td></tr>`
-    ).join("");
-  }).catch(e => {
-    document.getElementById("rows").innerHTML =
-      `<tr><td colspan="4" class="note">error: ${esc(String(e))}</td></tr>`;
-  });
-  function esc(s){return (s||"").replace(/[&<>"]/g,c=>(
-    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-</script>
+
+  <!-- Top Nav Header -->
+  <header class="top-nav">
+    <div class="nav-left">
+      <h1 class="nav-title">Career</h1>
+      <div class="stat-pills" id="statPills">
+        <!-- Live count pills injected via JS -->
+      </div>
+    </div>
+    <div class="nav-right">
+      <button class="btn-primary" id="openDrawerBtn">+ Add Job</button>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <!-- Top Widgets Row -->
+    <section class="widgets-row">
+      <!-- Morale Widget -->
+      <div class="widget cream-callout" id="moraleWidget">
+        <div class="morale-rate" id="moraleRate">—</div>
+        <div class="morale-subline" id="moraleSubline">calculating morale...</div>
+        <div class="morale-message" id="moraleMessage">Loading stats...</div>
+      </div>
+      
+      <!-- Crawl Status Widget -->
+      <div class="widget soft-card" id="crawlWidget">
+        <h3 class="widget-title" id="crawlHeadline">📥 Crawl Status</h3>
+        <div class="chips" id="crawlChips">
+          <!-- Active source chips injected here -->
+        </div>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 8px;" id="unhealthyContainer">
+          <!-- Unhealthy source chips and Retry buttons -->
+        </div>
+        <!-- Retry transient flash -->
+        <div id="retryFlash" style="font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 6px; display: none;"></div>
+      </div>
+    </section>
+
+    <!-- Toolbar Filters -->
+    <section class="toolbar">
+      <div class="filters" id="platformFilters">
+        <!-- Checkboxes injected by JS dynamically -->
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn-secondary btn-sm" id="keywordsBtn">⚙ Keywords</button>
+        <button class="btn-secondary btn-sm" id="ratingBtn">⚙ Rating</button>
+      </div>
+    </section>
+
+    <!-- Backfill Rating Banner (Conditionally Visible) -->
+    <div id="backfillBanner" class="config-banner" style="margin: 0 var(--spacing-xxl) var(--spacing-md); display: none;">
+      <div class="config-banner-text">
+        <strong>A/B Rating Config changed!</strong> Would you like to run backfill scoring for all currently Saved jobs?
+      </div>
+      <div style="display: flex; gap: var(--spacing-xs);">
+        <button class="btn-primary btn-sm" id="backfillConfirmBtn">Rate all saved jobs</button>
+        <button class="btn-secondary btn-sm" id="backfillDismissBtn">Only new jobs from now</button>
+      </div>
+    </div>
+
+    <!-- Kanban Board Grid -->
+    <section class="board-container">
+      <div class="board" id="kanbanBoard">
+        <!-- Columns (Saved, Waiting, Applied, Interview, Offer, Closed) will be rendered by JS -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Add-Job Drawer (Paste Form) -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <div class="drawer" id="addJobDrawer">
+    <div class="drawer-header">
+      <h2 class="drawer-title">Add Job</h2>
+      <button class="btn-close" id="closeDrawerBtn">×</button>
+    </div>
+    <div class="drawer-body">
+      <!-- Result banner -->
+      <div id="extractResultBanner" style="display: none; padding: 12px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; margin-bottom: 12px;"></div>
+      
+      <p style="font-size: 13px; color: var(--body); margin: 0 0 var(--spacing-xs) 0;">
+        Paste a job link (e.g., LinkedIn, TopCV) or paste raw Job Description (JD) text (min 50 chars).
+      </p>
+      <textarea id="pasteJDTextarea" class="textarea-input" style="height: 240px; margin-bottom: var(--spacing-md);" placeholder="https://topcv.vn/viec-lam/...&#10;&#10;OR&#10;&#10;We are looking for a Senior Developer with 5 years experience..."></textarea>
+      <button id="extractAddBtn" class="btn-primary" style="width: 100%;">Extract & Add</button>
+      
+      <div style="margin-top: 16px; padding: 12px; background: var(--surface-soft); border-radius: var(--radius-sm); border: 1px solid var(--hairline); display: flex; align-items: flex-start; gap: 12px;">
+        <span style="font-size: 16px; line-height: 1.2;">✨</span>
+        <p style="font-size: 12px; margin: 0; color: var(--body); line-height: 1.5;">
+          The system will parse details automatically (company, role, salary, skills, active date, distance) and score the job using AI models.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keywords Config Modal -->
+  <div class="modal-overlay" id="keywordsModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Crawler Keywords Configuration</h3>
+        <button class="btn-close modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="keywordsForm">
+          <!-- Textareas for each crawler source dynamically loaded -->
+        </div>
+        
+        <div style="margin-top: var(--spacing-md); border-top: 1px solid var(--hairline); padding-top: var(--spacing-md);">
+          <h4 style="font-size: 14px; font-weight: 600; margin-bottom: var(--spacing-xs);">Keyword Change Match Preview</h4>
+          <p style="font-size: 12px; color: var(--muted); margin-bottom: var(--spacing-xs);">
+            Preview how your modified keywords would match current jobs in the database:
+          </p>
+          <div id="keywordsPreviewList" style="background: var(--surface-soft); padding: var(--spacing-sm); border-radius: var(--radius-sm); font-size: 12px; border: 1px dashed var(--border-strong); max-height: 150px; overflow-y: auto;">
+            No modified keywords to preview.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-sm modal-close-btn">Cancel</button>
+        <button class="btn-primary btn-sm" id="saveKeywordsBtn">Save all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rating Config Modal -->
+  <div class="modal-overlay" id="ratingModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">AI Rating Configuration</h3>
+        <button class="btn-close modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: var(--spacing-md);">
+          <input type="checkbox" id="abModeCheckbox" style="width: 16px; height: 16px; accent-color: var(--primary);">
+          <label for="abModeCheckbox" style="cursor: pointer;">Enable A/B Rating Mode (Score using multiple models simultaneously)</label>
+        </div>
+        
+        <div class="form-group">
+          <label for="defaultModelSelect">Default Model (Main Score Badge)</label>
+          <select id="defaultModelSelect" class="text-input" style="height: 38px;">
+            <option value="GPT-4o">GPT-4o</option>
+            <option value="Claude 3.5">Claude 3.5</option>
+            <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-top: var(--spacing-md);">
+          <label style="margin-bottom: var(--spacing-xs);">Select Challenger Models (Max 3 total, including default)</label>
+          <div style="display: flex; flex-direction: column; gap: 8px;" id="challengerModelsList">
+            <!-- Dynamically populated checkboxes -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-sm modal-close-btn">Cancel</button>
+        <button class="btn-primary btn-sm" id="saveRatingConfigBtn">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Alerts Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- System Log Bar (Bottom) -->
+  <footer class="system-log">
+    <div class="log-label">System Activity</div>
+    <div class="log-feed" id="logFeed">
+      <!-- Events auto-refreshed every 30s -->
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="mock-data.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
