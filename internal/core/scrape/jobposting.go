@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/khangpworking/braveduck-cli/internal/core/browser"
 )
 
 // JobPosting is the subset of schema.org/JobPosting the board needs. Empty
@@ -180,18 +182,26 @@ func httpFetchPage(ctx context.Context, u string) string {
 	return string(body)
 }
 
-// browserFetchPage runs the opt-in external browser fetcher for pages that block
-// plain HTTP. The command comes from BRAVEDUCK_BROWSER_FETCHER (run via `sh -c`),
-// with the target URL passed in BRAVEDUCK_FETCH_URL — not string-interpolated, so
-// there's no shell-injection surface. The command must print the rendered HTML to
-// stdout. Returns "" when unconfigured or on any failure, keeping braveduck a
-// dependency-free binary that degrades to bare-URL adds. The browser stack
-// (CloakBrowser, Playwright, …) lives entirely in that external script.
+// browserFetchPage renders a JS/Cloudflare-gated page and returns its HTML. By
+// default it uses braveduck's built-in stealth browser (CloakBrowser Chromium,
+// self-provisioned on first use) so the board works out of the box with no extra
+// setup. Power users can override that with BRAVEDUCK_BROWSER_FETCHER — an external
+// command run via `sh -c`, with the target URL passed in BRAVEDUCK_FETCH_URL (not
+// string-interpolated, so no shell-injection surface) — that prints the rendered
+// HTML to stdout. Returns "" on any failure, degrading to a bare-URL add.
 func browserFetchPage(ctx context.Context, u string) string {
-	cmdStr := strings.TrimSpace(os.Getenv("BRAVEDUCK_BROWSER_FETCHER"))
-	if cmdStr == "" {
+	if cmdStr := strings.TrimSpace(os.Getenv("BRAVEDUCK_BROWSER_FETCHER")); cmdStr != "" {
+		return externalFetch(ctx, cmdStr, u)
+	}
+	html, err := browser.Fetch(ctx, u)
+	if err != nil {
 		return ""
 	}
+	return html
+}
+
+// externalFetch runs the BRAVEDUCK_BROWSER_FETCHER override command.
+func externalFetch(ctx context.Context, cmdStr, u string) string {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
