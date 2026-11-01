@@ -14,26 +14,20 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"html"
 	"io/fs"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
-	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
+	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 //go:embed web
 var webFS embed.FS
-
-// now returns the current time; overridable in tests.
-var now = time.Now
 
 // Handler builds the http.Handler serving the API and the embedded board.
 //
@@ -48,7 +42,7 @@ func Handler(st *store.Store, token string) http.Handler {
 	if token == "" {
 		panic("api.Handler: empty token")
 	}
-	s := &server{st: st}
+	s := &server{svc: service.New(st)}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/jobs", s.listJobs)
@@ -136,22 +130,14 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-type server struct{ st *store.Store }
+type server struct{ svc *service.Service }
 
 func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
-	f := store.ListFilter{
+	list, err := s.svc.ListJobs(r.Context(), service.ListFilter{
 		Status: r.URL.Query().Get("status"),
 		Source: r.URL.Query().Get("source"),
-	}
-	list, err := s.st.List(r.Context(), f)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	if list == nil {
-		list = []jobs.Job{}
-	}
-	writeJSON(w, http.StatusOK, list)
+	})
+	reply(w, http.StatusOK, list, err)
 }
 
 // createReq is the Extract & Add payload: a single pasted string that is either
@@ -160,102 +146,29 @@ type createReq struct {
 	Content string `json:"content"`
 }
 
-// createJob is "Extract & Add", done without any AI. A pasted URL is fetched and
-// its schema.org/JobPosting JSON-LD lifted verbatim; free text falls back to
-// line/regex heuristics. Fields we can't read stay empty rather than guessed.
 func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 	var req createReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
+	if !decode(w, r, &req) {
 		return
 	}
-	content := strings.TrimSpace(req.Content)
-	if len(content) < 5 {
-		writeErr(w, http.StatusBadRequest, errors.New("paste a job URL or description"))
-		return
-	}
-
-	var jp scrape.JobPosting
-	var srcURL, source string
-	if strings.HasPrefix(content, "http://") || strings.HasPrefix(content, "https://") {
-		srcURL = content
-		source = scrape.SourceFor(srcURL)
-		dup, err := s.st.ExistsByURL(r.Context(), srcURL)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return
-		}
-		if dup {
-			writeErr(w, http.StatusConflict, errors.New("this job is already on the board"))
-			return
-		}
-		// Best-effort: a blocked/JS-only page just yields a bare-URL card. A link
-		// to localhost/LAN is refused outright — we never fetch those.
-		var fetchErr error
-		jp, _, fetchErr = scrape.FetchJobPosting(r.Context(), srcURL)
-		if errors.Is(fetchErr, scrape.ErrNonPublicURL) {
-			writeErr(w, http.StatusBadRequest, fetchErr)
-			return
-		}
-	} else {
-		jp = scrape.ParsePastedJD(content)
-		source = "paste"
-	}
-
-	title := jp.Title
-	if title == "" {
-		title = "Untitled listing"
-	}
-	j := jobs.Job{
-		Title:           title,
-		Company:         jp.Company,
-		URL:             srcURL,
-		Location:        jp.Location,
-		Status:          "saved",
-		Salary:          jp.Salary,
-		Skills:          strings.Join(jp.Skills, ", "),
-		FullJD:          jp.Description,
-		ContactEmail:    jp.Email,
-		DiscoverySource: source,
-	}
-	if jp.Deadline != "" {
-		j.ExpiresAt = jobs.ExpirePrefix + jp.Deadline
-	}
-
-	id, err := s.st.Add(r.Context(), j, now())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	saved, err := s.st.Get(r.Context(), id)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	s.logEvent(r.Context(), "added", fmt.Sprintf("Added %q", saved.Title))
-	writeJSON(w, http.StatusCreated, saved)
+	j, err := s.svc.AddFromContent(r.Context(), req.Content)
+	reply(w, http.StatusCreated, j, err)
 }
 
 func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+	if id, ok := pathID(w, r); ok {
+		j, err := s.svc.GetJob(r.Context(), id)
+		reply(w, http.StatusOK, j, err)
 	}
-	j, err := s.st.Get(r.Context(), id)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, j)
 }
 
-// jobPatch is the mutable subset a board edits: lane moves and the two toggles.
-// Pointers distinguish "field omitted" from a zero value, so a PATCH touches
-// only what it names.
+// jobPatch is the mutable subset a board edits. Pointers distinguish "field
+// omitted" from a zero value, so a PATCH touches only what it names.
 type jobPatch struct {
 	Status *string `json:"status"`
 	Pinned *bool   `json:"pinned"`
 	Keep   *bool   `json:"keep"`
+	Notes  *string `json:"notes"`
 }
 
 func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
@@ -264,90 +177,34 @@ func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var p jobPatch
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
+	if !decode(w, r, &p) {
 		return
 	}
-
-	j, err := s.st.Get(r.Context(), id)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	moved := p.Status != nil && *p.Status != j.Status
-	if p.Status != nil {
-		j.Status = *p.Status
-	}
-	if p.Pinned != nil {
-		j.Pinned = *p.Pinned
-	}
-	if p.Keep != nil {
-		j.Keep = *p.Keep
-	}
-	if err := s.st.Update(r.Context(), j, now()); err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	if moved {
-		s.logEvent(r.Context(), "moved", fmt.Sprintf("Moved %q to %s", j.Title, j.Status))
-	}
-	// Re-read so the caller gets the persisted row (incl. bumped updated_at).
-	j, err = s.st.Get(r.Context(), id)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, j)
+	j, err := s.svc.UpdateJob(r.Context(), id, service.Patch(p))
+	reply(w, http.StatusOK, j, err)
 }
 
 func (s *server) deleteJob(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+	if id, ok := pathID(w, r); ok {
+		_, err := s.svc.DeleteJob(r.Context(), id)
+		reply(w, http.StatusOK, map[string]bool{"success": true}, err)
 	}
-	// Read the title first so the activity line is meaningful; absent job is fine.
-	j, _ := s.st.Get(r.Context(), id)
-	if err := s.st.Delete(r.Context(), id); err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	if j.Title != "" {
-		s.logEvent(r.Context(), "removed", fmt.Sprintf("Removed %q", j.Title))
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 // togglePin and toggleKeep flip one flag and return the updated job; they are
 // the §1.5 contract's POST /pin and /keep, which the board's buttons call.
 func (s *server) togglePin(w http.ResponseWriter, r *http.Request) {
-	s.toggle(w, r, func(j *jobs.Job) { j.Pinned = !j.Pinned })
+	if id, ok := pathID(w, r); ok {
+		j, err := s.svc.TogglePin(r.Context(), id)
+		reply(w, http.StatusOK, j, err)
+	}
 }
 
 func (s *server) toggleKeep(w http.ResponseWriter, r *http.Request) {
-	s.toggle(w, r, func(j *jobs.Job) { j.Keep = !j.Keep })
-}
-
-func (s *server) toggle(w http.ResponseWriter, r *http.Request, flip func(*jobs.Job)) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+	if id, ok := pathID(w, r); ok {
+		j, err := s.svc.ToggleKeep(r.Context(), id)
+		reply(w, http.StatusOK, j, err)
 	}
-	j, err := s.st.Get(r.Context(), id)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	flip(&j)
-	if err := s.st.Update(r.Context(), j, now()); err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	j, err = s.st.Get(r.Context(), id)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, j)
 }
 
 // ratingConfigJSON is the board's wire shape for rating.Config.
@@ -361,59 +218,35 @@ func toRatingJSON(c rating.Config) ratingConfigJSON {
 	return ratingConfigJSON{DefaultModel: c.DefaultModel, ABMode: c.ABEnabled, Models: c.Models}
 }
 
-// getRatingConfig returns the stored A/B rater config (normalized, so a fresh
-// DB yields the single default rater).
 func (s *server) getRatingConfig(w http.ResponseWriter, r *http.Request) {
-	c, err := s.st.GetRatingConfig(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toRatingJSON(c))
+	c, err := s.svc.RatingConfig(r.Context())
+	reply(w, http.StatusOK, toRatingJSON(c), err)
 }
 
-// putRatingConfig validates strictly (see rating.Config.Validate) and saves.
-// An invalid config is a 400 with the reason, never a silent repair.
 func (s *server) putRatingConfig(w http.ResponseWriter, r *http.Request) {
 	var in ratingConfigJSON
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
+	if !decode(w, r, &in) {
 		return
 	}
-	cfg := rating.Config{ABEnabled: in.ABMode, Models: in.Models, DefaultModel: in.DefaultModel}
-	if err := cfg.Validate(); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	c, err := s.st.SetRatingConfig(r.Context(), cfg)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toRatingJSON(c))
+	c, err := s.svc.SetRatingConfig(r.Context(), rating.Config{
+		ABEnabled: in.ABMode, Models: in.Models, DefaultModel: in.DefaultModel,
+	})
+	reply(w, http.StatusOK, toRatingJSON(c), err)
 }
 
 // getCrawlStatus reports per-source crawl health and today's find count. The
 // source rows come from crawl_runs (empty until a crawler is ported); the
 // today-count is real from the jobs table regardless.
 func (s *server) getCrawlStatus(w http.ResponseWriter, r *http.Request) {
-	view, err := s.st.CrawlStatus(r.Context(), now())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, view)
+	v, err := s.svc.CrawlStatus(r.Context())
+	reply(w, http.StatusOK, v, err)
 }
 
 // getActivity returns the recent activity feed (server-backed, so it survives a
 // browser change and captures every client's actions). Newest first, capped.
 func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
-	events, err := s.st.RecentEvents(r.Context(), 20)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, events)
+	ev, err := s.svc.Activity(r.Context(), 20)
+	reply(w, http.StatusOK, ev, err)
 }
 
 // retryCrawl is an honest not-implemented stub: crawlers aren't ported into
@@ -421,31 +254,16 @@ func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
 // no run to re-trigger. Returns 501 with a clear message rather than faking
 // success, so the board can tell the user the truth.
 func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
-	source := r.PathValue("source")
 	writeJSON(w, http.StatusNotImplemented, map[string]any{
 		"ok":      false,
-		"source":  source,
+		"source":  r.PathValue("source"),
 		"message": "crawlers aren't wired into braveduck-cli yet — nothing to retry",
 	})
 }
 
-// logEvent records an activity-feed entry best-effort: a logging failure must
-// never fail the mutation that triggered it, so the error is swallowed. A
-// cancelled request context is ignored too.
-func (s *server) logEvent(ctx context.Context, typ, message string) {
-	if ctx.Err() != nil {
-		ctx = context.Background()
-	}
-	_ = s.st.LogEvent(ctx, typ, message, now())
-}
-
 func (s *server) getKeywords(w http.ResponseWriter, r *http.Request) {
-	sets, err := s.st.AllKeywords(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, sets)
+	sets, err := s.svc.Keywords(r.Context())
+	reply(w, http.StatusOK, sets, err)
 }
 
 // --- helpers ---
@@ -459,15 +277,31 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
-func writeStoreErr(w http.ResponseWriter, err error) {
-	if errors.Is(err, context.Canceled) {
-		return
+// decode reads a JSON body (capped at 1 MiB), answering 400 on failure.
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(v); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return false
 	}
-	if store.IsNotFound(err) {
-		writeErr(w, http.StatusNotFound, errors.New("no such job"))
-		return
+	return true
+}
+
+// reply writes v with code on success, or maps a service error to its status.
+func reply(w http.ResponseWriter, code int, v any, err error) {
+	switch {
+	case err == nil:
+		writeJSON(w, code, v)
+	case errors.Is(err, context.Canceled):
+		// client went away; nothing to write
+	case errors.Is(err, service.ErrNotFound):
+		writeErr(w, http.StatusNotFound, err)
+	case errors.Is(err, service.ErrDuplicate):
+		writeErr(w, http.StatusConflict, err)
+	case errors.Is(err, service.ErrInvalid):
+		writeErr(w, http.StatusBadRequest, err)
+	default:
+		writeErr(w, http.StatusInternalServerError, err)
 	}
-	writeErr(w, http.StatusInternalServerError, err)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

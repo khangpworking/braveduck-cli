@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,22 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
-	"time"
 
-	"github.com/khangpworking/braveduck-cli/internal/core/apply"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
-	"github.com/khangpworking/braveduck-cli/internal/store"
+	"github.com/khangpworking/braveduck-cli/internal/service"
 )
 
-// validStages guards `status` against typos moving a job to a lane the board
-// doesn't render.
-var validStages = map[string]bool{
-	"saved": true, "waiting": true, "applied": true,
-	"interview": true, "offer": true, "closed": true,
-}
-
-func cmdAdd(ctx context.Context, st *store.Store, args []string) error {
+func cmdAdd(ctx context.Context, svc *service.Service, args []string) error {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	title := fs.String("title", "", "job title (required)")
 	company := fs.String("company", "", "company name")
@@ -39,47 +29,25 @@ func cmdAdd(ctx context.Context, st *store.Store, args []string) error {
 	if strings.TrimSpace(*title) == "" {
 		return errors.New("add: --title is required")
 	}
-
-	j := jobs.Job{
-		Title:           *title,
-		Company:         *company,
-		URL:             *url,
-		Salary:          *salary,
-		FullJD:          *jd,
-		DiscoverySource: *source,
-		Status:          "saved",
-		ScoreStatus:     "pending", // queued for a rater
-	}
-	// Wire the core apply classifier: read the contact email / email-vs-platform
-	// method straight off the JD, so `add` isn't just a dumb insert.
-	if *jd != "" {
-		cls := apply.ClassifyApply(*jd)
-		j.ApplyMethod = string(cls.Method)
-		j.ContactEmail = cls.ContactEmail
-	}
-	// Fall back to the platform inferred from the URL as the discovery source.
-	if j.DiscoverySource == "" && *url != "" {
-		if p := apply.PlatformOf(*url); p != apply.PlatformNone {
-			j.DiscoverySource = string(p)
-		}
-	}
-
-	id, err := st.Add(ctx, j, time.Now())
+	j, err := svc.AddJob(ctx, service.NewJob{
+		Title: *title, Company: *company, URL: *url,
+		Salary: *salary, Source: *source, JD: *jd,
+	})
 	if err != nil {
 		return err
 	}
-	fmt.Printf("added job #%d: %s\n", id, j.Title)
+	fmt.Printf("added job #%d: %s\n", j.ID, j.Title)
 	return nil
 }
 
-func cmdList(ctx context.Context, st *store.Store, args []string) error {
+func cmdList(ctx context.Context, svc *service.Service, args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	status := fs.String("status", "", "filter by lane")
 	source := fs.String("source", "", "filter by discovery source")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	list, err := st.List(ctx, store.ListFilter{Status: *status, Source: *source})
+	list, err := svc.ListJobs(ctx, service.ListFilter{Status: *status, Source: *source})
 	if err != nil {
 		return err
 	}
@@ -95,14 +63,14 @@ func cmdList(ctx context.Context, st *store.Store, args []string) error {
 	return w.Flush()
 }
 
-func cmdShow(ctx context.Context, st *store.Store, args []string) error {
+func cmdShow(ctx context.Context, svc *service.Service, args []string) error {
 	id, err := oneID(args, "show")
 	if err != nil {
 		return err
 	}
-	j, err := getJob(ctx, st, id)
+	j, err := svc.GetJob(ctx, id)
 	if err != nil {
-		return err
+		return friendly(err, id)
 	}
 	p := func(label, v string) {
 		if v != "" {
@@ -129,7 +97,7 @@ func cmdShow(ctx context.Context, st *store.Store, args []string) error {
 	return nil
 }
 
-func cmdStatus(ctx context.Context, st *store.Store, args []string) error {
+func cmdStatus(ctx context.Context, svc *service.Service, args []string) error {
 	if len(args) != 2 {
 		return errors.New("usage: braveduck status <id> <stage>")
 	}
@@ -137,54 +105,48 @@ func cmdStatus(ctx context.Context, st *store.Store, args []string) error {
 	if err != nil {
 		return err
 	}
-	stage := strings.ToLower(args[1])
-	if !validStages[stage] {
-		return fmt.Errorf("invalid stage %q (saved/waiting/applied/interview/offer/closed)", stage)
+	j, err := svc.SetStatus(ctx, id, args[1])
+	if err != nil {
+		return friendly(err, id)
 	}
-	if err := mapMissing(st.SetStatus(ctx, id, stage, time.Now()), id); err != nil {
-		return err
-	}
-	fmt.Printf("job #%d → %s\n", id, stage)
+	fmt.Printf("job #%d → %s\n", id, j.Status)
 	return nil
 }
 
-func cmdToggle(ctx context.Context, st *store.Store, args []string, kind string) error {
+func cmdToggle(ctx context.Context, svc *service.Service, args []string, kind string) error {
 	id, err := oneID(args, kind)
 	if err != nil {
 		return err
 	}
-	j, err := getJob(ctx, st, id)
-	if err != nil {
-		return err
-	}
+	var j jobs.Job
 	var now bool
 	if kind == "pin" {
-		j.Pinned = !j.Pinned
+		j, err = svc.TogglePin(ctx, id)
 		now = j.Pinned
 	} else {
-		j.Keep = !j.Keep
+		j, err = svc.ToggleKeep(ctx, id)
 		now = j.Keep
 	}
-	if err := st.Update(ctx, j, time.Now()); err != nil {
-		return err
+	if err != nil {
+		return friendly(err, id)
 	}
 	fmt.Printf("job #%d %s = %v\n", id, kind, now)
 	return nil
 }
 
-func cmdDelete(ctx context.Context, st *store.Store, args []string) error {
+func cmdDelete(ctx context.Context, svc *service.Service, args []string) error {
 	id, err := oneID(args, "rm")
 	if err != nil {
 		return err
 	}
-	if err := mapMissing(st.Delete(ctx, id), id); err != nil {
-		return err
+	if _, err := svc.DeleteJob(ctx, id); err != nil {
+		return friendly(err, id)
 	}
 	fmt.Printf("deleted job #%d\n", id)
 	return nil
 }
 
-func cmdRateConfig(ctx context.Context, st *store.Store, args []string) error {
+func cmdRateConfig(ctx context.Context, svc *service.Service, args []string) error {
 	fs := flag.NewFlagSet("rate-config", flag.ContinueOnError)
 	ab := fs.Bool("ab", false, "enable A/B challengers")
 	models := fs.String("models", "", "comma-separated rater ids to set (1..3)")
@@ -195,7 +157,7 @@ func cmdRateConfig(ctx context.Context, st *store.Store, args []string) error {
 
 	// No --models → show mode.
 	if strings.TrimSpace(*models) == "" {
-		cfg, err := st.GetRatingConfig(ctx)
+		cfg, err := svc.RatingConfig(ctx)
 		if err != nil {
 			return err
 		}
@@ -210,7 +172,7 @@ func cmdRateConfig(ctx context.Context, st *store.Store, args []string) error {
 	if d == "" {
 		d = ids[0]
 	}
-	cfg, err := st.SetRatingConfig(ctx, rating.Config{ABEnabled: *ab, Models: ids, DefaultModel: d})
+	cfg, err := svc.SetRatingConfig(ctx, rating.Config{ABEnabled: *ab, Models: ids, DefaultModel: d})
 	if err != nil {
 		return err
 	}
@@ -221,17 +183,9 @@ func cmdRateConfig(ctx context.Context, st *store.Store, args []string) error {
 
 // --- shared helpers ---
 
-func getJob(ctx context.Context, st *store.Store, id int64) (jobs.Job, error) {
-	j, err := st.Get(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return jobs.Job{}, fmt.Errorf("no job #%d", id)
-	}
-	return j, err
-}
-
-// mapMissing turns the store's ErrNoRows into a friendly "no job #N".
-func mapMissing(err error, id int64) error {
-	if errors.Is(err, sql.ErrNoRows) {
+// friendly turns the service's not-found into "no job #N" for the terminal.
+func friendly(err error, id int64) error {
+	if errors.Is(err, service.ErrNotFound) {
 		return fmt.Errorf("no job #%d", id)
 	}
 	return err

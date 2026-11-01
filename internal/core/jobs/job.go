@@ -34,9 +34,9 @@ type Job struct {
 
 	Salary    string `json:"salary"`
 	Skills    string `json:"skills"`     // comma-separated
-	Summary   string `json:"summary"`    // jd_summary
-	AISummary string `json:"ai_summary"` // jd_ai_summary
-	FullJD    string `json:"full_jd"`    // jd_full
+	Summary   string `json:"jd_summary"`
+	AISummary string `json:"jd_ai_summary"`
+	FullJD    string `json:"jd_full"`
 
 	DiscoverySource string `json:"discovery_source"` // topcv/vietnamworks/joboko/careerlink/serpapi/linkedin/paste
 

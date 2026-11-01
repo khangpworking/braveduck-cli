@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
@@ -84,24 +85,25 @@ func run(args []string) error {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	svc := service.New(st)
 
 	switch cmd {
 	case "add":
-		return cmdAdd(ctx, st, rest)
+		return cmdAdd(ctx, svc, rest)
 	case "list", "ls":
-		return cmdList(ctx, st, rest)
+		return cmdList(ctx, svc, rest)
 	case "show", "get":
-		return cmdShow(ctx, st, rest)
+		return cmdShow(ctx, svc, rest)
 	case "status":
-		return cmdStatus(ctx, st, rest)
+		return cmdStatus(ctx, svc, rest)
 	case "pin":
-		return cmdToggle(ctx, st, rest, "pin")
+		return cmdToggle(ctx, svc, rest, "pin")
 	case "keep":
-		return cmdToggle(ctx, st, rest, "keep")
+		return cmdToggle(ctx, svc, rest, "keep")
 	case "rm", "delete":
-		return cmdDelete(ctx, st, rest)
+		return cmdDelete(ctx, svc, rest)
 	case "rate-config":
-		return cmdRateConfig(ctx, st, rest)
+		return cmdRateConfig(ctx, svc, rest)
 	case "keywords", "kw":
 		return cmdKeywords(ctx, st, rest)
 	case "serve":
