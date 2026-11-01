@@ -14,9 +14,9 @@ no accounts, and no stored passwords. You authenticate with TopCV / VietnamWorks
 etc. directly in a real browser; braveduck only ever holds an encrypted session
 locally on your disk.
 
-> Status: **early.** The job pipeline, the web board and the MCP server work;
-> AI rating, CV/draft generation, platform login and auto-apply are not wired
-> yet. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the build plan and
+> Status: **early.** The job pipeline, the web board, the MCP server and
+> AI rating work; CV/draft generation, platform login and auto-apply are not
+> wired yet. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the build plan and
 > [`docs/`](./docs) for the feature spec and UI reference.
 
 ## Quick start
@@ -44,6 +44,25 @@ lane?"* or *"move job 12 to applied"*. The server speaks MCP over stdio and
 exposes the board as tools (`list_jobs`, `add_job`, `set_status`, `get_stats`,
 …). Codex and other MCP clients work the same way: point them at
 `braveduck mcp`.
+
+### Rate jobs with your own AI
+
+braveduck never calls an AI itself and stores no API keys. You describe
+yourself once, and whatever AI you already use does the judging:
+
+```bash
+braveduck profile      # creates ~/.braveduck/profile.md — fill in what applies, any language
+```
+
+- **From an agent (MCP):** ask *"rate my unrated jobs"*. The agent calls
+  `get_rating_queue`, judges each job against your profile and the rubric, and
+  saves each verdict with `submit_rating`.
+- **From any AI chat:** `braveduck rate` prints a ready-to-paste brief; the AI
+  answers with lines like `braveduck rate 12 --score 4.2 --why "..."` that you
+  run to save the scores.
+
+Scores are 1.0-5.0 with letters A-F, and the reasons show on each card.
+Rating stays off while the profile is still the blank template.
 
 ## Why
 

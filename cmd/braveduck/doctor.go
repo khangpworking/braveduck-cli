@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
@@ -23,7 +24,7 @@ func cmdDoctor(dbPath string) error {
 	}
 	fmt.Printf("  database:   %s\n", resolved)
 
-	st, err := openStore(dbPath)
+	st, resolvedPath, err := openStore(dbPath)
 	if err != nil {
 		fmt.Printf("  db open:    FAIL — %v\n", err)
 		return err
@@ -43,6 +44,15 @@ func cmdDoctor(dbPath string) error {
 
 	if cfg, err := st.GetRatingConfig(ctx); err == nil {
 		fmt.Printf("  rater:      default=%s ab=%v\n", cfg.DefaultModel, cfg.ABEnabled)
+	}
+	svc := service.New(st)
+	svc.SetProfilePath(profilePathFor(resolvedPath))
+	if p, err := svc.Profile(ctx); err == nil {
+		state := "filled in"
+		if !p.Filled {
+			state = "EMPTY — fill it in before rating"
+		}
+		fmt.Printf("  profile:    %s (%s)\n", p.Path, state)
 	}
 	fmt.Println("  status:     healthy")
 	return nil

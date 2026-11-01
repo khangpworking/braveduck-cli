@@ -36,6 +36,8 @@ type Service struct {
 	st  *store.Store
 	now func() time.Time
 
+	profilePath string // see SetProfilePath
+
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.
 	fetch func(ctx context.Context, url string) (scrape.JobPosting, bool, error)
