@@ -1,6 +1,6 @@
 # Spec: `braveduck mcp` — MCP server
 
-Status: **ready to build** · Owner: backend pipeline · Reviewer: audit gate
+Status: **built** (`internal/mcp`; also implements `set_rating_config` and `get_stats`) · Owner: backend pipeline · Reviewer: audit gate
 Depends on: nothing (wraps code that already works)
 
 ## Goal

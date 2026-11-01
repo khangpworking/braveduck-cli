@@ -5,15 +5,18 @@
 // Dispatch is a plain switch over stdlib flag rather than a framework: the
 // command set is small, and staying dependency-free keeps release cross-builds
 // and this RAM-limited dev box happy. Commands that need a live browser or LLM
-// (rate/cv/draft/apply/crawl/sync/serve/mcp) are honest stubs in this build.
+// (rate/cv/draft/apply/crawl/sync) are honest stubs in this build.
 package main
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
+	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -44,8 +47,12 @@ Keywords (crawler filter lists — start empty)
 Web board
   serve      run the local web board + JSON API   (--addr, --no-open)
 
+AI agents
+  mcp        MCP server on stdio, for Claude Code / Codex / agy
+             (claude mcp add braveduck -- braveduck mcp)
+
 Not in this build (need a live browser/LLM)
-  cv, draft, apply, crawl, sync, mcp
+  cv, draft, apply, crawl, sync
 
 Other
   doctor     environment + database health check
@@ -108,7 +115,12 @@ func run(args []string) error {
 		return cmdKeywords(ctx, st, rest)
 	case "serve":
 		return cmdServe(ctx, st, rest)
-	case "rate", "cv", "draft", "apply", "crawl", "sync", "mcp":
+	case "mcp":
+		// Runs until the client closes stdin; Ctrl-C/SIGTERM also end it.
+		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return mcpserver.Serve(ctx, svc)
+	case "rate", "cv", "draft", "apply", "crawl", "sync":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)

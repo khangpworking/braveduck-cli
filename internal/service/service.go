@@ -224,6 +224,37 @@ func (s *Service) DeleteJob(ctx context.Context, id int64) (jobs.Job, error) {
 
 // --- config, keywords, status feeds ---
 
+// Stats is the board's funnel: jobs per lane plus the interview-rate
+// ("morale") figures, computed by the ported jobs.SuccessRateOf logic.
+type Stats struct {
+	Total         int            `json:"total"`
+	ByStage       map[string]int `json:"by_stage"`
+	Resolved      int            `json:"resolved"`
+	Interviews    int            `json:"interviews"`
+	Pending       int            `json:"pending"`
+	InterviewRate float64        `json:"interview_rate"` // interviews / resolved; 0 until something resolves
+	Morale        string         `json:"morale"`
+}
+
+// Stats computes the funnel over every job.
+func (s *Service) Stats(ctx context.Context) (Stats, error) {
+	all, err := s.st.List(ctx, store.ListFilter{})
+	if err != nil {
+		return Stats{}, err
+	}
+	st := Stats{Total: len(all), ByStage: map[string]int{}}
+	for _, stage := range Stages {
+		st.ByStage[stage] = 0
+	}
+	for _, j := range all {
+		st.ByStage[j.Status]++
+	}
+	sr := jobs.SuccessRateOf(all, s.now())
+	st.Resolved, st.Interviews, st.Pending, st.InterviewRate = sr.Resolved, sr.Interviews, sr.Pending, sr.Rate
+	st.Morale = jobs.MoraleMessage(sr).Line
+	return st, nil
+}
+
 // RatingConfig returns the A/B rater config (normalized, never blocked).
 func (s *Service) RatingConfig(ctx context.Context) (rating.Config, error) {
 	return s.st.GetRatingConfig(ctx)

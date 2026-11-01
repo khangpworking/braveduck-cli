@@ -116,23 +116,66 @@ func jobPostingFromNode(n map[string]any) JobPosting {
 // first non-empty line is the title, the second the company, plus a scan for a
 // contact email and a salary line. Skills/description stay empty — no AI guess.
 func ParsePastedJD(text string) JobPosting {
+	phrases := split(text, phraseBreakRE)
+	jp := JobPosting{Description: cleanText(text)}
+	if len(phrases) > 0 {
+		jp.Title = truncate(phrases[0], 120)
+	}
+	jp.Company = pastedCompany(text, phrases)
+	jp.Email = emailRE.FindString(text)
+	// Salary is read per sentence, not per phrase, so a spaced range
+	// ("$1,500 - $2,000") isn't cut at its dash.
+	jp.Salary = pastedSalary(split(text, sentenceBreakRE))
+	return jp
+}
+
+// Pasted text is split per line, then per sentence, and for title/company
+// also at spaced separators ("A - B", "A | B", "• B"). That way a JD pasted as
+// one line (common from agents and chat apps) still yields a title, company and
+// salary instead of one giant title. An unspaced "15-20 triệu" stays whole.
+var (
+	sentenceBreakRE = regexp.MustCompile(`[.!?;]\s+`)
+	phraseBreakRE   = regexp.MustCompile(`[.!?;]\s+|\s+[-–—|•]\s+|^\s*[-•]\s+`)
+)
+
+// split returns the non-empty pieces of text, line by line, cut at brk.
+func split(text string, brk *regexp.Regexp) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		for _, seg := range brk.Split(line, -1) {
+			if seg = strings.TrimSpace(strings.TrimRight(seg, ".")); seg != "" {
+				out = append(out, seg)
+			}
+		}
+	}
+	return out
+}
+
+// companyRE spots a phrase naming an employer (Vietnamese or English forms).
+var companyRE = regexp.MustCompile(`(?i)(^|\s)(công ty|cty|tập đoàn|company|corporation|corp|jsc|ltd|llc|inc|tnhh)(\s|$|\.|,)`)
+
+// pastedCompany finds the employer: the first phrase after the title that looks
+// like a company name, else (multi-line pastes) the second line, as before.
+func pastedCompany(text string, segs []string) string {
+	for i, seg := range segs {
+		if i > 0 && companyRE.MatchString(seg) && len(seg) <= 120 {
+			return strings.TrimSpace(labelRE.ReplaceAllString(seg, ""))
+		}
+	}
 	var lines []string
 	for _, l := range strings.Split(text, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			lines = append(lines, l)
 		}
 	}
-	jp := JobPosting{Description: cleanText(text)}
-	if len(lines) > 0 {
-		jp.Title = truncate(lines[0], 120)
-	}
 	if len(lines) > 1 {
-		jp.Company = truncate(lines[1], 120)
+		return truncate(lines[1], 120)
 	}
-	jp.Email = emailRE.FindString(text)
-	jp.Salary = pastedSalary(lines)
-	return jp
+	return ""
 }
+
+// labelRE strips a leading "Label:" ("Mức lương:", "Company:") from a phrase.
+var labelRE = regexp.MustCompile(`^[^:]{1,20}:\s*`)
 
 // FetchJobPosting fetches a listing and extracts its JobPosting. It tries plain
 // HTTP first (cheap, no browser); if that finds no JobPosting AND an external
@@ -376,11 +419,17 @@ func deadlineDate(s string) string {
 }
 
 // pastedSalary finds a line that looks like a salary quote in pasted text.
-func pastedSalary(lines []string) string {
-	sre := regexp.MustCompile(`(?i)(salary|lương|mức lương|\$|usd|vnd|triệu|million)`)
-	for _, l := range lines {
-		if sre.MatchString(l) && len(l) < 80 {
-			return truncate(l, 80)
+var salaryRE = regexp.MustCompile(`(?i)(salary|lương|\$|usd|vnd|triệu|million)`)
+
+// pastedSalary returns the first short phrase that mentions pay, minus any
+// "Mức lương:" style label.
+func pastedSalary(segs []string) string {
+	for _, seg := range segs {
+		if salaryRE.MatchString(seg) && len(seg) < 80 {
+			if v := strings.TrimSpace(labelRE.ReplaceAllString(seg, "")); v != "" {
+				return truncate(v, 80)
+			}
+			return truncate(seg, 80)
 		}
 	}
 	return ""
