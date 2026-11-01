@@ -13,15 +13,32 @@ import (
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
+const testToken = "test-token"
+
+var storeFilterAll = store.ListFilter{}
+
 func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	ts := httptest.NewServer(Handler(st))
+	ts := httptest.NewServer(Handler(st, testToken))
 	t.Cleanup(func() { ts.Close(); st.Close() })
 	return ts, st
+}
+
+// do sends an authenticated request (body may be "") and returns the response.
+func do(t *testing.T, method, url, body string) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(method, url, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
 }
 
 func TestListAndGet(t *testing.T) {
@@ -51,13 +68,7 @@ func TestPatchMovesLaneAndPins(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/jobs/1",
-		strings.NewReader(`{"status":"applied","pinned":true}`))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
+	resp := do(t, http.MethodPatch, ts.URL+"/api/jobs/1", `{"status":"applied","pinned":true}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("patch status = %d", resp.StatusCode)
 	}
@@ -72,11 +83,7 @@ func TestPatchMovesLaneAndPins(t *testing.T) {
 
 func TestGetMissingIs404(t *testing.T) {
 	ts, _ := newTestServer(t)
-	resp, err := http.Get(ts.URL + "/api/jobs/999")
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
+	resp := do(t, http.MethodGet, ts.URL+"/api/jobs/999", "")
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("missing job = %d, want 404", resp.StatusCode)
 	}
@@ -84,11 +91,7 @@ func TestGetMissingIs404(t *testing.T) {
 
 func getJSON(t *testing.T, url string, v any) {
 	t.Helper()
-	resp, err := http.Get(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
+	resp := do(t, http.MethodGet, url, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s = %d", url, resp.StatusCode)
 	}

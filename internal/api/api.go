@@ -8,18 +8,23 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io/fs"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -31,7 +36,18 @@ var webFS embed.FS
 var now = time.Now
 
 // Handler builds the http.Handler serving the API and the embedded board.
-func Handler(st *store.Store) http.Handler {
+//
+// token is a per-run secret (ARCHITECTURE.md §1.3) that every /api/ request
+// must present as "Authorization: Bearer <token>". The board page gets it
+// injected at serve time; other sites can't read it (same-origin policy) and
+// can't send a custom header cross-origin without a CORS preflight we never
+// grant — so neither a malicious page nor a CSRF form can drive the API. The
+// Host check closes the remaining hole: a DNS-rebinding page *is* same-origin
+// with us, but its Host header names the attacker's domain, not localhost.
+func Handler(st *store.Store, token string) http.Handler {
+	if token == "" {
+		panic("api.Handler: empty token")
+	}
 	s := &server{st: st}
 	mux := http.NewServeMux()
 
@@ -40,8 +56,11 @@ func Handler(st *store.Store) http.Handler {
 	mux.HandleFunc("GET /api/jobs/{id}", s.getJob)
 	mux.HandleFunc("PATCH /api/jobs/{id}", s.patchJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
+	mux.HandleFunc("POST /api/jobs/{id}/pin", s.togglePin)
+	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
+	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
 	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
 	mux.HandleFunc("GET /api/activity", s.getActivity)
 	mux.HandleFunc("POST /api/crawl/{source}/retry", s.retryCrawl)
@@ -49,10 +68,72 @@ func Handler(st *store.Store) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	// Everything else: the embedded web board (index.html + assets).
+	// Everything else: the embedded web board (index.html + assets), with the
+	// token injected into index.html.
 	sub, _ := fs.Sub(webFS, "web")
-	mux.Handle("/", http.FileServer(http.FS(sub)))
-	return mux
+	index := renderIndex(sub, token)
+	files := http.FileServer(http.FS(sub))
+	mux.HandleFunc("GET /{$}", index)
+	mux.HandleFunc("GET /index.html", index)
+	mux.Handle("GET /", files)
+
+	return guard(token, mux)
+}
+
+// tokenMeta is the placeholder in web/index.html that renderIndex fills.
+const tokenMeta = `<meta name="braveduck-token" content="">`
+
+// renderIndex serves index.html with the per-run token filled in. Never cached:
+// a stale page would carry a dead token after a restart.
+func renderIndex(web fs.FS, token string) http.HandlerFunc {
+	raw, err := fs.ReadFile(web, "index.html")
+	if err != nil || !bytes.Contains(raw, []byte(tokenMeta)) {
+		panic("api: web/index.html is missing the braveduck-token meta placeholder")
+	}
+	page := bytes.Replace(raw, []byte(tokenMeta),
+		[]byte(`<meta name="braveduck-token" content="`+html.EscapeString(token)+`">`), 1)
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(page)
+	}
+}
+
+// guard wraps every request: loopback Host only, a bearer token on /api/, and
+// headers that stop the board being framed by another site (clickjacking).
+func guard(token string, next http.Handler) http.Handler {
+	want := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			writeErr(w, http.StatusForbidden, errors.New("braveduck only answers on localhost"))
+			return
+		}
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+
+		if strings.HasPrefix(r.URL.Path, "/api/") &&
+			subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			writeErr(w, http.StatusUnauthorized, errors.New("missing or bad token — reload the board"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isLoopbackHost reports whether a Host header names this machine's loopback
+// (localhost, 127.0.0.0/8 or ::1), with or without a port.
+func isLoopbackHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 type server struct{ st *store.Store }
@@ -108,8 +189,14 @@ func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, errors.New("this job is already on the board"))
 			return
 		}
-		// Best-effort: a blocked/JS-only page just yields a bare-URL card.
-		jp, _, _ = scrape.FetchJobPosting(r.Context(), srcURL)
+		// Best-effort: a blocked/JS-only page just yields a bare-URL card. A link
+		// to localhost/LAN is refused outright — we never fetch those.
+		var fetchErr error
+		jp, _, fetchErr = scrape.FetchJobPosting(r.Context(), srcURL)
+		if errors.Is(fetchErr, scrape.ErrNonPublicURL) {
+			writeErr(w, http.StatusBadRequest, fetchErr)
+			return
+		}
 	} else {
 		jp = scrape.ParsePastedJD(content)
 		source = "paste"
@@ -230,14 +317,80 @@ func (s *server) deleteJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
-// getRatingConfig is a placeholder the board awaits at boot; it returns an inert
-// shape until the scoring subsystem is ported — see docs/web-board-brief.md.
-func (s *server) getRatingConfig(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"default_model": "",
-		"ab_mode":       false,
-		"models":        []string{},
-	})
+// togglePin and toggleKeep flip one flag and return the updated job; they are
+// the §1.5 contract's POST /pin and /keep, which the board's buttons call.
+func (s *server) togglePin(w http.ResponseWriter, r *http.Request) {
+	s.toggle(w, r, func(j *jobs.Job) { j.Pinned = !j.Pinned })
+}
+
+func (s *server) toggleKeep(w http.ResponseWriter, r *http.Request) {
+	s.toggle(w, r, func(j *jobs.Job) { j.Keep = !j.Keep })
+}
+
+func (s *server) toggle(w http.ResponseWriter, r *http.Request, flip func(*jobs.Job)) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	j, err := s.st.Get(r.Context(), id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	flip(&j)
+	if err := s.st.Update(r.Context(), j, now()); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	j, err = s.st.Get(r.Context(), id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, j)
+}
+
+// ratingConfigJSON is the board's wire shape for rating.Config.
+type ratingConfigJSON struct {
+	DefaultModel string   `json:"default_model"`
+	ABMode       bool     `json:"ab_mode"`
+	Models       []string `json:"models"`
+}
+
+func toRatingJSON(c rating.Config) ratingConfigJSON {
+	return ratingConfigJSON{DefaultModel: c.DefaultModel, ABMode: c.ABEnabled, Models: c.Models}
+}
+
+// getRatingConfig returns the stored A/B rater config (normalized, so a fresh
+// DB yields the single default rater).
+func (s *server) getRatingConfig(w http.ResponseWriter, r *http.Request) {
+	c, err := s.st.GetRatingConfig(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toRatingJSON(c))
+}
+
+// putRatingConfig validates strictly (see rating.Config.Validate) and saves.
+// An invalid config is a 400 with the reason, never a silent repair.
+func (s *server) putRatingConfig(w http.ResponseWriter, r *http.Request) {
+	var in ratingConfigJSON
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	cfg := rating.Config{ABEnabled: in.ABMode, Models: in.Models, DefaultModel: in.DefaultModel}
+	if err := cfg.Validate(); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	c, err := s.st.SetRatingConfig(r.Context(), cfg)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toRatingJSON(c))
 }
 
 // getCrawlStatus reports per-source crawl health and today's find count. The

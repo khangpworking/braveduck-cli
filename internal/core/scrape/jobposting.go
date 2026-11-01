@@ -139,8 +139,14 @@ func ParsePastedJD(text string) JobPosting {
 // browser fetcher is configured (BRAVEDUCK_BROWSER_FETCHER), it escalates once to
 // that fetcher for Cloudflare/JS-gated pages like TopCV. ok is false when neither
 // tier finds a JobPosting — the caller still adds the job from the bare URL. Both
-// tiers are best-effort, so the error is always nil (kept for signature stability).
+// tiers are best-effort; the only error is ErrNonPublicURL (or a resolve
+// failure) for a link that must not be fetched at all — see CheckPublicURL.
+// The browser tier can't use publicClient, so this up-front check is what keeps
+// it off localhost/LAN.
 func FetchJobPosting(ctx context.Context, u string) (JobPosting, bool, error) {
+	if err := CheckPublicURL(ctx, u); err != nil {
+		return JobPosting{}, false, err
+	}
 	if page := httpFetchPage(ctx, u); page != "" {
 		if jp, ok := ExtractJobPosting(page); ok {
 			return jp, true, nil
@@ -167,7 +173,7 @@ func httpFetchPage(ctx context.Context, u string) string {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept-Language", "vi,en;q=0.9")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := publicClient.Do(req)
 	if err != nil {
 		return ""
 	}

@@ -29,23 +29,78 @@ type Store struct {
 	db *sql.DB
 }
 
-// Open opens (creating if needed) the database at path and applies the schema.
-// Use ":memory:" for an ephemeral store. Foreign keys are enabled so the
-// job_ratings cascade works.
+// migrations are applied in order, each exactly once, tracked by SQLite's
+// PRAGMA user_version (version N means migrations[:N] have run). Append new
+// steps; never edit or reorder a shipped one. Step 1 is the v1 baseline — it is
+// idempotent (IF NOT EXISTS), so databases created before versioning existed
+// adopt it cleanly.
+var migrations = []string{
+	schemaSQL,
+}
+
+// Open opens (creating if needed) the database at path and migrates it to the
+// current schema. Use ":memory:" for an ephemeral store.
+//
+// Pragmas go in the DSN so they apply to every pooled connection, not just the
+// first: foreign keys (for the job_ratings cascade), a busy timeout so the CLI
+// and a running `serve` don't fail with "database is locked", and WAL so readers
+// never block the writer.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	pragmas := "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	memory := path == ":memory:"
+	if !memory {
+		pragmas += "&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+	}
+	db, err := sql.Open("sqlite", path+"?"+pragmas)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+	if memory {
+		// Each :memory: connection is its own empty database; pin to one.
+		db.SetMaxOpenConns(1)
+	}
+	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schemaSQL); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
-	}
 	return &Store{db: db}, nil
+}
+
+// migrate brings db up to len(migrations), one transaction per step.
+func migrate(db *sql.DB) error {
+	var v int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
+		return err
+	}
+	if v > len(migrations) {
+		return fmt.Errorf("database schema v%d is newer than this braveduck (v%d) — upgrade braveduck", v, len(migrations))
+	}
+	for i := v; i < len(migrations); i++ {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(migrations[i]); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		// PRAGMA can't take a bound parameter; i+1 is our own int.
+		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SchemaVersion reports the database's applied migration count (for doctor).
+func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
+	var v int
+	err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v)
+	return v, err
 }
 
 // Close closes the underlying database.

@@ -14,6 +14,47 @@ const STORAGE_KEYS = {
 const USE_MOCK = false; // Set to false to interact with real backend REST endpoints
 const API_BASE = "/api";
 
+// The server injects a per-run token into index.html and requires it on every
+// /api/ call (see guard in api.go). On 401 the page is stale — the server was
+// restarted with a new token — so reloading picks the new one up.
+const API_TOKEN = document.querySelector('meta[name="braveduck-token"]')?.content || "";
+
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${API_TOKEN}` }
+  });
+  if (res.status === 401) {
+    showToast("Session expired — reloading the board…", "error");
+    setTimeout(() => location.reload(), 1500);
+  }
+  return res;
+}
+
+// --- HTML safety -------------------------------------------------------------
+// Job fields come from scraped third-party pages, so treat every one as hostile
+// text. Anything interpolated into an innerHTML template goes through esc();
+// a value inside an inline onclick="f(...)" goes through jsArg(); a value used
+// as an href goes through safeUrl(), which only lets http(s) links through.
+function esc(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function jsArg(v) {
+  return esc(JSON.stringify(String(v ?? "")));
+}
+
+function safeUrl(v) {
+  try {
+    const u = new URL(String(v ?? ""), location.href);
+    return u.protocol === "http:" || u.protocol === "https:" ? esc(u.href) : "#";
+  } catch {
+    return "#";
+  }
+}
+
 // --- Field-shape adapter -----------------------------------------------------
 // This UI was built against mock data whose Job shape differs from the Go store's
 // JSON in three ways: status is TitleCase ("Waiting to apply") vs the store's
@@ -117,7 +158,7 @@ const APIClient = {
     if (USE_MOCK) {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
     } else {
-      const res = await fetch(`${API_BASE}/jobs`);
+      const res = await apiFetch(`${API_BASE}/jobs`);
       const data = await res.json();
       return Array.isArray(data) ? data.map(normalizeJob) : [];
     }
@@ -134,7 +175,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}`, {
+      const res = await apiFetch(`${API_BASE}/jobs/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(denormalizeFields(fields))
@@ -155,7 +196,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}`, { method: "DELETE" });
       return res.json();
     }
   },
@@ -285,7 +326,7 @@ const APIClient = {
 
       return newJob;
     } else {
-      const res = await fetch(`${API_BASE}/jobs`, {
+      const res = await apiFetch(`${API_BASE}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: pasteContent })
@@ -329,7 +370,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/rate`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/rate`, { method: "POST" });
       return res.json();
     }
   },
@@ -365,7 +406,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/rate/ask`, {
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/rate/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: modelName })
@@ -401,7 +442,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/cv`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/cv`, { method: "POST" });
       return res.json();
     }
   },
@@ -434,7 +475,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/draft`, {
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options)
@@ -458,7 +499,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/draft/approve`, {
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft_email: draftEmail })
@@ -480,7 +521,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/draft/reject`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/reject`, { method: "POST" });
       return res.json();
     }
   },
@@ -522,7 +563,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/apply`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/apply`, { method: "POST" });
       return res.json();
     }
   },
@@ -539,7 +580,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/keep`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/keep`, { method: "POST" });
       return res.json();
     }
   },
@@ -576,7 +617,7 @@ const APIClient = {
       }
       throw new Error("Job not found");
     } else {
-      const res = await fetch(`${API_BASE}/jobs/${id}/pin`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/${id}/pin`, { method: "POST" });
       return res.json();
     }
   },
@@ -585,7 +626,7 @@ const APIClient = {
     if (USE_MOCK) {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.RATING_CONFIG));
     } else {
-      const res = await fetch(`${API_BASE}/rating-config`);
+      const res = await apiFetch(`${API_BASE}/rating-config`);
       return res.json();
     }
   },
@@ -596,7 +637,7 @@ const APIClient = {
       this.addActivity("info", "Updated AI rating config");
       return config;
     } else {
-      const res = await fetch(`${API_BASE}/rating-config`, {
+      const res = await apiFetch(`${API_BASE}/rating-config`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config)
@@ -609,7 +650,7 @@ const APIClient = {
     if (USE_MOCK) {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.KEYWORDS));
     } else {
-      const res = await fetch(`${API_BASE}/keywords`);
+      const res = await apiFetch(`${API_BASE}/keywords`);
       return res.json();
     }
   },
@@ -620,7 +661,7 @@ const APIClient = {
       this.addActivity("info", "Updated keywords list");
       return keywords;
     } else {
-      const res = await fetch(`${API_BASE}/keywords`, {
+      const res = await apiFetch(`${API_BASE}/keywords`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(keywords)
@@ -633,7 +674,7 @@ const APIClient = {
     if (USE_MOCK) {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.CRAWL_STATUS));
     } else {
-      const res = await fetch(`${API_BASE}/crawl-status`);
+      const res = await apiFetch(`${API_BASE}/crawl-status`);
       return res.json();
     }
   },
@@ -642,7 +683,7 @@ const APIClient = {
     if (USE_MOCK) {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVITY)) || [];
     } else {
-      const res = await fetch(`${API_BASE}/activity`);
+      const res = await apiFetch(`${API_BASE}/activity`);
       if (!res.ok) return [];
       const events = await res.json();
       // Server timestamps are ISO; the feed renders a plain clock like the mock.
@@ -726,7 +767,7 @@ const APIClient = {
       }
       throw new Error("Source not found");
     } else {
-      const res = await fetch(`${API_BASE}/crawl/${sourceName}/retry`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/crawl/${sourceName}/retry`, { method: "POST" });
       return res.json();
     }
   },
@@ -774,7 +815,7 @@ const APIClient = {
       
       return { success: true };
     } else {
-      const res = await fetch(`${API_BASE}/jobs/rate-backfill`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE}/jobs/rate-backfill`, { method: "POST" });
       return res.json();
     }
   }
@@ -876,12 +917,12 @@ function renderCrawlStatus() {
   if (!status) return;
 
   const headline = document.getElementById("crawlHeadline");
-  headline.innerHTML = `📥 <strong>${status.newJobsToday} new jobs</strong> found · ${status.date}`;
+  headline.innerHTML = `📥 <strong>${esc(status.newJobsToday)} new jobs</strong> found · ${esc(status.date)}`;
 
   // Render per-source chips
   const chipsContainer = document.getElementById("crawlChips");
   chipsContainer.innerHTML = status.sources
-    .map(s => `<span class="chip">${s.name} <strong style="color:var(--ink)">${s.count}</strong></span>`)
+    .map(s => `<span class="chip">${esc(s.name)} <strong style="color:var(--ink)">${esc(s.count)}</strong></span>`)
     .join("");
 
   // Render unhealthy sources
@@ -896,8 +937,8 @@ function renderCrawlStatus() {
     unhealthyContainer.innerHTML = unhealthySources
       .map(s => `
         <div class="chip unhealthy" style="justify-content: space-between; display: flex; width: 100%;">
-          <span>⚠️ ${s.name} (Crawl stalled: ${timeAgo(s.lastRun) || "never run"})</span>
-          <button class="btn-text" onclick="triggerCrawlerRetry('${s.name}')" style="color: #991b1b; text-decoration: underline;">Retry ⟳</button>
+          <span>⚠️ ${esc(s.name)} (Crawl stalled: ${esc(timeAgo(s.lastRun) || "never run")})</span>
+          <button class="btn-text" onclick="triggerCrawlerRetry(${jsArg(s.name)})" style="color: #991b1b; text-decoration: underline;">Retry ⟳</button>
         </div>
       `)
       .join("");
@@ -945,8 +986,8 @@ function renderPlatformFilters() {
   container.innerHTML = Array.from(platforms)
     .map(p => `
       <label class="filter-cb">
-        <input type="checkbox" name="platform-filter" value="${p}" ${AppState.filters.platform === p ? "checked" : ""} onchange="updatePlatformFilter(this)">
-        ${p}
+        <input type="checkbox" name="platform-filter" value="${esc(p)}" ${AppState.filters.platform === p ? "checked" : ""} onchange="updatePlatformFilter(this)">
+        ${esc(p)}
       </label>
     `)
     .join("");
@@ -1110,7 +1151,7 @@ function renderJobCard(job, container) {
     dealbreakers.push("⛔ Lương thỏa thuận");
   }
   if (job.company_distance_km && parseFloat(job.company_distance_km) > 10) {
-    dealbreakers.push(`⛔ Xa ${job.company_distance_km}km`);
+    dealbreakers.push(`⛔ Xa ${esc(job.company_distance_km)}km`);
   }
   if (job.company_active_date && job.company_active_date !== "🏢 …" && job.company_active_date !== "🏢 Unknown") {
     const year = new Date(job.company_active_date).getFullYear();
@@ -1140,7 +1181,7 @@ function renderJobCard(job, container) {
   } else if (job.score_status === "stuck") {
     scoreHtml = `<span class="score-badge score-f" style="font-size:11px; cursor:pointer;" onclick="retryScoring('${job.id}')" title="Scoring hung. Click to force retry.">stuck·retry</span>`;
   } else {
-    scoreHtml = `<span class="score-badge ${scoreClass}">${job.score_letter} ${job.score}</span>`;
+    scoreHtml = `<span class="score-badge ${scoreClass}">${esc(job.score_letter)} ${esc(job.score)}</span>`;
   }
 
   // Compare Badges (A/B mode on Saved/Waiting cards)
@@ -1151,12 +1192,12 @@ function renderJobCard(job, container) {
         const rating = job.ratings && job.ratings[model];
         if (rating) {
           if (rating.letter === "...") {
-            compareBadgesHtml += `<span class="score-badge score-pending" style="font-size:10px; opacity:0.8;" title="${model}">${model.substring(0,3)}:…</span>`;
+            compareBadgesHtml += `<span class="score-badge score-pending" style="font-size:10px; opacity:0.8;" title="${esc(model)}">${esc(model.substring(0,3))}:…</span>`;
           } else if (rating.letter === "✕") {
-            compareBadgesHtml += `<span class="score-badge score-f" style="font-size:10px; opacity:0.8;" title="${model} failed">${model.substring(0,3)}:✕</span>`;
+            compareBadgesHtml += `<span class="score-badge score-f" style="font-size:10px; opacity:0.8;" title="${esc(model)} failed">${esc(model.substring(0,3))}:✕</span>`;
           } else {
             let modelClass = rating.letter === "A" ? "score-a" : (rating.letter === "B" ? "score-b" : "score-c");
-            compareBadgesHtml += `<span class="score-badge ${modelClass}" style="font-size:10px; opacity:0.8;" title="${model}">${model.substring(0,3)}: ${rating.letter} ${rating.score}</span>`;
+            compareBadgesHtml += `<span class="score-badge ${modelClass}" style="font-size:10px; opacity:0.8;" title="${esc(model)}">${esc(model.substring(0,3))}: ${esc(rating.letter)} ${esc(rating.score)}</span>`;
           }
         }
       }
@@ -1164,7 +1205,7 @@ function renderJobCard(job, container) {
   }
 
   // Salary chip
-  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip">💰 ${job.salary}</span>` : "";
+  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip">💰 ${esc(job.salary)}</span>` : "";
 
   // Company active date (masothue link)
   let masothueHtml = "";
@@ -1188,7 +1229,7 @@ function renderJobCard(job, container) {
       let icon = "✅";
       if (job.company_geo_status === "ok") icon = "🟡";
       if (job.company_geo_status === "far") icon = "🔴";
-      distanceHtml = `<span class="intel-badge">${icon} ${job.company_distance_km}km</span>`;
+      distanceHtml = `<span class="intel-badge">${icon} ${esc(job.company_distance_km)}km</span>`;
     }
   } else {
     distanceHtml = `<span class="intel-badge" title="Unknown distance. Pin card to trigger lookup.">📍 ? km</span>`;
@@ -1204,9 +1245,9 @@ function renderJobCard(job, container) {
       suitable: "✅ suitable",
       rejected: "❌ rejected"
     };
-    platformStatusHtml = `<span class="apply-badge">${labels[job.topcv_status] || job.topcv_status}</span>`;
+    platformStatusHtml = `<span class="apply-badge">${esc(labels[job.topcv_status] || job.topcv_status)}</span>`;
   } else if (job.discovery_source === "VietnamWorks" && job.vnw_status) {
-    platformStatusHtml = `<span class="apply-badge">${job.vnw_status === "seen" ? "👁 seen" : job.vnw_status}</span>`;
+    platformStatusHtml = `<span class="apply-badge">${job.vnw_status === "seen" ? "👁 seen" : esc(job.vnw_status)}</span>`;
   }
 
   // Age and expiry badge calculation
@@ -1303,8 +1344,8 @@ function renderJobCard(job, container) {
     <div class="card-header">
       <div class="card-top-row">
         <div class="card-title-group">
-          <a href="${job.url}" target="_blank" class="card-title" onclick="event.stopPropagation()">${job.title}</a>
-          <div class="card-company">${job.company}</div>
+          <a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="card-title" onclick="event.stopPropagation()">${esc(job.title)}</a>
+          <div class="card-company">${esc(job.company)}</div>
         </div>
         <div class="card-actions-group">
           <div style="display: flex; gap: 4px; align-items: center;">
@@ -1312,7 +1353,7 @@ function renderJobCard(job, container) {
             ${scoreHtml}
           </div>
           <div class="quick-actions">
-            <a href="${job.url}" target="_blank" class="icon-btn-sm" title="Open original link" onclick="event.stopPropagation()">↗</a>
+            <a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="icon-btn-sm" title="Open original link" onclick="event.stopPropagation()">↗</a>
             ${pinBtnHtml}
             <button class="icon-btn-sm" title="Delete job" style="color:var(--error);" onclick="deleteJobCard('${job.id}')">✕</button>
           </div>
@@ -1328,7 +1369,7 @@ function renderJobCard(job, container) {
     
     <div class="card-footer">
       <div class="footer-left">
-        <span class="age-label">${ageStr} · ${job.discovery_source}</span>
+        <span class="age-label">${esc(ageStr)} · ${esc(job.discovery_source)}</span>
         ${expiryHtml}
         ${automationHtml}
         ${sentMarkersHtml}
@@ -1365,12 +1406,12 @@ function renderCardDetailContents(job, detailContainer) {
       .split("\n")
       .map(line => line.trim().replace(/^•\s*/, ""))
       .filter(Boolean)
-      .map(item => `<li>${item}</li>`)
+      .map(item => `<li>${esc(item)}</li>`)
       .join("");
     
     assessmentHtml = `
       <div class="detail-section">
-        <div class="detail-title">AI Assessment (${AppState.ratingConfig.default_model})</div>
+        <div class="detail-title">AI Assessment (${esc(AppState.ratingConfig.default_model)})</div>
         <ul class="assessment-list">${listItems}</ul>
       </div>
     `;
@@ -1387,10 +1428,10 @@ function renderCardDetailContents(job, detailContainer) {
           list += `
             <div style="margin-bottom: 6px;">
               <span class="score-badge ${rating.letter === "A" ? "score-a" : (rating.letter === "B" ? "score-b" : "score-c")}" style="font-size: 11px;">
-                ${model}: ${rating.letter} ${rating.score}
+                ${esc(model)}: ${esc(rating.letter)} ${esc(rating.score)}
               </span>
               <p style="font-size:12px; margin: 2px 0 0 0; color: var(--body); font-style: italic;">
-                "${rating.reasoning}"
+                "${esc(rating.reasoning)}"
               </p>
             </div>
           `;
@@ -1402,7 +1443,7 @@ function renderCardDetailContents(job, detailContainer) {
     const availableOthers = AppState.ratingConfig.models.filter(m => !job.ratings || !job.ratings[m] || job.ratings[m].letter === "✕");
     let askSelectHtml = "";
     if (availableOthers.length > 0) {
-      const options = availableOthers.map(m => `<option value="${m}">${m}</option>`).join("");
+      const options = availableOthers.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
       askSelectHtml = `
         <div style="margin-top: 8px; display: flex; gap: 6px; align-items: center;">
           <select class="text-input" style="padding: 4px 8px; font-size:12px; width: auto;" id="askModelSelect-${job.id}">
@@ -1425,7 +1466,7 @@ function renderCardDetailContents(job, detailContainer) {
   // 3. Skills
   let skillsHtml = "";
   if (job.skills && job.skills.length > 0) {
-    const pills = job.skills.map(s => `<span class="skill-pill">${s}</span>`).join("");
+    const pills = job.skills.map(s => `<span class="skill-pill">${esc(s)}</span>`).join("");
     skillsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
         <div class="detail-title">Skills Extracted</div>
@@ -1438,8 +1479,8 @@ function renderCardDetailContents(job, detailContainer) {
   let summaryHtml = "";
   if (job.jd_ai_summary || job.jd_summary) {
     const content = job.jd_ai_summary
-      ? job.jd_ai_summary.split("\n").map(l => `<li>${l.trim().replace(/^•\s*/, "")}</li>`).join("")
-      : `<li>${job.jd_summary}</li>`;
+      ? job.jd_ai_summary.split("\n").map(l => `<li>${esc(l.trim().replace(/^•\s*/, ""))}</li>`).join("")
+      : `<li>${esc(job.jd_summary)}</li>`;
     
     summaryHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
@@ -1453,7 +1494,7 @@ function renderCardDetailContents(job, detailContainer) {
   const notesHtml = `
     <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
       <div class="detail-title">My Notes (Auto-saves)</div>
-      <textarea class="textarea-input" style="height: 60px; font-size: 12px;" placeholder="Add custom notes..." oninput="saveJobNotes('${job.id}', this)">${job.notes || ""}</textarea>
+      <textarea class="textarea-input" style="height: 60px; font-size: 12px;" placeholder="Add custom notes..." oninput="saveJobNotes('${job.id}', this)">${esc(job.notes)}</textarea>
     </div>
   `;
 
@@ -1478,7 +1519,7 @@ function renderCardDetailContents(job, detailContainer) {
       
       applyBlockHtml = `
         <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-          <div class="detail-title">🌐 On-Site Application (${job.discovery_source})</div>
+          <div class="detail-title">🌐 On-Site Application (${esc(job.discovery_source)})</div>
           <div style="margin-top: 6px;">
             <button class="btn-primary btn-sm" onclick="${btnAction}">${btnLabel}</button>
             ${undoBtn}
@@ -1516,15 +1557,15 @@ function renderCardDetailContents(job, detailContainer) {
           <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
             <div>
               <label style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
-              <input type="text" id="draftTo-${job.id}" class="text-input" value="${draft.to}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
+              <input type="text" id="draftTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
             </div>
             <div>
               <label style="font-size:11px; font-weight:600; color:var(--muted)">Subject</label>
-              <input type="text" id="draftSubject-${job.id}" class="text-input" value="${draft.subject || `Ứng tuyển vị trí ${job.title} - CV tailored`}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
+              <input type="text" id="draftSubject-${job.id}" class="text-input" value="${esc(draft.subject || `Ứng tuyển vị trí ${job.title} - CV tailored`)}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
             </div>
             <div>
               <label style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
-              <textarea id="draftBody-${job.id}" class="textarea-input" style="height: 120px; font-size: 12px;" ${readOnlyAttr}>${draft.body || ""}</textarea>
+              <textarea id="draftBody-${job.id}" class="textarea-input" style="height: 120px; font-size: 12px;" ${readOnlyAttr}>${esc(draft.body)}</textarea>
             </div>
             ${draftControls}
           </div>
@@ -1558,11 +1599,11 @@ function renderCardDetailContents(job, detailContainer) {
       <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
         <div>
           <label style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
-          <input type="text" id="replyTo-${job.id}" class="text-input" value="${draft.to}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
+          <input type="text" id="replyTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
         </div>
         <div>
           <label style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
-          <textarea id="replyBody-${job.id}" class="textarea-input" style="height: 80px; font-size: 12px;" ${readOnlyAttr}>${draft.body || ""}</textarea>
+          <textarea id="replyBody-${job.id}" class="textarea-input" style="height: 80px; font-size: 12px;" ${readOnlyAttr}>${esc(draft.body)}</textarea>
         </div>
         ${draftControls}
       </div>
@@ -1586,9 +1627,9 @@ function renderCardDetailContents(job, detailContainer) {
       cvStatusText = "Tailored CV: ✍️ Tailoring in progress...";
       cvButtons = "";
     } else if (job.cv_status === "ready") {
-      cvStatusText = `Tailored CV: Ready (${job.cv_version}) · ${new Date(job.cv_generated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+      cvStatusText = `Tailored CV: Ready (${esc(job.cv_version)}) · ${new Date(job.cv_generated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
       cvButtons = `
-        <a href="${job.cv_path}" download class="btn-secondary btn-sm" onclick="event.stopPropagation(); showToast('Downloading CV.pdf...', 'info');">Download CV.pdf</a>
+        <a href="${safeUrl(job.cv_path)}" download class="btn-secondary btn-sm" onclick="event.stopPropagation(); showToast('Downloading CV.pdf...', 'info');">Download CV.pdf</a>
         <button class="btn-secondary btn-sm" onclick="triggerCvTailor('${job.id}')">Re-draft CV</button>
       `;
     }
@@ -1862,7 +1903,7 @@ function showToast(message, type = "success") {
   const container = document.getElementById("toastContainer");
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️')}</span> ${message}`;
+  toast.innerHTML = `<span>${type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️')}</span> ${esc(message)}`;
   container.appendChild(toast);
   
   // Show animation
@@ -1896,9 +1937,9 @@ function renderActivityLog() {
     
     return `
       <div class="log-item">
-        <span class="log-time">${act.timestamp}</span>
+        <span class="log-time">${esc(act.timestamp)}</span>
         <span class="log-icon">${icon}</span>
-        <span>${act.message}</span>
+        <span>${esc(act.message)}</span>
       </div>
     `;
   }).join("");
@@ -1971,7 +2012,7 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.backgroundColor = "#dcfce7";
       extractResultBanner.style.color = "#166534";
       extractResultBanner.style.border = "1px solid #bbf7d0";
-      extractResultBanner.innerHTML = `✨ <strong>Job Added Successfully (#${newJob.id})</strong><br>Extracted: ${newJob.title} at ${newJob.company}. Scoring in progress.`;
+      extractResultBanner.innerHTML = `✨ <strong>Job Added Successfully (#${newJob.id})</strong><br>Extracted: ${esc(newJob.title)} at ${esc(newJob.company)}. Scoring in progress.`;
       extractResultBanner.style.display = "block";
       pasteTextarea.value = "";
       
@@ -2010,8 +2051,8 @@ document.addEventListener("DOMContentLoaded", () => {
     
     container.innerHTML = Object.keys(kw).map(source => `
       <div class="form-group">
-        <label for="kw-${source}">${source} Crawler Keywords</label>
-        <textarea id="kw-${source}" class="textarea-input" style="height: 60px;" oninput="previewKeywordMatches()">${kw[source].join(", ")}</textarea>
+        <label for="kw-${esc(source)}">${esc(source)} Crawler Keywords</label>
+        <textarea id="kw-${esc(source)}" class="textarea-input" style="height: 60px;" oninput="previewKeywordMatches()">${esc(kw[source].join(", "))}</textarea>
       </div>
     `).join("");
 
@@ -2047,8 +2088,8 @@ document.addEventListener("DOMContentLoaded", () => {
     
     challengerContainer.innerHTML = allModels.map(m => `
       <label class="filter-cb">
-        <input type="checkbox" name="challengerModel" value="${m}" ${config.models.includes(m) ? "checked" : ""}>
-        ${m}
+        <input type="checkbox" name="challengerModel" value="${esc(m)}" ${config.models.includes(m) ? "checked" : ""}>
+        ${esc(m)}
       </label>
     `).join("");
 
@@ -2179,7 +2220,7 @@ function previewKeywordMatches() {
     previewBox.innerHTML = `
       <strong>${matches.length} matching jobs found:</strong>
       <ul style="margin: 4px 0 0 0; padding-left: 16px;">
-        ${matches.map(j => `<li>${j.title} at ${j.company} (${j.discovery_source})</li>`).join("")}
+        ${matches.map(j => `<li>${esc(j.title)} at ${esc(j.company)} (${esc(j.discovery_source)})</li>`).join("")}
       </ul>
     `;
   }
