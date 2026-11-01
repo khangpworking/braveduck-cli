@@ -51,6 +51,9 @@ func cmdServe(ctx context.Context, st *store.Store, args []string) error {
 	srv := &http.Server{
 		Handler:           api.Handler(st, hex.EncodeToString(tok)),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Requests inherit ctx, so Ctrl-C also ends long-lived event streams
+		// instead of Shutdown waiting on them.
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 	go func() {
 		<-ctx.Done()

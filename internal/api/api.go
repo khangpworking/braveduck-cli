@@ -42,7 +42,7 @@ func Handler(st *store.Store, token string) http.Handler {
 	if token == "" {
 		panic("api.Handler: empty token")
 	}
-	s := &server{svc: service.New(st)}
+	s := &server{svc: service.New(st), hub: newHub(st)}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/jobs", s.listJobs)
@@ -58,6 +58,7 @@ func Handler(st *store.Store, token string) http.Handler {
 	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
 	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
 	mux.HandleFunc("GET /api/activity", s.getActivity)
+	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("POST /api/crawl/{source}/retry", s.retryCrawl)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -108,8 +109,14 @@ func guard(token string, next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 
+		auth := r.Header.Get("Authorization")
+		// EventSource can't set headers, so the event stream alone may carry
+		// the token in the query (ARCHITECTURE.md §1.5 allows ?token=).
+		if r.URL.Path == "/api/events" && auth == "" {
+			auth = "Bearer " + r.URL.Query().Get("token")
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/") &&
-			subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			subtle.ConstantTimeCompare([]byte(auth), want) != 1 {
 			writeErr(w, http.StatusUnauthorized, errors.New("missing or bad token — reload the board"))
 			return
 		}
@@ -131,7 +138,10 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-type server struct{ svc *service.Service }
+type server struct {
+	svc *service.Service
+	hub *hub
+}
 
 func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 	list, err := s.svc.ListJobs(r.Context(), service.ListFilter{

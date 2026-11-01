@@ -26,7 +26,8 @@ var schemaSQL string
 
 // Store is a handle to the local SQLite database.
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	memory bool // :memory: — single connection, nothing else can write
 }
 
 // migrations are applied in order, each exactly once, tracked by SQLite's
@@ -66,7 +67,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, memory: memory}, nil
 }
 
 // migrate brings db up to len(migrations), one transaction per step.
