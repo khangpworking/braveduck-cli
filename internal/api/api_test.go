@@ -99,3 +99,23 @@ func getJSON(t *testing.T, url string, v any) {
 		t.Fatal(err)
 	}
 }
+
+func TestPatchRejectsUnknownStage(t *testing.T) {
+	ts, st := newTestServer(t)
+	if _, err := st.Add(context.Background(), jobs.Job{Title: "X"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if resp := do(t, http.MethodPatch, ts.URL+"/api/jobs/1", `{"status":"banana"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unknown stage = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestCreateDuplicateIs409(t *testing.T) {
+	ts, st := newTestServer(t)
+	if _, err := st.Add(context.Background(), jobs.Job{Title: "X", URL: "https://www.topcv.vn/j/1"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if resp := do(t, http.MethodPost, ts.URL+"/api/jobs", `{"content":"https://www.topcv.vn/j/1"}`); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate = %d, want 409", resp.StatusCode)
+	}
+}

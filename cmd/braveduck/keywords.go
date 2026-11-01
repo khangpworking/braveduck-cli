@@ -168,8 +168,10 @@ func keywordsCheck(ctx context.Context, st *store.Store, args []string) error {
 	if err != nil {
 		return err
 	}
-	j, err := getJob(ctx, st, id)
-	if err != nil {
+	j, err := st.Get(ctx, id)
+	if store.IsNotFound(err) {
+		return fmt.Errorf("no job #%d", id)
+	} else if err != nil {
 		return err
 	}
 	sets, err := st.AllKeywords(ctx)

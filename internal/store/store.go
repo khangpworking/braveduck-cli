@@ -36,6 +36,9 @@ type Store struct {
 // adopt it cleanly.
 var migrations = []string{
 	schemaSQL,
+	// 2: duplicate-URL checks (AddJob) scan by url. Deliberately not UNIQUE —
+	// a DB that already holds duplicates would then fail to open at all.
+	`CREATE INDEX IF NOT EXISTS idx_jobs_url ON jobs(url)`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the
@@ -203,8 +206,15 @@ func b2i(b bool) int {
 	return 0
 }
 
+// ErrDuplicateURL is returned by Add when a job with the same non-empty URL is
+// already stored.
+var ErrDuplicateURL = errors.New("this job is already on the board")
+
 // Add inserts a new job and returns its id. now backfills any empty
 // SavedAt/CreatedAt/UpdatedAt with a single consistent ISO timestamp.
+//
+// A non-empty URL must be unique: the existence check and the insert are one
+// statement, so two concurrent adds of the same link can't both succeed.
 func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, error) {
 	ts := now.UTC().Format(time.RFC3339)
 	if j.SavedAt == "" {
@@ -219,10 +229,17 @@ func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, erro
 	}
 
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(writeCols)), ",")
-	q := fmt.Sprintf("INSERT INTO jobs (%s) VALUES (%s)", strings.Join(writeCols, ","), ph)
-	res, err := s.db.ExecContext(ctx, q, writeArgs(j)...)
+	q := fmt.Sprintf(
+		"INSERT INTO jobs (%s) SELECT %s WHERE ? = '' OR NOT EXISTS (SELECT 1 FROM jobs WHERE url = ?)",
+		strings.Join(writeCols, ","), ph)
+	res, err := s.db.ExecContext(ctx, q, append(writeArgs(j), j.URL, j.URL)...)
 	if err != nil {
 		return 0, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return 0, err
+	} else if n == 0 {
+		return 0, ErrDuplicateURL
 	}
 	return res.LastInsertId()
 }
@@ -233,15 +250,16 @@ func (s *Store) Get(ctx context.Context, id int64) (jobs.Job, error) {
 	return scanJob(row)
 }
 
-// ExistsByURL reports whether a job with this exact URL is already stored, so
-// Extract & Add can reject a duplicate paste. An empty URL never matches.
+// ExistsByURL reports whether a job with this exact URL is stored — a cheap
+// pre-check so Extract & Add can skip a slow fetch for a duplicate (Add itself
+// re-checks atomically). An empty URL never matches.
 func (s *Store) ExistsByURL(ctx context.Context, url string) (bool, error) {
 	if url == "" {
 		return false, nil
 	}
 	var n int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs WHERE url = ?", url).Scan(&n)
-	return n > 0, err
+	err := s.db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE url = ?)", url).Scan(&n)
+	return n == 1, err
 }
 
 // ListFilter narrows List; empty fields mean "no filter on that column".
@@ -296,6 +314,56 @@ func (s *Store) Update(ctx context.Context, j jobs.Job, now time.Time) error {
 	q := fmt.Sprintf("UPDATE jobs SET %s WHERE id = ?", strings.Join(set, ","))
 	args := append(writeArgs(j), j.ID)
 	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res)
+}
+
+// JobPatch names the board-editable fields to change; nil means "leave as is".
+// Patch writes only the named columns, so two clients editing different fields
+// of the same job can't clobber each other (a full-row Update could).
+type JobPatch struct {
+	Status *string
+	Pinned *bool
+	Keep   *bool
+	Notes  *string
+}
+
+// Patch applies p to job id, stamping updated_at. An empty patch still checks
+// the job exists. Returns sql.ErrNoRows if it doesn't.
+func (s *Store) Patch(ctx context.Context, id int64, p JobPatch, now time.Time) error {
+	set := []string{"updated_at = ?"}
+	args := []any{now.UTC().Format(time.RFC3339)}
+	if p.Status != nil {
+		set, args = append(set, "status = ?"), append(args, *p.Status)
+	}
+	if p.Pinned != nil {
+		set, args = append(set, "pinned = ?"), append(args, b2i(*p.Pinned))
+	}
+	if p.Keep != nil {
+		set, args = append(set, "keep = ?"), append(args, b2i(*p.Keep))
+	}
+	if p.Notes != nil {
+		set, args = append(set, "notes = ?"), append(args, *p.Notes)
+	}
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE jobs SET "+strings.Join(set, ", ")+" WHERE id = ?", append(args, id)...)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res)
+}
+
+// Toggle flips a boolean flag ("pinned" or "keep") in one statement, so two
+// rapid clicks can't read the same old value and both write the same new one.
+func (s *Store) Toggle(ctx context.Context, id int64, flag string, now time.Time) error {
+	if flag != "pinned" && flag != "keep" {
+		return fmt.Errorf("store: can't toggle %q", flag)
+	}
+	res, err := s.db.ExecContext(ctx,
+		fmt.Sprintf("UPDATE jobs SET %[1]s = 1 - %[1]s, updated_at = ? WHERE id = ?", flag),
+		now.UTC().Format(time.RFC3339), id)
 	if err != nil {
 		return err
 	}

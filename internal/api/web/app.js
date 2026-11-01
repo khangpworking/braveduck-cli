@@ -1,17 +1,5 @@
 // Career Tracker - Core Application Logic
 
-// LocalStorage Keys
-const STORAGE_KEYS = {
-  JOBS: "braveduck_jobs",
-  RATING_CONFIG: "braveduck_rating_config",
-  KEYWORDS: "braveduck_keywords",
-  CRAWL_STATUS: "braveduck_crawl_status",
-  PLATFORMS: "braveduck_platforms",
-  ACTIVITY: "braveduck_activity"
-};
-
-// Flags for Mock vs Real API
-const USE_MOCK = false; // Set to false to interact with real backend REST endpoints
 const API_BASE = "/api";
 
 // The server injects a per-run token into index.html and requires it on every
@@ -47,6 +35,7 @@ function jsArg(v) {
 }
 
 function safeUrl(v) {
+  if (!v) return "#";
   try {
     const u = new URL(String(v ?? ""), location.href);
     return u.protocol === "http:" || u.protocol === "https:" ? esc(u.href) : "#";
@@ -56,11 +45,11 @@ function safeUrl(v) {
 }
 
 // --- Field-shape adapter -----------------------------------------------------
-// This UI was built against mock data whose Job shape differs from the Go store's
-// JSON in three ways: status is TitleCase ("Waiting to apply") vs the store's
+// The board's views use a slightly different Job shape from the Go store's JSON
+// in three ways: status is TitleCase ("Waiting to apply") vs the store's
 // lowercase ("waiting"), skills is an array vs a comma-separated string, and id
 // is a string vs a number. We reconcile at the fetch boundary so the rest of the
-// app (which assumes the mock shape) stays untouched.
+// app stays untouched.
 const STATUS_API_TO_UI = {
   saved: "Saved", waiting: "Waiting to apply", applied: "Applied",
   interview: "Interview", offer: "Offer", closed: "Closed"
@@ -104,18 +93,7 @@ function denormalizeFields(fields) {
   return out;
 }
 
-// Initialize LocalStorage with Mock data if empty
-function initStorage() {
-  if (!localStorage.getItem(STORAGE_KEYS.JOBS)) {
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(window.MOCK_DATA.jobs));
-    localStorage.setItem(STORAGE_KEYS.RATING_CONFIG, JSON.stringify(window.MOCK_DATA.ratingConfig));
-    localStorage.setItem(STORAGE_KEYS.KEYWORDS, JSON.stringify(window.MOCK_DATA.keywords));
-    localStorage.setItem(STORAGE_KEYS.CRAWL_STATUS, JSON.stringify(window.MOCK_DATA.crawlStatus));
-    localStorage.setItem(STORAGE_KEYS.PLATFORMS, JSON.stringify(window.MOCK_DATA.platforms));
-    localStorage.setItem(STORAGE_KEYS.ACTIVITY, JSON.stringify(window.MOCK_DATA.activity));
-  }
-}
-initStorage();
+
 
 // Global App State
 const AppState = {
@@ -136,688 +114,154 @@ const AppState = {
 
 // API Client Wrapper (mirrors REST-API-CONTRACT.md)
 const APIClient = {
-  // Add activity log event
-  addActivity(type, message) {
-    const activity = JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVITY)) || [];
-    const timestamp = new Date().toLocaleTimeString('vi-VN', { hour12: false });
-    activity.unshift({
-      id: "act-" + Date.now(),
-      timestamp,
-      type,
-      message
-    });
-    // Keep max 20 events
-    if (activity.length > 20) activity.pop();
-    localStorage.setItem(STORAGE_KEYS.ACTIVITY, JSON.stringify(activity));
-    
-    // Dispatch event to redraw activity logs
-    window.dispatchEvent(new CustomEvent("activity-logged"));
-  },
-
   async getJobs() {
-    if (USE_MOCK) {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs`);
-      const data = await res.json();
-      return Array.isArray(data) ? data.map(normalizeJob) : [];
-    }
+    const res = await apiFetch(`${API_BASE}/jobs`);
+    const data = await res.json();
+    return Array.isArray(data) ? data.map(normalizeJob) : [];
   },
 
   async updateJob(id, fields) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const idx = jobs.findIndex(j => j.id === id);
-      if (idx !== -1) {
-        jobs[idx] = { ...jobs[idx], ...fields };
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        return jobs[idx];
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(denormalizeFields(fields))
-      });
-      return normalizeJob(await res.json());
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(denormalizeFields(fields))
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return normalizeJob(body);
   },
 
   async deleteJob(id) {
-    if (USE_MOCK) {
-      let jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const job = jobs.find(j => j.id === id);
-      if (job) {
-        jobs = jobs.filter(j => j.id !== id);
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("error", `Deleted job: ${job.title} at ${job.company}`);
-        return { success: true };
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}`, { method: "DELETE" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}`, { method: "DELETE" });
+    return res.json();
   },
 
   async addJob(pasteContent) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const cleanContent = pasteContent.trim();
-
-      if (cleanContent.length < 5) {
-        throw new Error("too-short");
-      }
-
-      // Check if duplicate
-      const isUrl = cleanContent.startsWith("http");
-      const duplicate = jobs.find(j => j.url === cleanContent || (j.jd_full && j.jd_full.includes(cleanContent)));
-      if (duplicate) {
-        throw new Error("duplicate");
-      }
-
-      // Parse simulated details
-      let title = "Product Specialist";
-      let company = "Growth Corp";
-      let url = isUrl ? cleanContent : "https://mock-jd-paste.com";
-      let salary = "Lương thỏa thuận";
-      let skills = ["Product Management", "Marketing", "Data Analysis"];
-      let source = "Pasted";
-
-      if (isUrl) {
-        try {
-          const parsedUrl = new URL(cleanContent);
-          const domain = parsedUrl.hostname;
-          if (domain.includes("linkedin")) {
-            title = "Growth Specialist";
-            company = "Grab Vietnam";
-            salary = "35 - 50 triệu";
-            skills = ["User Growth", "SQL", "Tableau"];
-            source = "LinkedIn";
-          } else if (domain.includes("topcv")) {
-            title = "Brand Executive";
-            company = "VNG Corporation";
-            salary = "22 - 30 triệu";
-            skills = ["Brand Strategy", "Campaign Execution", "KOLs"];
-            source = "TopCV";
-          } else if (domain.includes("vietnamworks")) {
-            title = "Senior Data Analyst";
-            company = "OneMount Group";
-            salary = "40 - 65 triệu";
-            skills = ["SQL", "Python", "Tableau", "Data Warehouse"];
-            source = "VietnamWorks";
-          }
-        } catch (e) {
-          throw new Error("fetch-failed"); // Bad link format
-        }
-      } else {
-        // Text JD parsing attempts
-        if (cleanContent.length < 50) {
-          throw new Error("too-short");
-        }
-        const lines = cleanContent.split("\n").map(l => l.trim()).filter(Boolean);
-        if (lines.length > 0) title = lines[0].substring(0, 50);
-        if (lines.length > 1) company = lines[1].substring(0, 50);
-      }
-
-      const newId = "job-" + (jobs.length + 1) + "-" + Math.random().toString(36).substr(2, 4);
-      const newJob = {
-        id: newId,
-        title,
-        company,
-        url,
-        salary,
-        location: "TP. HCM",
-        skills,
-        status: "Saved",
-        pinned: false,
-        keep: false,
-        score: Math.floor(Math.random() * 25) + 75, // score 75 - 100
-        score_letter: "",
-        score_status: "scoring", // Starts in scoring state
-        score_reasoning: "• Analyzing qualifications against job requirements...",
-        ratings: {},
-        jd_summary: "Simulated job description summary.",
-        jd_ai_summary: "• Key responsibilities parsed.\n• Required skills identified.",
-        jd_full: cleanContent,
-        discovery_source: source,
-        saved_at: new Date().toISOString(),
-        apply_method: Math.random() > 0.5 ? "email" : "on-site",
-        apply_state: "manual",
-        cv_path: "",
-        cv_status: "none",
-        cv_version: "",
-        cv_generated_at: "",
-        draft_email: null,
-        draft_status: "no-draft-yet",
-        contact_email: source === "LinkedIn" ? "hr@grab.vn" : "recruitment@vng.com.vn",
-        expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-        followup_sent_at: null,
-        topcv_status: null,
-        vnw_status: null,
-        company_active_date: null,
-        company_distance_km: null,
-        company_geo_status: "unknown",
-        notes: ""
-      };
-
-      if (newJob.score >= 90) newJob.score_letter = "A";
-      else if (newJob.score >= 80) newJob.score_letter = "B";
-      else if (newJob.score >= 70) newJob.score_letter = "C";
-      else newJob.score_letter = "D";
-
-      jobs.push(newJob);
-      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-      this.addActivity("info", `Job extracted & added: ${title} at ${company}`);
-
-      // Simulate background scoring after 4 seconds
-      setTimeout(() => {
-        const currentJobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS)) || [];
-        const j = currentJobs.find(item => item.id === newId);
-        if (j) {
-          j.score_status = "scored";
-          j.score_reasoning = `• Good alignment with core skills.\n• Salary profile is competitive.\n• Strong organizational reputation.`;
-          localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(currentJobs));
-          APIClient.addActivity("success", `AI Scoring completed for ${j.title} (${j.company})`);
-          refreshAppState();
-        }
-      }, 4000);
-
-      return newJob;
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: pasteContent })
-      });
-      if (!res.ok) {
-        // Map backend status to the banner's expected codes (400→too-short,
-        // 409→duplicate); anything else surfaces the server's message verbatim.
-        if (res.status === 400) throw new Error("too-short");
-        if (res.status === 409) throw new Error("duplicate");
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "add-failed");
-      }
-      return res.json();
+    const res = await apiFetch(`${API_BASE}/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: pasteContent })
+    });
+    if (!res.ok) {
+      // 409 gets its own banner; anything else (a too-short paste, a link to
+      // localhost/LAN, ...) surfaces the server's message verbatim.
+      if (res.status === 409) throw new Error("duplicate");
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
     }
+    return res.json();
   },
 
   async rescore(id) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.score_status = "scoring";
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Rescoring triggered for ${j.title} (${j.company})`);
-        
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob) {
-            currentJob.score_status = "scored";
-            currentJob.score = Math.floor(Math.random() * 20) + 80;
-            currentJob.score_letter = currentJob.score >= 90 ? "A" : "B";
-            currentJob.score_reasoning = "• Manually re-scored. Fit remains high.\n• Key matching markers updated.";
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            this.addActivity("success", `Rescored successfully: ${currentJob.title}`);
-            refreshAppState();
-          }
-        }, 3000);
-        
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/rate`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/rate`, { method: "POST" });
+    return res.json();
   },
 
   async askModel(id, modelName) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.ratings = j.ratings || {};
-        j.ratings[modelName] = { letter: "...", score: "...", reasoning: "Scoring in progress..." };
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Asked model ${modelName} to score ${j.title}`);
-
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob) {
-            const scoreVal = Math.floor(Math.random() * 30) + 70;
-            const letterVal = scoreVal >= 90 ? "A" : (scoreVal >= 80 ? "B" : "C");
-            currentJob.ratings[modelName] = {
-              letter: letterVal,
-              score: scoreVal,
-              reasoning: `Challenger model ${modelName} analysis completed. Matches on stack and seniority requirements.`
-            };
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            this.addActivity("success", `Model ${modelName} scoring finished for ${currentJob.title}`);
-            refreshAppState();
-          }
-        }, 3000);
-
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/rate/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: modelName })
-      });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/rate/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: modelName })
+    });
+    return res.json();
   },
 
   async generateCV(id) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.cv_status = "tailoring";
-        j.cv_generated_at = "";
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Tailoring CV started for ${j.title}`);
-        
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob) {
-            currentJob.cv_status = "ready";
-            currentJob.cv_version = currentJob.cv_version === "v1" ? "v2" : "v1";
-            currentJob.cv_generated_at = new Date().toISOString();
-            currentJob.cv_path = "#";
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            this.addActivity("success", `Tailored CV generated for ${currentJob.title} (${currentJob.cv_version})`);
-            refreshAppState();
-          }
-        }, 8000); // 8 seconds tailoring CV
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/cv`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/cv`, { method: "POST" });
+    return res.json();
   },
 
   async draftEmail(id, options = {}) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.draft_status = "drafting";
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Generating application email draft for ${j.title}`);
-        
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob) {
-            currentJob.draft_status = "ready-to-review";
-            currentJob.draft_email = {
-              to: currentJob.contact_email || "recruitment@company.com",
-              subject: `Ứng tuyển vị trí ${currentJob.title} - Nguyễn Văn A`,
-              body: `Kính gửi bộ phận Tuyển dụng ${currentJob.company},\n\nTôi là Nguyễn Văn A, có nền tảng về ${currentJob.skills.slice(0, 3).join(", ")}. Tôi rất hứng thú với cơ hội tại công ty.\n\n${options.notes ? "Lưu ý bổ sung: " + options.notes : ""}\nTrân trọng,\nNguyễn Văn A`
-            };
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            this.addActivity("success", `Email draft generated for ${currentJob.title}`);
-            refreshAppState();
-          }
-        }, 6000); // 6 seconds drafting email
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(options)
-      });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options)
+    });
+    return res.json();
   },
 
   async approveDraft(id, draftEmail) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.draft_email = draftEmail;
-        j.draft_status = "sent";
-        j.apply_state = "sent";
-        j.status = "Applied"; // Auto-advance to Applied
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("success", `Approved & Sent application email for ${j.title} to ${draftEmail.to}`);
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft_email: draftEmail })
-      });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft_email: draftEmail })
+    });
+    return res.json();
   },
 
   async rejectDraft(id) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.draft_status = "no-draft-yet";
-        j.draft_email = null;
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Rejected draft email for ${j.title}`);
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/reject`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/reject`, { method: "POST" });
+    return res.json();
   },
 
   async applyJob(id) {
     // Triggers platform apply engine (on-site apply)
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.apply_state = "queued";
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Queued on-site apply for ${j.title} via platform`);
-        
-        // Simulating the apply pipeline states: queued -> filling -> sent
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob && currentJob.apply_state === "queued") {
-            currentJob.apply_state = "filling";
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            refreshAppState();
-            
-            setTimeout(() => {
-              const current2 = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-              const currentJob2 = current2.find(item => item.id === id);
-              if (currentJob2 && currentJob2.apply_state === "filling") {
-                currentJob2.apply_state = "sent";
-                currentJob2.status = "Applied"; // Auto-advance to Applied
-                localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current2));
-                APIClient.addActivity("success", `Platform apply completed for ${currentJob2.title} on ${currentJob2.discovery_source}`);
-                refreshAppState();
-              }
-            }, 5000);
-          }
-        }, 5000);
-
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/apply`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/apply`, { method: "POST" });
+    return res.json();
   },
 
   async keepJob(id) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.keep = !j.keep;
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Job exemption toggled: ${j.title} (keep = ${j.keep})`);
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/keep`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/keep`, { method: "POST" });
+    return res.json();
   },
 
   async pinJob(id) {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const j = jobs.find(item => item.id === id);
-      if (j) {
-        j.pinned = !j.pinned;
-        // Trigger Twin lookup if founding date/distance are unknown
-        if (j.pinned && (!j.company_active_date || !j.company_distance_km)) {
-          j.company_active_date = "🏢 …";
-          j.company_distance_km = "🚗 …";
-          
-          setTimeout(() => {
-            const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-            const currentJob = current.find(item => item.id === id);
-            if (currentJob && currentJob.pinned) {
-              // Resolve values
-              const foundYear = Math.floor(Math.random() * 15) + 2010; // 2010 - 2025
-              currentJob.company_active_date = `${foundYear}-06-15`;
-              currentJob.company_distance_km = Math.floor(Math.random() * 15) + 1; // 1 - 16 km
-              currentJob.company_geo_status = currentJob.company_distance_km <= 8 ? "ideal" : (currentJob.company_distance_km <= 10 ? "ok" : "far");
-              localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-              APIClient.addActivity("success", `Twin lookup resolved for ${currentJob.company}: Active since ${foundYear}, distance is ${currentJob.company_distance_km}km`);
-              refreshAppState();
-            }
-          }, 3000);
-        }
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-        this.addActivity("info", `Pinned toggled: ${j.title} (pinned = ${j.pinned})`);
-        return j;
-      }
-      throw new Error("Job not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/${id}/pin`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/pin`, { method: "POST" });
+    return res.json();
   },
 
   async getRatingConfig() {
-    if (USE_MOCK) {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.RATING_CONFIG));
-    } else {
-      const res = await apiFetch(`${API_BASE}/rating-config`);
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/rating-config`);
+    return res.json();
   },
 
   async updateRatingConfig(config) {
-    if (USE_MOCK) {
-      localStorage.setItem(STORAGE_KEYS.RATING_CONFIG, JSON.stringify(config));
-      this.addActivity("info", "Updated AI rating config");
-      return config;
-    } else {
-      const res = await apiFetch(`${API_BASE}/rating-config`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config)
-      });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/rating-config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config)
+    });
+    return res.json();
   },
 
   async getKeywords() {
-    if (USE_MOCK) {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.KEYWORDS));
-    } else {
-      const res = await apiFetch(`${API_BASE}/keywords`);
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/keywords`);
+    return res.json();
   },
 
   async updateKeywords(keywords) {
-    if (USE_MOCK) {
-      localStorage.setItem(STORAGE_KEYS.KEYWORDS, JSON.stringify(keywords));
-      this.addActivity("info", "Updated keywords list");
-      return keywords;
-    } else {
-      const res = await apiFetch(`${API_BASE}/keywords`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(keywords)
-      });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/keywords`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(keywords)
+    });
+    return res.json();
   },
 
   async getCrawlStatus() {
-    if (USE_MOCK) {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.CRAWL_STATUS));
-    } else {
-      const res = await apiFetch(`${API_BASE}/crawl-status`);
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/crawl-status`);
+    return res.json();
   },
 
   async getActivity() {
-    if (USE_MOCK) {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVITY)) || [];
-    } else {
-      const res = await apiFetch(`${API_BASE}/activity`);
-      if (!res.ok) return [];
-      const events = await res.json();
-      // Server timestamps are ISO; the feed renders a plain clock like the mock.
-      return (events || []).map(e => ({
-        ...e,
-        timestamp: new Date(e.timestamp).toLocaleTimeString('vi-VN', { hour12: false })
-      }));
-    }
+    const res = await apiFetch(`${API_BASE}/activity`);
+    if (!res.ok) return [];
+    const events = await res.json();
+    // Server timestamps are ISO; the feed renders a plain clock.
+    return (events || []).map(e => ({
+      ...e,
+      timestamp: new Date(e.timestamp).toLocaleTimeString('vi-VN', { hour12: false })
+    }));
   },
 
   async retryCrawl(sourceName) {
-    if (USE_MOCK) {
-      const status = JSON.parse(localStorage.getItem(STORAGE_KEYS.CRAWL_STATUS));
-      const src = status.sources.find(s => s.name === sourceName);
-      if (src) {
-        src.healthy = true;
-        src.lastRun = new Date().toISOString();
-        src.count = Math.floor(Math.random() * 4) + 1; // finds 1-4 new jobs
-        status.newJobsToday += src.count;
-        status.date = "Hôm nay, " + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        localStorage.setItem(STORAGE_KEYS.CRAWL_STATUS, JSON.stringify(status));
-        
-        this.addActivity("info", `Crawl retry requested for: ${sourceName}`);
-        
-        // Simulating background new jobs add on crawler success
-        setTimeout(() => {
-          const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS)) || [];
-          for (let i = 0; i < src.count; i++) {
-            const newId = `job-crawl-${Date.now()}-${i}`;
-            const jobTitles = ["Product Marketer", "Social Media lead", "Analytics Manager", "Growth Marketer"];
-            const companies = ["Katinat", "Vinasoy", "Aha Coffee", "Phúc Long"];
-            const newTitle = jobTitles[Math.floor(Math.random() * jobTitles.length)];
-            const newComp = companies[Math.floor(Math.random() * companies.length)];
-            
-            jobs.push({
-              id: newId,
-              title: newTitle,
-              company: newComp,
-              url: `https://www.google.com/search?q=${encodeURIComponent(newTitle + " " + newComp)}`,
-              salary: "Lương thỏa thuận",
-              location: "Quận 1, TP. HCM",
-              skills: ["Marketing", "Data"],
-              status: "Saved",
-              pinned: false,
-              keep: false,
-              score: Math.floor(Math.random() * 20) + 75,
-              score_letter: "B",
-              score_status: "scored",
-              score_reasoning: "• Auto-crawled job successfully scored.",
-              ratings: {},
-              jd_summary: "Simulated crawler parsed summary.",
-              jd_ai_summary: "• Auto-discovery summary.",
-              jd_full: "Crawl JD payload...",
-              discovery_source: sourceName,
-              saved_at: new Date().toISOString(),
-              apply_method: "on-site",
-              apply_state: "manual",
-              cv_path: "",
-              cv_status: "none",
-              cv_version: "",
-              cv_generated_at: "",
-              draft_email: null,
-              draft_status: "no-draft-yet",
-              contact_email: "recruitment@coffee-company.com",
-              expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-              followup_sent_at: null,
-              topcv_status: null,
-              vnw_status: null,
-              company_active_date: "2019-12-01",
-              company_distance_km: 4,
-              company_geo_status: "ideal",
-              notes: ""
-            });
-          }
-          localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-          this.addActivity("success", `Crawler ${sourceName} successfully scraped ${src.count} new jobs`);
-          refreshAppState();
-        }, 3000);
-        
-        return status;
-      }
-      throw new Error("Source not found");
-    } else {
-      const res = await apiFetch(`${API_BASE}/crawl/${sourceName}/retry`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/crawl/${sourceName}/retry`, { method: "POST" });
+    return res.json();
   },
 
   async backfillRatings() {
-    if (USE_MOCK) {
-      const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-      const config = JSON.parse(localStorage.getItem(STORAGE_KEYS.RATING_CONFIG));
-      
-      this.addActivity("info", "Starting backfill rating job for all saved cards...");
-      
-      const savedJobs = jobs.filter(j => j.status === "Saved");
-      savedJobs.forEach(j => {
-        j.score_status = "scoring";
-        config.models.forEach(m => {
-          if (m !== config.default_model) {
-            j.ratings[m] = { letter: "...", score: "...", reasoning: "Backfilling..." };
-          }
-        });
-      });
-      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-      refreshAppState();
-
-      // Resolve backfill scoring after 4 seconds
-      setTimeout(() => {
-        const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-        const currentSaved = current.filter(j => j.status === "Saved");
-        currentSaved.forEach(j => {
-          j.score_status = "scored";
-          config.models.forEach(m => {
-            if (m !== config.default_model) {
-              const scoreVal = Math.floor(Math.random() * 20) + 75;
-              j.ratings[m] = {
-                letter: scoreVal >= 90 ? "A" : (scoreVal >= 80 ? "B" : "C"),
-                score: scoreVal,
-                reasoning: `Backfilled rating analysis completed under A/B check.`
-              };
-            }
-          });
-        });
-        localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-        this.addActivity("success", "Backfill scoring completed for all Saved jobs.");
-        refreshAppState();
-      }, 4000);
-      
-      return { success: true };
-    } else {
-      const res = await apiFetch(`${API_BASE}/jobs/rate-backfill`, { method: "POST" });
-      return res.json();
-    }
+    const res = await apiFetch(`${API_BASE}/jobs/rate-backfill`, { method: "POST" });
+    return res.json();
   }
 };
 
@@ -961,7 +405,7 @@ async function triggerCrawlerRetry(sourceName) {
 
   flash.style.display = "none";
   // The real backend returns {ok:false, message} until crawlers are wired in;
-  // surface that truth rather than a canned success. (Mock returns no `ok`.)
+  // surface that truth rather than a canned success.
   if (result && result.ok === false) {
     showToast(result.message || `Couldn't retry ${sourceName}`, "error");
   } else {
@@ -1741,20 +1185,9 @@ async function approveEmailDraft(id) {
 }
 
 async function sendInterviewReply(id) {
-  const to = document.getElementById(`replyTo-${id}`).value;
-  const body = document.getElementById(`replyBody-${id}`).value;
-  
-  const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-  const idx = jobs.findIndex(j => j.id === id);
-  if (idx !== -1) {
-    jobs[idx].draft_status = "replied-sent";
-    jobs[idx].draft_email = { to, body };
-    jobs[idx].apply_state = "replied";
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-    APIClient.addActivity("success", `Sent interview response email to ${to}`);
-    showToast("Interview reply sent!", "success");
-    refreshAppState();
-  }
+  // Email sending isn't wired into braveduck-cli yet; say so rather than
+  // pretending the reply went out.
+  showToast("Sending email isn't available in this build yet.", "error");
 }
 
 async function approveOnSiteApply(id) {
@@ -1763,15 +1196,7 @@ async function approveOnSiteApply(id) {
 }
 
 async function undoOnSiteApply(id) {
-  const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-  const idx = jobs.findIndex(j => j.id === id);
-  if (idx !== -1) {
-    jobs[idx].status = "Waiting to apply";
-    jobs[idx].apply_state = "manual";
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-    APIClient.addActivity("info", `Undo application for ${jobs[idx].title}`);
-    refreshAppState();
-  }
+  await transitionCardStatus(id, "Waiting to apply");
 }
 
 async function retryApply(id) {
@@ -1782,17 +1207,20 @@ async function retryApply(id) {
 // Save job notes inside detail panels (auto-saved on input)
 function saveJobNotes(id, textarea) {
   const text = textarea.value;
-  // Simple debounce logic
-  if (window[`notes_timeout_${id}`]) clearTimeout(window[`notes_timeout_${id}`]);
-  window[`notes_timeout_${id}`] = setTimeout(async () => {
-    const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS)) || [];
-    const idx = jobs.findIndex(j => j.id === id);
-    if (idx !== -1) {
-      jobs[idx].notes = text;
-      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
+  // Debounce: save 500ms after the last keystroke.
+  clearTimeout(notesTimers[id]);
+  notesTimers[id] = setTimeout(async () => {
+    try {
+      await APIClient.updateJob(id, { notes: text });
+      const j = AppState.jobs.find(item => item.id === id);
+      if (j) j.notes = text;
+    } catch (e) {
+      showToast(`Couldn't save notes: ${e.message}`, "error");
     }
   }, 500);
 }
+
+const notesTimers = {};
 
 // Drag & Drop event bindings for column element
 function setupColumnDragEvents(colEl) {
@@ -1827,75 +1255,15 @@ async function moveStageDropdown(id, selectEl) {
 }
 
 async function transitionCardStatus(id, newStatus) {
-  const jobs = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS)) || [];
-  const j = jobs.find(item => item.id === id);
-  
-  if (j && j.status !== newStatus) {
-    const oldStatus = j.status;
-    j.status = newStatus;
-    
-    // Lane-driven automation rules:
-    // Moving a card to "Waiting to apply" auto-triggers CV tailoring and email drafting tickers
-    if (newStatus === "Waiting to apply") {
-      j.cv_status = "tailoring";
-      j.saved_at = new Date().toISOString(); // resets the timing ticker anchor
-      if (j.apply_method === "email") {
-        j.draft_status = "drafting";
-        
-        // Simulating the email drafting triggered after CV tailored
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob && currentJob.cv_status === "tailoring") {
-            currentJob.cv_status = "ready";
-            currentJob.cv_version = "v1";
-            currentJob.cv_generated_at = new Date().toISOString();
-            currentJob.cv_path = "#";
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            
-            // Starts email drafting ticker
-            setTimeout(() => {
-              const current2 = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-              const currentJob2 = current2.find(item => item.id === id);
-              if (currentJob2 && currentJob2.draft_status === "drafting") {
-                currentJob2.draft_status = "ready-to-review";
-                currentJob2.draft_email = {
-                  to: currentJob2.contact_email || "recruitment@momo.vn",
-                  subject: `Ứng tuyển vị trí ${currentJob2.title} - Nguyễn Văn A`,
-                  body: `Kính gửi bộ phận Tuyển dụng ${currentJob2.company},\n\nTôi xin ứng ứng tuyển vị trí ${currentJob2.title}. Rất mong nhận được phản hồi của quý công ty.`
-                };
-                localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current2));
-                APIClient.addActivity("success", `Application email draft completed for ${currentJob2.title}`);
-                refreshAppState();
-              }
-            }, 6000);
-            
-            refreshAppState();
-          }
-        }, 6000);
-      } else {
-        // on-site method, only tailor CV
-        setTimeout(() => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.JOBS));
-          const currentJob = current.find(item => item.id === id);
-          if (currentJob && currentJob.cv_status === "tailoring") {
-            currentJob.cv_status = "ready";
-            currentJob.cv_version = "v1";
-            currentJob.cv_generated_at = new Date().toISOString();
-            currentJob.cv_path = "#";
-            localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(current));
-            APIClient.addActivity("success", `CV tailored for ${currentJob.title}`);
-            refreshAppState();
-          }
-        }, 6000);
-      }
-    }
-    
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-    APIClient.addActivity("info", `Moved job: "${j.title}" from "${oldStatus}" to "${newStatus}"`);
+  const j = AppState.jobs.find(item => item.id === id);
+  if (!j || j.status === newStatus) return;
+  try {
+    await APIClient.updateJob(id, { status: newStatus });
     showToast(`Job moved to ${newStatus}`, "success");
-    refreshAppState();
+  } catch (e) {
+    showToast(`Couldn't move job: ${e.message}`, "error");
   }
+  refreshAppState();
 }
 
 // Toast alerts utility
@@ -2012,7 +1380,7 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.backgroundColor = "#dcfce7";
       extractResultBanner.style.color = "#166534";
       extractResultBanner.style.border = "1px solid #bbf7d0";
-      extractResultBanner.innerHTML = `✨ <strong>Job Added Successfully (#${newJob.id})</strong><br>Extracted: ${esc(newJob.title)} at ${esc(newJob.company)}. Scoring in progress.`;
+      extractResultBanner.innerHTML = `✨ <strong>Job Added Successfully (#${newJob.id})</strong><br>Extracted: ${esc(newJob.title)} at ${esc(newJob.company)}.`;
       extractResultBanner.style.display = "block";
       pasteTextarea.value = "";
       
@@ -2024,14 +1392,10 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.color = "#991b1b";
       extractResultBanner.style.border = "1px solid #fecaca";
       
-      if (err.message === "too-short") {
-        extractResultBanner.innerText = "⚠️ Extraction failed: Paste text is too short! Must be a valid url link or JD text of at least 50 characters.";
-      } else if (err.message === "duplicate") {
+      if (err.message === "duplicate") {
         extractResultBanner.innerText = "⚠️ Already in tracker: This job listing already exists in your Kanban pipeline.";
-      } else if (err.message === "fetch-failed") {
-        extractResultBanner.innerText = "❌ Fetch failed: Link is blocked or has expired. Please paste the text description directly instead.";
       } else {
-        extractResultBanner.innerText = "❌ Extraction failed: AI nanobot extraction crashed. Please check JD format.";
+        extractResultBanner.innerText = `❌ Couldn't add this job: ${err.message}`;
       }
       extractResultBanner.style.display = "block";
     } finally {
@@ -2147,11 +1511,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Custom Event for Live logs trigger
-  window.addEventListener("activity-logged", () => {
-    renderActivityLog();
-  });
-
   // Periodic Intervals
   // 1. Tickers and timers refresh every 1 second
   setInterval(() => {
@@ -2172,21 +1531,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }, 1000);
 
-  // 2. Activity Feed Live SSE Simulation (runs every 30s)
-  setInterval(() => {
-    const mockEvents = [
-      { type: "info", text: "Crawler LinkedIn initiated daily scan" },
-      { type: "success", text: "TopCV crawler successfully parsed 2 new listings" },
-      { type: "info", text: "Apply queue: Processed cooldown timer for Shopee job" },
-      { type: "success", text: "Auto-apply: Completed credential handshake with VietnamWorks" },
-      { type: "error", text: "CV tailor reaper: Stalled job #job-3 detected, retrying..." }
-    ];
-    const event = mockEvents[Math.floor(Math.random() * mockEvents.length)];
-    APIClient.addActivity(event.type, event.text);
-    if (Math.random() > 0.6) {
-      showToast(event.text, event.type);
-    }
-  }, 30000);
+  // 2. Activity feed: poll the server's real event log. Only the feed is
+  // re-rendered, so a half-typed note or open card is never disturbed.
+  setInterval(async () => {
+    if (document.hidden) return;
+    AppState.activity = await APIClient.getActivity();
+    renderActivityLog();
+  }, 15000);
 
   // Initial load
   refreshAppState();
