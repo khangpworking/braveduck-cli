@@ -1269,6 +1269,61 @@ async function transitionCardStatus(id, newStatus) {
   refreshAppState();
 }
 
+// --- Live updates -------------------------------------------------------------
+// One "changed" event can arrive per second; refetch after a short debounce.
+// Never re-render under the user's cursor: while they're typing in a card,
+// hold the refresh until they leave the field.
+let refreshTimer = null;
+let refreshPending = false;
+
+function isEditingCard() {
+  const el = document.activeElement;
+  return !!(el && el.closest && el.closest("#kanbanBoard") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+}
+
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (isEditingCard()) {
+      refreshPending = true;
+      return;
+    }
+    refreshAppState();
+  }, 250);
+}
+
+document.addEventListener("focusout", () => {
+  if (refreshPending) {
+    refreshPending = false;
+    scheduleRefresh();
+  }
+});
+
+function connectLiveUpdates() {
+  const es = new EventSource(`${API_BASE}/events?token=${encodeURIComponent(API_TOKEN)}`);
+  es.addEventListener("changed", scheduleRefresh);
+  es.onerror = () => {
+    // EventSource retries dropped connections itself. It gives up (CLOSED)
+    // when the server answers with an error — e.g. it restarted with a new
+    // token — so wait for the server to be back, then reload the page.
+    if (es.readyState === EventSource.CLOSED) waitForServerThenReload();
+  };
+}
+
+function waitForServerThenReload() {
+  showToast("Lost connection to the board server — reconnecting…", "error");
+  const probe = setInterval(async () => {
+    try {
+      if ((await fetch("/healthz", { cache: "no-store" })).ok) {
+        clearInterval(probe);
+        location.reload();
+      }
+    } catch {
+      // still down; keep waiting
+    }
+  }, 3000);
+}
+
 // Toast alerts utility
 function showToast(message, type = "success") {
   const container = document.getElementById("toastContainer");
@@ -1534,13 +1589,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }, 1000);
 
-  // 2. Activity feed: poll the server's real event log. Only the feed is
-  // re-rendered, so a half-typed note or open card is never disturbed.
-  setInterval(async () => {
-    if (document.hidden) return;
-    AppState.activity = await APIClient.getActivity();
-    renderActivityLog();
-  }, 15000);
+  // 2. Live updates: the server pushes "changed" whenever the data changes,
+  // whoever changed it (this tab, another tab, the CLI, an agent over MCP).
+  connectLiveUpdates();
 
   // Initial load
   refreshAppState();
