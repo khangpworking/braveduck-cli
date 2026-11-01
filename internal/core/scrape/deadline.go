@@ -86,7 +86,7 @@ func FetchDeadline(ctx context.Context, url string) (string, error) {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept-Language", "vi,en;q=0.9")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := publicClient.Do(req)
 	if err != nil {
 		return "", err
 	}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -38,7 +40,18 @@ func cmdServe(ctx context.Context, st *store.Store, args []string) error {
 	}
 	url := "http://" + ln.Addr().String()
 
-	srv := &http.Server{Handler: api.Handler(st)}
+	// Per-run API token (ARCHITECTURE.md §1.3): injected into the board page, so
+	// the user never handles it, and required on every /api/ call.
+	tok := make([]byte, 32)
+	if _, err := rand.Read(tok); err != nil {
+		ln.Close()
+		return err
+	}
+
+	srv := &http.Server{
+		Handler:           api.Handler(st, hex.EncodeToString(tok)),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	go func() {
 		<-ctx.Done()
 		sc, cancel := context.WithTimeout(context.Background(), 3*time.Second)

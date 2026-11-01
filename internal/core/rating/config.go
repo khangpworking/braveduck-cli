@@ -13,7 +13,7 @@ package rating
 
 // DefaultModel is the out-of-box rater id used when no config has been saved.
 // Users point this at whatever harness they wire up.
-const DefaultModel = "claude-opus-4-8"
+const DefaultModel = "claude-opus-5-5"
 
 // MaxModels caps how many raters can score the queue at once (A/B/C fan-out).
 const MaxModels = 3

@@ -29,9 +29,11 @@ func cmdDoctor(dbPath string) error {
 		return err
 	}
 	defer st.Close()
-	fmt.Printf("  db open:    ok (schema applied)\n")
-
 	ctx := context.Background()
+	if v, err := st.SchemaVersion(ctx); err == nil {
+		fmt.Printf("  db open:    ok (schema v%d)\n", v)
+	}
+
 	all, err := st.List(ctx, store.ListFilter{})
 	if err != nil {
 		fmt.Printf("  job count:  FAIL — %v\n", err)
