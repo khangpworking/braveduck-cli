@@ -40,7 +40,10 @@ func NewServer(svc *service.Service) *mcp.Server {
 		Instructions: "braveduck is the user's local job-hunt board. Jobs move through lanes " +
 			"saved → waiting → applied → interview → offer → closed. Use list_jobs to see the " +
 			"board, add_job to save a listing (a URL or pasted job description), set_status to " +
-			"move a job. Tools marked 'not wired' fail honestly — don't retry them.",
+			"move a job. To rate jobs: call get_rating_queue (or rate_job for one job), judge each " +
+			"job against the user's profile using the rubric it returns, then call submit_rating " +
+			"once per job. If the profile is empty, tell the user which file to fill in — don't " +
+			"invent a profile. Tools marked 'not wired' fail honestly — don't retry them.",
 	})
 	t := tools{svc}
 
@@ -62,12 +65,17 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "pin_job", "Toggle a job's pin (pinned jobs sort first in their lane).", write, t.pinJob)
 	add(srv, "keep_job", "Toggle a job's keep flag (kept jobs are exempt from auto-clear).", write, t.keepJob)
 	add(srv, "delete_job", "Permanently delete a job and its ratings.", destructive, t.deleteJob)
+	add(srv, "get_profile", "The user's profile (CV + what they want) that jobs are rated against, its file path, and whether it has been filled in.", readOnly, t.getProfile)
+	add(srv, "get_rating_queue", "Jobs waiting for a score (oldest first), plus the user's profile, the scoring rubric and the default rater id. Judge each job, then call submit_rating for it. Fails if the profile is still empty.", readOnly, t.ratingQueue)
+	add(srv, "rate_job", "Everything needed to rate (or re-rate) one job: the user's profile, the rubric and the job. Then call submit_rating.", readOnly, t.rateJob)
+	add(srv, "submit_rating", "Save your verdict for one job: score 1.0-5.0 (letter is derived if omitted: A>=4.5, B>=4.0, C>=3.5, D>=3.0, else F) and 3-4 short reasons separated by ' • '. "+
+		"Leave model empty unless you're an A/B challenger; the default rater's verdict becomes the board badge.", idempotentWrite, t.submitRating)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
 	// until its subsystem lands (spec: "surface now, body later").
 	for _, name := range []string{
-		"rate_job", "ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
+		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
 		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
 	} {
 		addStub(srv, name)
@@ -180,6 +188,18 @@ type deletedOut struct {
 	Deleted jobs.Job `json:"deleted"`
 }
 
+type queueIn struct {
+	Limit int `json:"limit,omitempty" jsonschema:"how many jobs (default 10)"`
+}
+
+type verdictIn struct {
+	ID        int64   `json:"id" jsonschema:"the job id"`
+	Score     float64 `json:"score" jsonschema:"1.0 (skip) to 5.0 (apply now)"`
+	Letter    string  `json:"letter,omitempty" jsonschema:"A, B, C, D or F; derived from score when omitted"`
+	Reasoning string  `json:"reasoning" jsonschema:"3-4 concise points separated by ' • ': fit, strongest proof point, comp if notable, key gap or red flag"`
+	Model     string  `json:"model,omitempty" jsonschema:"your model id, only when rating as an A/B challenger"`
+}
+
 // --- handlers ---
 
 type tools struct{ svc *service.Service }
@@ -257,4 +277,22 @@ func (t tools) setRatingConfig(ctx context.Context, in ratingIO) (ratingIO, erro
 		ABEnabled: in.ABMode, Models: in.Models, DefaultModel: in.DefaultModel,
 	})
 	return ratingIO{DefaultModel: c.DefaultModel, ABMode: c.ABEnabled, Models: c.Models}, err
+}
+
+func (t tools) getProfile(ctx context.Context, _ struct{}) (service.Profile, error) {
+	return t.svc.Profile(ctx)
+}
+
+func (t tools) ratingQueue(ctx context.Context, in queueIn) (service.RatingBrief, error) {
+	return t.svc.RatingQueue(ctx, in.Limit)
+}
+
+func (t tools) rateJob(ctx context.Context, in idIn) (service.RatingBrief, error) {
+	return t.svc.RateBrief(ctx, in.ID)
+}
+
+func (t tools) submitRating(ctx context.Context, in verdictIn) (jobs.Job, error) {
+	return t.svc.SubmitRating(ctx, service.Verdict{
+		JobID: in.ID, Model: in.Model, Score: in.Score, Letter: in.Letter, Reasoning: in.Reasoning,
+	})
 }

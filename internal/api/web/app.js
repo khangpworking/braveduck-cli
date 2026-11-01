@@ -849,8 +849,10 @@ function renderCardDetailContents(job, detailContainer) {
   // 1. AI Assessment
   let assessmentHtml = "";
   if (job.score_reasoning) {
+    // Raters answer "point • point • point" (see the rubric); older entries
+    // used one point per line. Accept both.
     const listItems = job.score_reasoning
-      .split("\n")
+      .split(/\n|\s+•\s+/)
       .map(line => line.trim().replace(/^•\s*/, ""))
       .filter(Boolean)
       .map(item => `<li>${esc(item)}</li>`)

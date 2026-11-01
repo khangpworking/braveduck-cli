@@ -34,9 +34,12 @@ Jobs
   keep <id>  toggle keep (exempt from auto-clear)
   rm <id>    delete a job
 
-Rating
+Rating (bring your own AI: braveduck stores no API keys)
+  profile              show where your profile lives and whether it's filled in
+  rate [--limit N]     print a rating brief for unrated jobs, to paste into any AI
+  rate <id>            print a rating brief for one job
+  rate <id> --score 4.2 --why "..." [--letter B] [--model m]   save a verdict
   rate-config [--ab] [--models a,b,c] [--default a]   show or set the A/B rater config
-  rate <id>            (stub — needs a rater harness)
 
 Keywords (crawler filter lists — start empty)
   keywords                       show every list and its terms
@@ -86,13 +89,14 @@ func run(args []string) error {
 	}
 
 	// Everything below needs the store.
-	st, err := openStore(dbPath)
+	st, resolved, err := openStore(dbPath)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 	ctx := context.Background()
 	svc := service.New(st)
+	svc.SetProfilePath(profilePathFor(resolved))
 
 	switch cmd {
 	case "add":
@@ -109,6 +113,10 @@ func run(args []string) error {
 		return cmdToggle(ctx, svc, rest, "keep")
 	case "rm", "delete":
 		return cmdDelete(ctx, svc, rest)
+	case "profile":
+		return cmdProfile(ctx, svc)
+	case "rate":
+		return cmdRate(ctx, svc, rest)
 	case "rate-config":
 		return cmdRateConfig(ctx, svc, rest)
 	case "keywords", "kw":
@@ -120,7 +128,7 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return mcpserver.Serve(ctx, svc)
-	case "rate", "cv", "draft", "apply", "crawl", "sync":
+	case "cv", "draft", "apply", "crawl", "sync":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)
@@ -158,18 +166,26 @@ func defaultDBPath() (string, error) {
 
 // openStore resolves the db path (flag/env/default), ensures its directory
 // exists, and opens the store (creating + migrating the schema on first run).
-func openStore(dbPath string) (*store.Store, error) {
+// It also returns the resolved path.
+func openStore(dbPath string) (*store.Store, string, error) {
 	if dbPath == "" {
 		p, err := defaultDBPath()
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		dbPath = p
 	}
 	if dir := filepath.Dir(dbPath); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return store.Open(dbPath)
+	st, err := store.Open(dbPath)
+	return st, dbPath, err
+}
+
+// profilePathFor puts profile.md next to the database, so a --db sandbox keeps
+// its own profile and the default lands in ~/.braveduck/profile.md.
+func profilePathFor(dbPath string) string {
+	return filepath.Join(filepath.Dir(dbPath), "profile.md")
 }

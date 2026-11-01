@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,7 +25,9 @@ func connect(t *testing.T) *mcp.ClientSession {
 	}
 	ctx := context.Background()
 	ct, sTr := mcp.NewInMemoryTransports()
-	ss, err := NewServer(service.New(st)).Connect(ctx, sTr, nil)
+	svc := service.New(st)
+	svc.SetProfilePath(filepath.Join(t.TempDir(), "profile.md"))
+	ss, err := NewServer(svc).Connect(ctx, sTr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +80,8 @@ func TestListsEveryTool(t *testing.T) {
 		"list_jobs", "get_job", "add_job", "update_job", "delete_job", "set_status",
 		"pin_job", "keep_job", "get_keywords", "get_rating_config", "set_rating_config",
 		"get_stats", "get_crawl_status", "get_activity",
-		"rate_job", "ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
+		"get_profile", "get_rating_queue", "rate_job", "submit_rating",
+		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
 		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
 	} {
 		if got[name] == nil {
@@ -146,7 +151,7 @@ func TestErrorsAreToolErrors(t *testing.T) {
 		{"set_status", "unknown stage", map[string]any{"id": 1, "stage": "banana"}}, // validation
 		{"add_job", "title", map[string]any{}},                                      // nothing to add
 		{"add_job", "not both", map[string]any{"content": "https://x.vn/j", "title": "X"}},
-		{"rate_job", "not wired", map[string]any{"id": 1}}, // honest stub
+		{"ask_model", "not wired", map[string]any{"id": 1}}, // honest stub
 		{"get_job", "", map[string]any{"id": "abc"}},       // schema validation
 	} {
 		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
@@ -184,5 +189,48 @@ func TestRatingConfigRoundTrip(t *testing.T) {
 	}
 	if res := call(t, cs, "set_rating_config", map[string]any{"models": []string{"a"}, "default_model": "zzz", "ab_mode": false}, nil); !res.IsError {
 		t.Fatal("invalid config accepted")
+	}
+}
+
+// The agent flow: empty profile → told which file to fill; filled → queue,
+// judge, submit; the default rater's verdict lands on the board badge.
+func TestRatingFlow(t *testing.T) {
+	cs := connect(t)
+	var j jobs.Job
+	call(t, cs, "add_job", map[string]any{"title": "Go backend engineer", "jd": "Go, Postgres, Kubernetes"}, &j)
+
+	var p service.Profile
+	call(t, cs, "get_profile", map[string]any{}, &p)
+	if p.Filled || !strings.Contains(p.Text, "# What I'm looking for") {
+		t.Fatalf("fresh profile = %+v", p)
+	}
+	res := call(t, cs, "get_rating_queue", map[string]any{}, nil)
+	if !res.IsError || !strings.Contains(text(res), p.Path) {
+		t.Fatalf("queue with empty profile = %q (IsError=%v), want an error naming %s", text(res), res.IsError, p.Path)
+	}
+
+	if err := os.WriteFile(p.Path, []byte("Backend engineer, 5 years Go."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var q service.RatingBrief
+	call(t, cs, "get_rating_queue", map[string]any{}, &q)
+	if len(q.Jobs) != 1 || q.Jobs[0].Description != "Go, Postgres, Kubernetes" || q.Rubric == "" {
+		t.Fatalf("queue = %+v", q)
+	}
+
+	var rated jobs.Job
+	if res := call(t, cs, "submit_rating", map[string]any{"id": j.ID, "score": 4.6, "reasoning": "Go + Postgres match • 5y meets bar • k8s a plus"}, &rated); res.IsError {
+		t.Fatalf("submit_rating: %s", text(res))
+	}
+	if rated.ScoreLetter != "A" || rated.ScoreStatus != "scored" {
+		t.Fatalf("rated = %+v", rated)
+	}
+	call(t, cs, "get_rating_queue", map[string]any{}, &q)
+	if len(q.Jobs) != 0 {
+		t.Fatalf("queue after rating = %+v", q.Jobs)
+	}
+
+	if res := call(t, cs, "submit_rating", map[string]any{"id": j.ID, "score": 9, "reasoning": "way out of range"}, nil); !res.IsError {
+		t.Fatal("score 9 accepted")
 	}
 }
