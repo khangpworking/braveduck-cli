@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -26,7 +25,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 	ctx := context.Background()
 	ct, sTr := mcp.NewInMemoryTransports()
 	svc := service.New(st)
-	svc.SetProfilePath(filepath.Join(t.TempDir(), "profile.md"))
+	svc.SetDataDir(t.TempDir())
 	ss, err := NewServer(svc).Connect(ctx, sTr, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +80,7 @@ func TestListsEveryTool(t *testing.T) {
 		"pin_job", "keep_job", "get_keywords", "get_rating_config", "set_rating_config",
 		"get_stats", "get_crawl_status", "get_activity",
 		"get_profile", "get_rating_queue", "rate_job", "submit_rating",
+		"list_platforms", "connect_platform", "disconnect_platform",
 		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
 		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
 	} {
@@ -147,12 +147,12 @@ func TestErrorsAreToolErrors(t *testing.T) {
 		name, want string
 		args       map[string]any
 	}{
-		{"get_job", "list_jobs", map[string]any{"id": 42}},                           // not found, with a hint
+		{"get_job", "list_jobs", map[string]any{"id": 42}},                          // not found, with a hint
 		{"set_status", "unknown stage", map[string]any{"id": 1, "stage": "banana"}}, // validation
 		{"add_job", "title", map[string]any{}},                                      // nothing to add
 		{"add_job", "not both", map[string]any{"content": "https://x.vn/j", "title": "X"}},
 		{"ask_model", "not wired", map[string]any{"id": 1}}, // honest stub
-		{"get_job", "", map[string]any{"id": "abc"}},       // schema validation
+		{"get_job", "", map[string]any{"id": "abc"}},        // schema validation
 	} {
 		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
 		if err != nil {
@@ -232,5 +232,23 @@ func TestRatingFlow(t *testing.T) {
 
 	if res := call(t, cs, "submit_rating", map[string]any{"id": j.ID, "score": 9, "reasoning": "way out of range"}, nil); !res.IsError {
 		t.Fatal("score 9 accepted")
+	}
+}
+
+func TestPlatformTools(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	cs := connect(t)
+	var out platformsOut
+	call(t, cs, "list_platforms", map[string]any{}, &out)
+	if len(out.Platforms) != 4 || out.Platforms[0].Status != "not_connected" {
+		t.Fatalf("list_platforms = %+v", out)
+	}
+	if res := call(t, cs, "connect_platform", map[string]any{"platform": "nope"}, nil); !res.IsError {
+		t.Fatal("unknown platform accepted")
+	}
+	var d disconnectOut
+	call(t, cs, "disconnect_platform", map[string]any{"platform": "topcv"}, &d)
+	if d.Deleted {
+		t.Fatal("disconnect reported a deletion with nothing saved")
 	}
 }

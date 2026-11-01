@@ -70,13 +70,16 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "rate_job", "Everything needed to rate (or re-rate) one job: the user's profile, the rubric and the job. Then call submit_rating.", readOnly, t.rateJob)
 	add(srv, "submit_rating", "Save your verdict for one job: score 1.0-5.0 (letter is derived if omitted: A>=4.5, B>=4.0, C>=3.5, D>=3.0, else F) and 3-4 short reasons separated by ' • '. "+
 		"Leave model empty unless you're an A/B challenger; the default rater's verdict becomes the board badge.", idempotentWrite, t.submitRating)
+	add(srv, "list_platforms", "Job sites braveduck can hold a login for, and whether the user is logged in to each (status only — never session data).", readOnly, t.listPlatforms)
+	add(srv, "connect_platform", "Open a browser window on the user's screen so THEY can log in to a job site (braveduck never sees the password). Returns at once with status 'connecting'; poll list_platforms to see when it becomes 'connected'. Only call this when the user asks to connect a site.", write, t.connectPlatform)
+	add(srv, "disconnect_platform", "Delete the saved login for a job site.", destructive, t.disconnectPlatform)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
 	// until its subsystem lands (spec: "surface now, body later").
 	for _, name := range []string{
 		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
-		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
+		"apply_job", "crawl", "retry_crawl", "set_keywords",
 	} {
 		addStub(srv, name)
 	}
@@ -188,6 +191,18 @@ type deletedOut struct {
 	Deleted jobs.Job `json:"deleted"`
 }
 
+type platformIn struct {
+	Platform string `json:"platform" jsonschema:"site id from list_platforms, e.g. topcv"`
+}
+
+type platformsOut struct {
+	Platforms []service.PlatformStatus `json:"platforms"`
+}
+
+type disconnectOut struct {
+	Deleted bool `json:"deleted"`
+}
+
 type queueIn struct {
 	Limit int `json:"limit,omitempty" jsonschema:"how many jobs (default 10)"`
 }
@@ -295,4 +310,18 @@ func (t tools) submitRating(ctx context.Context, in verdictIn) (jobs.Job, error)
 	return t.svc.SubmitRating(ctx, service.Verdict{
 		JobID: in.ID, Model: in.Model, Score: in.Score, Letter: in.Letter, Reasoning: in.Reasoning,
 	})
+}
+
+func (t tools) listPlatforms(ctx context.Context, _ struct{}) (platformsOut, error) {
+	ps, err := t.svc.Platforms(ctx)
+	return platformsOut{ps}, err
+}
+
+func (t tools) connectPlatform(_ context.Context, in platformIn) (service.PlatformStatus, error) {
+	return t.svc.StartConnect(in.Platform)
+}
+
+func (t tools) disconnectPlatform(ctx context.Context, in platformIn) (disconnectOut, error) {
+	deleted, err := t.svc.Disconnect(ctx, in.Platform)
+	return disconnectOut{deleted}, err
 }

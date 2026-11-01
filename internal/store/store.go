@@ -40,6 +40,11 @@ var migrations = []string{
 	// 2: duplicate-URL checks (AddJob) scan by url. Deliberately not UNIQUE —
 	// a DB that already holds duplicates would then fail to open at all.
 	`CREATE INDEX IF NOT EXISTS idx_jobs_url ON jobs(url)`,
+	// 3: platform sessions (docs/specs/platform-sessions.md §4).
+	`ALTER TABLE platform_sessions ADD COLUMN fp_seed TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE platform_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'unknown';
+	 ALTER TABLE platform_sessions ADD COLUMN checked_at TEXT;
+	 ALTER TABLE platform_sessions ADD COLUMN account_hint TEXT;`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

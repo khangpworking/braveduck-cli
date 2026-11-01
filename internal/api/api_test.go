@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
@@ -23,7 +24,9 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	ts := httptest.NewServer(Handler(st, testToken))
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ts := httptest.NewServer(Handler(st, svc, testToken))
 	t.Cleanup(func() { ts.Close(); st.Close() })
 	return ts, st
 }

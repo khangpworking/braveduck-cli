@@ -4,7 +4,7 @@ import "testing"
 
 func TestParsePastedJD(t *testing.T) {
 	for _, tc := range []struct {
-		name, in                       string
+		name, in                      string
 		title, company, salary, email string
 	}{
 		{

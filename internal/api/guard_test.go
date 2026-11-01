@@ -146,3 +146,28 @@ func TestCreateRejectsInternalURL(t *testing.T) {
 		t.Fatal("internal URL was stored")
 	}
 }
+
+func TestPlatformsAPI(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	ts, _ := newTestServer(t)
+	var ps []map[string]any
+	getJSON(t, ts.URL+"/api/platforms", &ps)
+	if len(ps) != 4 || ps[0]["status"] != "not_connected" {
+		t.Fatalf("platforms = %v", ps)
+	}
+	if resp := do(t, http.MethodPost, ts.URL+"/api/platforms/nope/login", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unknown platform = %d, want 400", resp.StatusCode)
+	}
+	if resp := do(t, http.MethodDelete, ts.URL+"/api/platforms/topcv/login", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("disconnect = %d", resp.StatusCode)
+	}
+	// Login windows can only be opened by the token-holding board.
+	resp, err := http.Post(ts.URL+"/api/platforms/topcv/login", "text/plain", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("tokenless connect = %d, want 401", resp.StatusCode)
+	}
+}

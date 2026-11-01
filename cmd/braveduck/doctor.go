@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"runtime"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/browser"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -46,13 +48,28 @@ func cmdDoctor(dbPath string) error {
 		fmt.Printf("  rater:      default=%s ab=%v\n", cfg.DefaultModel, cfg.ABEnabled)
 	}
 	svc := service.New(st)
-	svc.SetProfilePath(profilePathFor(resolvedPath))
+	svc.SetDataDir(filepath.Dir(resolvedPath))
 	if p, err := svc.Profile(ctx); err == nil {
 		state := "filled in"
 		if !p.Filled {
 			state = "EMPTY — fill it in before rating"
 		}
 		fmt.Printf("  profile:    %s (%s)\n", p.Path, state)
+	}
+	if src, err := svc.KeySource(); err == nil {
+		fmt.Printf("  sessions:   encrypted with %s\n", src)
+	} else {
+		fmt.Printf("  sessions:   FAIL — %v\n", err)
+	}
+	if ps, err := svc.Platforms(ctx); err == nil {
+		for _, p := range ps {
+			if p.Status != "not_connected" {
+				fmt.Printf("              %s: %s\n", p.ID, p.Status)
+			}
+		}
+	}
+	if hint := browser.LibsHint(); hint != "" {
+		fmt.Printf("  browser:    missing system libraries%s\n", hint)
 	}
 	fmt.Println("  status:     healthy")
 	return nil

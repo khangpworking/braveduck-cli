@@ -38,11 +38,14 @@ var webFS embed.FS
 // grant — so neither a malicious page nor a CSRF form can drive the API. The
 // Host check closes the remaining hole: a DNS-rebinding page *is* same-origin
 // with us, but its Host header names the attacker's domain, not localhost.
-func Handler(st *store.Store, token string) http.Handler {
+//
+// svc is the configured service (data dir set, so sessions and the profile
+// resolve); st is its store, which the live-update watcher polls.
+func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	if token == "" {
 		panic("api.Handler: empty token")
 	}
-	s := &server{svc: service.New(st), hub: newHub(st)}
+	s := &server{svc: svc, hub: newHub(st)}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/jobs", s.listJobs)
@@ -53,6 +56,9 @@ func Handler(st *store.Store, token string) http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/pin", s.togglePin)
 	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
 	mux.HandleFunc("GET /api/stats", s.getStats)
+	mux.HandleFunc("GET /api/platforms", s.listPlatforms)
+	mux.HandleFunc("POST /api/platforms/{name}/login", s.connectPlatform)
+	mux.HandleFunc("DELETE /api/platforms/{name}/login", s.disconnectPlatform)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
 	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
@@ -270,6 +276,30 @@ func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 		"source":  r.PathValue("source"),
 		"message": "crawlers aren't wired into braveduck-cli yet — nothing to retry",
 	})
+}
+
+// listPlatforms is each job site's login status (never session data).
+func (s *server) listPlatforms(w http.ResponseWriter, r *http.Request) {
+	ps, err := s.svc.Platforms(r.Context())
+	reply(w, http.StatusOK, ps, err)
+}
+
+// connectPlatform opens the login window on the user's own desktop and
+// returns at once (202); the outcome arrives via the activity feed and live
+// updates. Only the token-holding board can call this, so a web page can't
+// pop windows on the user's screen.
+func (s *server) connectPlatform(w http.ResponseWriter, r *http.Request) {
+	st, err := s.svc.StartConnect(r.PathValue("name"))
+	if errors.Is(err, service.ErrLoginInProgress) {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	reply(w, http.StatusAccepted, st, err)
+}
+
+func (s *server) disconnectPlatform(w http.ResponseWriter, r *http.Request) {
+	deleted, err := s.svc.Disconnect(r.Context(), r.PathValue("name"))
+	reply(w, http.StatusOK, map[string]bool{"deleted": deleted}, err)
 }
 
 // getStats is the funnel + interview-rate widget data (§1.5).

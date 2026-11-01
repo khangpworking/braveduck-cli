@@ -122,6 +122,29 @@ func EnsureBinary(ctx context.Context) (string, error) {
 	return binPath, nil
 }
 
+// Provisioned reports whether the browser is ready without a download (an
+// override binary, or an already-cached build), so callers can warn before a
+// first, slow download.
+func Provisioned() bool {
+	if strings.TrimSpace(os.Getenv("CLOAKBROWSER_BINARY_PATH")) != "" {
+		return true
+	}
+	tag, err := platformTag()
+	if err != nil {
+		return false
+	}
+	version, ok := pinnedVersions[tag]
+	if !ok {
+		return false
+	}
+	root, err := cacheRoot()
+	if err != nil {
+		return false
+	}
+	fi, err := os.Stat(filepath.Join(root, binaryRelPath(version)))
+	return err == nil && !fi.IsDir()
+}
+
 // download fetches, checksum-verifies, and extracts the Chromium archive into
 // root/chromium-{version}. It tries CloakBrowser's CDN first, then the GitHub
 // release mirror, for both the archive and the SHA256SUMS manifest.
@@ -148,6 +171,14 @@ func download(ctx context.Context, root, tag, version string) error {
 	want, err := expectedSHA(ctx, checksumURLs, archiveName)
 	if err != nil {
 		return err
+	}
+
+	// A download killed mid-way (Ctrl-C) leaves its temp file behind; clear
+	// those before starting another.
+	if stale, _ := filepath.Glob(filepath.Join(root, "cloak-dl-*")); len(stale) > 0 {
+		for _, f := range stale {
+			_ = os.Remove(f)
+		}
 	}
 
 	tmp, err := os.CreateTemp(root, "cloak-dl-*"+ext)
