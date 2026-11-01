@@ -14,9 +14,36 @@ no accounts, and no stored passwords. You authenticate with TopCV / VietnamWorks
 etc. directly in a real browser; braveduck only ever holds an encrypted session
 locally on your disk.
 
-> Status: **early — design/architecture phase.** No usable code yet.
-> See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full build plan and
+> Status: **early.** The job pipeline, the web board and the MCP server work;
+> AI rating, CV/draft generation, platform login and auto-apply are not wired
+> yet. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the build plan and
 > [`docs/`](./docs) for the feature spec and UI reference.
+
+## Quick start
+
+Requires Go 1.25+.
+
+```bash
+go install github.com/khangpworking/braveduck-cli/cmd/braveduck@latest
+braveduck add --title "Data Analyst" --company "Duck Co" --url https://www.topcv.vn/...
+braveduck list
+braveduck serve        # web board on http://127.0.0.1:8080
+```
+
+Data lives in `~/.braveduck/braveduck.db` (override with `--db` or `BRAVEDUCK_DB`).
+`braveduck doctor` checks your setup.
+
+### Use it from Claude Code (MCP)
+
+```bash
+claude mcp add braveduck -- braveduck mcp
+```
+
+Then ask Claude things like *"save this job: <url>"*, *"what's in my interview
+lane?"* or *"move job 12 to applied"*. The server speaks MCP over stdio and
+exposes the board as tools (`list_jobs`, `add_job`, `set_status`, `get_stats`,
+…). Codex and other MCP clients work the same way: point them at
+`braveduck mcp`.
 
 ## Why
 

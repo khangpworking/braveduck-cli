@@ -52,6 +52,7 @@ func Handler(st *store.Store, token string) http.Handler {
 	mux.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
 	mux.HandleFunc("POST /api/jobs/{id}/pin", s.togglePin)
 	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
+	mux.HandleFunc("GET /api/stats", s.getStats)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
 	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
@@ -259,6 +260,12 @@ func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 		"source":  r.PathValue("source"),
 		"message": "crawlers aren't wired into braveduck-cli yet — nothing to retry",
 	})
+}
+
+// getStats is the funnel + interview-rate widget data (§1.5).
+func (s *server) getStats(w http.ResponseWriter, r *http.Request) {
+	st, err := s.svc.Stats(r.Context())
+	reply(w, http.StatusOK, st, err)
 }
 
 func (s *server) getKeywords(w http.ResponseWriter, r *http.Request) {

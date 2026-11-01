@@ -624,8 +624,11 @@ function renderJobCard(job, container) {
     scoreHtml = `<span class="score-badge score-f" style="font-size:11px; cursor:pointer;" onclick="retryScoring('${job.id}')" title="Scoring failed. Click to retry.">✕ failed</span>`;
   } else if (job.score_status === "stuck") {
     scoreHtml = `<span class="score-badge score-f" style="font-size:11px; cursor:pointer;" onclick="retryScoring('${job.id}')" title="Scoring hung. Click to force retry.">stuck·retry</span>`;
-  } else {
+  } else if (job.score_status === "scored") {
     scoreHtml = `<span class="score-badge ${scoreClass}">${esc(job.score_letter)} ${esc(job.score)}</span>`;
+  } else {
+    // Not rated yet: no number to show (a bare "0" read as a terrible score).
+    scoreHtml = `<span class="score-badge score-pending" title="Not rated yet">—</span>`;
   }
 
   // Compare Badges (A/B mode on Saved/Waiting cards)

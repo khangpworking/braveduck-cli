@@ -157,3 +157,24 @@ func TestSetRatingConfigInvalidIsErrInvalid(t *testing.T) {
 		t.Fatalf("got %v, want ErrInvalid", err)
 	}
 }
+
+func TestStats(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	for _, stage := range []string{"saved", "interview", "closed", "closed"} {
+		j, _ := s.AddJob(ctx, NewJob{Title: stage})
+		if _, err := s.SetStatus(ctx, j.ID, stage); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, err := s.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Total != 4 || st.ByStage["closed"] != 2 || st.ByStage["offer"] != 0 {
+		t.Fatalf("counts wrong: %+v", st)
+	}
+	if st.Resolved != 3 || st.Interviews != 1 || st.Morale == "" {
+		t.Fatalf("rate wrong: %+v", st)
+	}
+}
