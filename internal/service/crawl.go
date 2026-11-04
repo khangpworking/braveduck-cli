@@ -290,6 +290,8 @@ func (s *Service) runDue(ctx context.Context) {
 		}
 		_, _ = s.Crawl(ctx, sc.Source) // the outcome is in the crawl panel
 	}
+	// New jobs (crawled, synced, added) get their distance a few at a time.
+	_, _ = s.UpdateDistances(ctx, MaxLookupsPerPass)
 }
 
 // platformConnected reports whether id has a saved, not-expired session.
