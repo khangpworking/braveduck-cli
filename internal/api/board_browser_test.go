@@ -420,7 +420,7 @@ func TestEditDetailsOnBoard(t *testing.T) {
 // Control response delivery at the HTTP boundary: a refresh can finish after
 // editing starts, after a newer refresh, or with a server error.
 func TestBoardRefresh(t *testing.T) {
-	for _, scenario := range []string{"editing", "out_of_order", "failed_read", "move_select", "focused_select"} {
+	for _, scenario := range []string{"editing", "out_of_order", "failed_read", "move_select", "move_failed", "focused_select"} {
 		t.Run(scenario, func(t *testing.T) {
 			st, err := store.Open(":memory:")
 			if err != nil {
@@ -514,6 +514,25 @@ func TestBoardRefresh(t *testing.T) {
 				page.MustEval(`() => { const s = document.querySelector('.card[data-id="1"] .move-select'); s.focus(); s.value = "Applied"; s.dispatchEvent(new Event("change")); }`)
 				if err := page.Timeout(5 * time.Second).Wait(rod.Eval(`() => !!document.querySelector('.column[data-status="Applied"] .card[data-id="1"]')`)); err != nil {
 					t.Fatalf("moved card not shown in Applied while the stage select had focus: %v", err)
+				}
+				return
+			}
+			if scenario == "move_failed" {
+				// A rejected move leaves the focused select showing the stage the
+				// job is really in, not the one that failed to save.
+				original := page.MustEval(`() => document.querySelector('.card[data-id="1"] .move-select').value`).Str()
+				before, _ := svc.GetJob(ctx, 1)
+				failingPath.Store("/api/jobs/1")
+				page.MustEval(`() => { const s = document.querySelector('.card[data-id="1"] .move-select'); s.focus(); s.value = "Applied"; s.dispatchEvent(new Event("change")); }`)
+				if err := page.Timeout(5 * time.Second).Wait(rod.Eval(`() => document.getElementById('toastContainer').textContent.includes("Couldn't move job")`)); err != nil {
+					t.Fatalf("failed move not reported: %v", err)
+				}
+				state := page.MustEval(`() => { const s = document.activeElement; return { focused: s.classList.contains('move-select') && !!s.closest('.card[data-id="1"]'), value: s.value, lane: s.closest('.column')?.dataset.status }; }`)
+				if !state.Get("focused").Bool() || state.Get("value").Str() != original || state.Get("lane").Str() != original {
+					t.Fatalf("after failed move: %v, want focused select showing %q in lane %q", state, original, original)
+				}
+				if j, _ := svc.GetJob(ctx, 1); j.Status != before.Status {
+					t.Fatalf("persisted status = %q, want %q", j.Status, before.Status)
 				}
 				return
 			}

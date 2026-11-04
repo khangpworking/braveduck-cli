@@ -1966,6 +1966,7 @@ async function transitionCardStatus(id, newStatus, committedEl) {
     if (committedEl && document.activeElement === committedEl) committedEl.blur();
   } catch (e) {
     showToast(`Couldn't move job: ${e.message}`, "error");
+    if (committedEl && committedEl.value === newStatus) committedEl.value = j.status;
   }
   refreshAppState();
 }
