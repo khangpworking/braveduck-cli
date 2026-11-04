@@ -238,3 +238,32 @@ func splitCSV(s string) []string {
 	}
 	return out
 }
+
+// cmdEdit changes a job's details; only the flags given change.
+func cmdEdit(ctx context.Context, svc *service.Service, args []string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return errors.New("usage: braveduck edit <id> [--title T] [--company C] [--salary S] [--location L] [--notes N]")
+	}
+	id, err := parseID(args[0])
+	if err != nil {
+		return err
+	}
+	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
+	var p service.Patch
+	for name, dst := range map[string]**string{"title": &p.Title, "company": &p.Company, "salary": &p.Salary, "location": &p.Location, "notes": &p.Notes} {
+		dst := dst
+		fs.Func(name, "new "+name, func(v string) error { *dst = &v; return nil })
+	}
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if p == (service.Patch{}) {
+		return errors.New("nothing to change — pass e.g. --company \"New name\"")
+	}
+	j, err := svc.UpdateJob(ctx, id, p)
+	if err != nil {
+		return friendly(err, id)
+	}
+	fmt.Printf("job #%d updated: %s — %s\n", j.ID, j.Title, j.Company)
+	return nil
+}

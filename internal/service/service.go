@@ -175,8 +175,25 @@ func (s *Service) addQuiet(ctx context.Context, j jobs.Job) (jobs.Job, error) {
 // Patch names the board-editable fields to change; nil leaves a field as is.
 type Patch = store.JobPatch
 
-// UpdateJob applies p and returns the updated job.
+// Edit limits, in characters: generous, but a paste can't bloat the board.
+var editLimits = map[string]int{"title": 200, "company": 200, "salary": 100, "location": 300, "notes": 20000}
+
+// UpdateJob applies p and returns the updated job. Text fields are trimmed;
+// a title can't be blank.
 func (s *Service) UpdateJob(ctx context.Context, id int64, p Patch) (jobs.Job, error) {
+	for name, v := range map[string]**string{"title": &p.Title, "company": &p.Company, "salary": &p.Salary, "location": &p.Location, "notes": &p.Notes} {
+		if *v == nil {
+			continue
+		}
+		t := strings.TrimSpace(**v)
+		if name == "title" && t == "" {
+			return jobs.Job{}, fmt.Errorf("%w: title can't be blank", ErrInvalid)
+		}
+		if n := len([]rune(t)); n > editLimits[name] {
+			return jobs.Job{}, fmt.Errorf("%w: %s is %d characters (max %d)", ErrInvalid, name, n, editLimits[name])
+		}
+		*v = &t
+	}
 	if p.Status != nil {
 		st := strings.ToLower(strings.TrimSpace(*p.Status))
 		if !validStage(st) {

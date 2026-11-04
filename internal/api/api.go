@@ -188,10 +188,14 @@ func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
 // jobPatch is the mutable subset a board edits. Pointers distinguish "field
 // omitted" from a zero value, so a PATCH touches only what it names.
 type jobPatch struct {
-	Status *string `json:"status"`
-	Pinned *bool   `json:"pinned"`
-	Keep   *bool   `json:"keep"`
-	Notes  *string `json:"notes"`
+	Status   *string `json:"status"`
+	Pinned   *bool   `json:"pinned"`
+	Keep     *bool   `json:"keep"`
+	Notes    *string `json:"notes"`
+	Title    *string `json:"title"`
+	Company  *string `json:"company"`
+	Salary   *string `json:"salary"`
+	Location *string `json:"location"`
 }
 
 func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {

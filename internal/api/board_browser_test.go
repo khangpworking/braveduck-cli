@@ -248,3 +248,38 @@ func waitUntil(t *testing.T, cond func() bool, msg string) {
 }
 
 func must[T any](v T, _ error) T { return v }
+
+// Edit details on a card persists, and a hostile value round-trips as text
+// inside the input (no attribute break-out).
+func TestEditDetailsOnBoard(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	svc.AddJob(ctx, service.NewJob{Title: "Lead", Company: `x" onfocus="window.__pwned=1`})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	page.MustEval(`() => toggleCardDetail("1")`)
+	page.MustElement("#detail-1 details summary").MustClick()
+	in := page.MustElement("#edit-company-1")
+	if v := in.MustProperty("value").Str(); v != `x" onfocus="window.__pwned=1` {
+		t.Fatalf("input value = %q (escaping broken?)", v)
+	}
+	in.MustFocus()
+	if page.MustEval(`() => window.__pwned === 1`).Bool() {
+		t.Fatal("attribute injection executed")
+	}
+	in.MustSelectAllText().MustInput("Việc làm AI Engineer -Việt Nam")
+	page.MustElementR("button", "Save details").MustClick()
+	waitUntil(t, func() bool {
+		j, _ := svc.GetJob(ctx, 1)
+		return j.Company == "Việc làm AI Engineer -Việt Nam"
+	}, "company not saved")
+}

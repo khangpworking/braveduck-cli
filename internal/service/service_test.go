@@ -208,3 +208,19 @@ func TestReportCrawl(t *testing.T) {
 		t.Fatalf("feed = %+v, want exactly one failure line", ev)
 	}
 }
+
+func TestEditDetails(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	j, _ := s.AddJob(ctx, NewJob{Title: "Old", Company: "Group 1329241984892387"})
+	got, err := s.UpdateJob(ctx, j.ID, Patch{Company: ptr("  Việc làm AI Engineer -Việt Nam "), Salary: ptr("20-30 triệu")})
+	if err != nil || got.Company != "Việc làm AI Engineer -Việt Nam" || got.Salary != "20-30 triệu" || got.Title != "Old" {
+		t.Fatalf("edit = %+v, %v", got, err)
+	}
+	if _, err := s.UpdateJob(ctx, j.ID, Patch{Title: ptr("   ")}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("blank title = %v", err)
+	}
+	if _, err := s.UpdateJob(ctx, j.ID, Patch{Company: ptr(strings.Repeat("x", 201))}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("too-long company = %v", err)
+	}
+}
