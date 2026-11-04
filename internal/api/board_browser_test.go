@@ -217,11 +217,23 @@ func TestKeywordsAndSources(t *testing.T) {
 	svc.SetDataDir(t.TempDir())
 	fc := &boardFakeCrawler{}
 	svc.SetCrawlers(fc)
+	ctx := context.Background()
+	if _, err := svc.SetCrawlSchedule(ctx, "vietnamworks", 120); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordCrawlRun(ctx, "vietnamworks", true, "", time.Now().Add(-5*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 	ts := httptest.NewServer(Handler(st, svc, testToken))
 	defer ts.Close()
-	ctx := context.Background()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	// The store applies the source's schedule to health. The warning must
+	// not claim a fixed one-hour window for this two-hourly crawler.
+	warning := page.MustElement("#unhealthyContainer .unhealthy").MustText()
+	if !strings.Contains(warning, "no recent successful run") || !strings.Contains(warning, "last report: 5h") {
+		t.Fatalf("stale crawler warning = %q", warning)
+	}
 	openModal(t, page, "keywordsBtn", "keywordsModalOverlay")
 	page.MustElement("#kw-search_queries").MustInput("n8n, ai automation")
 	clickID(page, "saveKeywordsBtn")
