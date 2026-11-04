@@ -83,7 +83,7 @@ func TestAssistApplyPreconditions(t *testing.T) {
 		t.Fatalf("non-TopCV job = %v", err)
 	}
 	nocv, _ := s.AddJob(ctx, NewJob{Title: "No CV", URL: "https://www.topcv.vn/viec-lam/x/2200002.html"})
-	if _, err := s.PrepareApply(ctx, nocv.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "tailor the CV") {
+	if _, err := s.PrepareApply(ctx, nocv.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "upload your CV") {
 		t.Fatalf("no CV = %v", err)
 	}
 	for i := 0; i < DailyApplyCap; i++ {

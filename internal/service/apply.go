@@ -11,6 +11,7 @@ import (
 
 	"github.com/khangpworking/braveduck-cli/internal/core/apply"
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/markdown"
 	"github.com/khangpworking/braveduck-cli/internal/core/topcv"
 )
@@ -33,7 +34,7 @@ var ErrApplyLimit = errors.New("apply limit")
 type ApplyPrep struct {
 	JobID       int64  `json:"job_id"`
 	URL         string `json:"url"`
-	CVPDF       string `json:"cv_pdf"`       // path of the tailored CV, to pick in TopCV's upload dialog
+	CVPDF       string `json:"cv_pdf"`       // the CV to pick in TopCV's upload dialog: the tailored one as PDF, else the base CV (PDF or .docx)
 	CoverLetter string `json:"cover_letter"` // the draft body, to paste ("" if none)
 }
 
@@ -78,16 +79,8 @@ func (s *Service) PrepareApply(ctx context.Context, id int64) (ApplyPrep, error)
 	if err := s.checkApplyLimits(ctx); err != nil {
 		return ApplyPrep{}, err
 	}
-	md, _, err := s.CV(ctx, id)
+	path, err := s.applyCV(ctx, j)
 	if err != nil {
-		return ApplyPrep{}, fmt.Errorf("%w: tailor the CV for this job first (Ask your AI → tailor)", ErrInvalid)
-	}
-	pdf, err := renderCVPDF(ctx, markdown.Page(j.Title, markdown.ToHTML(md)))
-	if err != nil {
-		return ApplyPrep{}, fmt.Errorf("couldn't make the CV PDF: %w", err)
-	}
-	path := filepath.Join(filepath.Dir(s.profilePath), "cvs", fmt.Sprintf("job-%d-v%d.pdf", id, j.CVVersion))
-	if err := os.WriteFile(path, pdf, 0o600); err != nil {
 		return ApplyPrep{}, err
 	}
 	prep := ApplyPrep{JobID: id, URL: j.URL, CVPDF: path}
@@ -95,6 +88,28 @@ func (s *Service) PrepareApply(ctx context.Context, id int64) (ApplyPrep, error)
 		prep.CoverLetter = d.Body
 	}
 	return prep, nil
+}
+
+// applyCV is the CV file to upload for job j: its tailored CV printed to
+// PDF, or else the user's base CV.
+func (s *Service) applyCV(ctx context.Context, j jobs.Job) (string, error) {
+	md, _, err := s.CV(ctx, j.ID)
+	if err != nil {
+		path, err := s.baseCVFile(ctx)
+		if err != nil {
+			return "", err
+		}
+		if path == "" {
+			return "", fmt.Errorf("%w: upload your CV (📄 My CV) or tailor one for this job first (Ask your AI → tailor)", ErrInvalid)
+		}
+		return path, nil
+	}
+	pdf, err := renderCVPDF(ctx, markdown.Page(j.Title, markdown.ToHTML(md)))
+	if err != nil {
+		return "", fmt.Errorf("couldn't make the CV PDF: %w", err)
+	}
+	path := filepath.Join(filepath.Dir(s.profilePath), "cvs", fmt.Sprintf("job-%d-v%d.pdf", j.ID, j.CVVersion))
+	return path, os.WriteFile(path, pdf, 0o600)
 }
 
 // AssistApply runs the whole assisted apply for job id: prepare, open the

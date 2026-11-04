@@ -1508,6 +1508,88 @@ async function saveAskPaste() {
   }
 }
 
+// --- My CV (the base CV) -------------------------------------------------------
+async function renderMyCV() {
+  const status = document.getElementById("cvStatus");
+  const res = await apiFetch(`${API_BASE}/cv`);
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    status.innerText = `Couldn't load your CV: ${out.error || res.status}`;
+    return;
+  }
+  const profile = out.profile || {};
+  const profileLine = profile.filled
+    ? `Your profile (<code>${esc(profile.path)}</code>) is filled in, so jobs can be rated.`
+    : `Your profile (<code>${esc(profile.path)}</code>) is still empty, so no job can be rated yet.`;
+  if (!out.cv) {
+    status.innerHTML = `No CV uploaded yet. ${profileLine}`;
+    return;
+  }
+  const cv = out.cv;
+  status.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
+      <div><strong>${esc(cv.name)}</strong>
+        <div style="font-size: 12px; color: var(--muted);">${esc(cv.kind.toUpperCase())} · ${Math.ceil(cv.size / 1024)} KB · uploaded ${esc(new Date(cv.uploaded_at).toLocaleString())}</div>
+      </div>
+      <button class="btn-secondary btn-sm" onclick="downloadMyCV()">Download</button>
+    </div>
+    <p style="margin: 8px 0 0;">${profileLine} Upload a new file to replace this one.</p>`;
+}
+
+async function uploadMyCV(replace) {
+  const input = document.getElementById("cvFileInput");
+  const btn = document.getElementById("cvUploadBtn");
+  const result = document.getElementById("cvResult");
+  const file = input.files[0];
+  if (!file) {
+    showToast("Choose your CV file first", "info");
+    return;
+  }
+  const form = new FormData();
+  form.append("file", file);
+  if (replace) form.append("replace", "true");
+  btn.disabled = true;
+  btn.textContent = "Uploading…";
+  try {
+    const res = await apiFetch(`${API_BASE}/cv`, { method: "POST", body: form });
+    const out = await res.json().catch(() => ({}));
+    if (res.status === 409 && !replace) {
+      if (confirm(`${out.error}\n\nOK replaces it with the text of ${file.name}.`)) return uploadMyCV(true);
+      return;
+    }
+    result.style.display = "block";
+    const tone = (bg, fg, border) => Object.assign(result.style, { backgroundColor: bg, color: fg, border: `1px solid ${border}` });
+    if (!res.ok) {
+      tone("#fee2e2", "#991b1b", "#fecaca");
+      result.innerText = `❌ ${out.error || `HTTP ${res.status}`}`;
+      return;
+    }
+    tone("#dcfce7", "#166534", "#bbf7d0");
+    result.innerHTML = `✅ <strong>${esc(out.name)}</strong> uploaded, and its text is now in your profile's About me.<br>` +
+      `Add what you're looking for (pay, location, deal-breakers) to the same file so ratings fit you.`;
+    input.value = "";
+    showToast("CV uploaded", "success");
+    renderMyCV();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Upload";
+  }
+}
+
+async function downloadMyCV() {
+  const res = await apiFetch(`${API_BASE}/cv/file`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    showToast(err.error || `HTTP ${res.status}`, "error");
+    return;
+  }
+  const name = (res.headers.get("Content-Disposition") || "").match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i);
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: name ? decodeURIComponent(name[1]) : "cv" });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 async function downloadCV(id) {
   const res = await apiFetch(`${API_BASE}/jobs/${id}/cv.pdf`);
   if (!res.ok) {
@@ -1971,6 +2053,14 @@ document.addEventListener("DOMContentLoaded", () => {
     await renderSources();
   });
 
+  const cvModal = document.getElementById("cvModalOverlay");
+  document.getElementById("myCVBtn").addEventListener("click", async () => {
+    document.getElementById("cvResult").style.display = "none";
+    cvModal.classList.add("open");
+    await renderMyCV();
+  });
+  document.getElementById("cvUploadBtn").addEventListener("click", () => uploadMyCV(false));
+
   const platformsModal = document.getElementById("platformsModalOverlay");
   document.getElementById("platformsBtn").addEventListener("click", async () => {
     platformsModal.classList.add("open");
@@ -1984,6 +2074,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ratingModal.classList.remove("open");
       platformsModal.classList.remove("open");
       sourcesModal.classList.remove("open");
+      cvModal.classList.remove("open");
       document.getElementById("askModalOverlay").classList.remove("open");
       document.getElementById("locationModalOverlay").classList.remove("open");
     });

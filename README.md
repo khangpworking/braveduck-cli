@@ -25,6 +25,7 @@ Requires Go 1.25+.
 
 ```bash
 go install github.com/khangpworking/braveduck-cli/cmd/braveduck@latest
+braveduck cv upload ~/Downloads/my-cv.pdf   # .pdf .docx .md .html — fills your profile, kept for applying
 braveduck add https://www.topcv.vn/viec-lam/...   # TopCV, VietnamWorks, JobOKO, CareerLink
 braveduck add https://www.facebook.com/groups/.../posts/.../ - < post.txt   # Facebook: link + post text
 braveduck list

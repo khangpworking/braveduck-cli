@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/go-rod/rod v0.116.2
+	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.45.0
