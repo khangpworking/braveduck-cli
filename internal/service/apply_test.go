@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/platform"
 	"github.com/khangpworking/braveduck-cli/internal/core/topcv"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -34,7 +35,13 @@ func TestAssistApplyConfirmsFromHistory(t *testing.T) {
 	s, id := applySvc(t)
 	ctx := context.Background()
 	opened := ""
-	openApplyWindow = func(_ context.Context, _ *Service, url string) error { opened = url; return nil }
+	openApplyWindow = func(_ context.Context, _ *Service, p platform.Platform, url string) error {
+		if p.ID != "topcv" {
+			t.Fatalf("opened %s for a TopCV job", p.ID)
+		}
+		opened = url
+		return nil
+	}
 
 	// The user closes the window without submitting: nothing changes.
 	fetchApplications = func(context.Context, *Service) ([]topcv.Application, error) { return nil, nil }
@@ -78,9 +85,13 @@ func TestAssistApplyConfirmsFromHistory(t *testing.T) {
 func TestAssistApplyPreconditions(t *testing.T) {
 	s, _ := applySvc(t)
 	ctx := context.Background()
-	other, _ := s.AddJob(ctx, NewJob{Title: "VNW job", URL: "https://www.vietnamworks.com/x-1-jv"})
-	if _, err := s.PrepareApply(ctx, other.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "TopCV jobs") {
-		t.Fatalf("non-TopCV job = %v", err)
+	other, _ := s.AddJob(ctx, NewJob{Title: "Elsewhere", URL: "https://jobs.example.com/x-1"})
+	if _, err := s.PrepareApply(ctx, other.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "a site you can log in to") {
+		t.Fatalf("job on a site with no login support = %v", err)
+	}
+	vnw, _ := s.AddJob(ctx, NewJob{Title: "VNW job", URL: "https://www.vietnamworks.com/x-1-jv"})
+	if _, err := s.PrepareApply(ctx, vnw.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "log in to VietnamWorks first") {
+		t.Fatalf("VietnamWorks job without a VietnamWorks login = %v", err)
 	}
 	nocv, _ := s.AddJob(ctx, NewJob{Title: "No CV", URL: "https://www.topcv.vn/viec-lam/x/2200002.html"})
 	if _, err := s.PrepareApply(ctx, nocv.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "upload your CV") {
@@ -97,5 +108,38 @@ func TestAssistApplyPreconditions(t *testing.T) {
 	s.st.DeleteSession(ctx, "topcv")
 	if _, err := s.PrepareApply(ctx, j.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "log in to TopCV") {
 		t.Fatalf("not logged in = %v", err)
+	}
+}
+
+// On a site braveduck can't check (here VietnamWorks), the window opens with
+// that site's login and the job then waits for the user's answer.
+func TestAssistApplyOnOtherSitesAsks(t *testing.T) {
+	s, _ := applySvc(t)
+	ctx := context.Background()
+	s.st.SaveSession(ctx, store.PlatformSession{Platform: "vietnamworks", Enc: []byte{1}, CreatedAt: "x", FPSeed: "1", Status: store.SessionConnected})
+	j, _ := s.AddJob(ctx, NewJob{Title: "Growth Marketer", URL: "https://www.vietnamworks.com/growth-marketer-1-jv"})
+	s.SubmitCV(ctx, j.ID, "# A\n\n## Experience\n- Growth marketing with SQL and Python for five years")
+	site := ""
+	openApplyWindow = func(_ context.Context, _ *Service, p platform.Platform, url string) error { site = p.ID; return nil }
+	fetchApplications = func(context.Context, *Service) ([]topcv.Application, error) {
+		t.Fatal("TopCV's history was read for a VietnamWorks job")
+		return nil, nil
+	}
+
+	res, err := s.AssistApply(ctx, j.ID)
+	if err != nil || !res.Confirm || res.Submitted || site != "vietnamworks" || res.Site != "VietnamWorks" {
+		t.Fatalf("res = %+v, err = %v, window for %q", res, err, site)
+	}
+	if got, _ := s.GetJob(ctx, j.ID); got.ApplyState != "confirm" || got.Status != "saved" {
+		t.Fatalf("after the window: state %q, status %q", got.ApplyState, got.Status)
+	}
+
+	// "Not yet" clears the question; "yes" moves it to Applied with the clock started.
+	if got, _ := s.ConfirmApplied(ctx, j.ID, false); got.ApplyState != "" || got.Status != "saved" {
+		t.Fatalf("not submitted: %q / %q", got.ApplyState, got.Status)
+	}
+	got, err := s.ConfirmApplied(ctx, j.ID, true)
+	if err != nil || got.Status != "applied" || got.ApplyState != "sent" || !strings.HasPrefix(got.ExpiresAt, "applied:") {
+		t.Fatalf("submitted: %v %+v", err, got)
 	}
 }

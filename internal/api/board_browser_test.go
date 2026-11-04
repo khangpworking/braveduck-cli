@@ -1202,3 +1202,43 @@ func TestBoardHidesTaskSources(t *testing.T) {
 		}
 	}
 }
+
+// Assisted apply works on any site with a saved login: the card offers
+// "Apply on VietnamWorks", and after the window it asks whether you
+// submitted — "Yes, I applied" moves the job to Applied.
+func TestBoardApplyOnAnySite(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	st.SaveSession(ctx, store.PlatformSession{Platform: "vietnamworks", Enc: []byte{1}, CreatedAt: "x", FPSeed: "1", Status: store.SessionConnected})
+	ready, _ := svc.AddJob(ctx, service.NewJob{Title: "Growth Marketer", URL: "https://www.vietnamworks.com/growth-marketer-1-jv"})
+	svc.SubmitCV(ctx, ready.ID, "# A\n\n## Experience\n- Growth marketing with SQL and Python for five years")
+	asked, _ := svc.AddJob(ctx, service.NewJob{Title: "Data Analyst", URL: "https://www.vietnamworks.com/data-analyst-2-jv"})
+	st.SetApplyState(ctx, asked.ID, "confirm", "did you submit it on VietnamWorks?", time.Now())
+	noLogin, _ := svc.AddJob(ctx, service.NewJob{Title: "On JobOKO", URL: "https://vn.joboko.com/viec-lam-x-xvi1"})
+	svc.SubmitCV(ctx, noLogin.ID, "# A\n\n## Experience\n- Growth marketing with SQL and Python for five years")
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	for _, id := range []int64{ready.ID, noLogin.ID} {
+		page.MustEval(`id => toggleCardDetail(String(id))`, id)
+	}
+	waitUntil(t, func() bool {
+		return page.MustEval(`() => [...document.querySelectorAll("button")].some(b => b.textContent === "Apply on VietnamWorks")`).Bool()
+	}, "no Apply on VietnamWorks button")
+	if page.MustEval(`() => [...document.querySelectorAll("button")].some(b => /Apply on (JobOKO|TopCV)/.test(b.textContent))`).Bool() {
+		t.Fatal("an Apply button for a site without a login")
+	}
+
+	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustClick()
+	waitUntil(t, func() bool { j, _ := svc.GetJob(ctx, asked.ID); return j.Status == "applied" && j.ApplyState == "sent" }, "confirming didn't move the job to Applied")
+}

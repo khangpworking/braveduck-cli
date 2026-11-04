@@ -65,6 +65,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/draft/sent", s.draftSent)
 	mux.HandleFunc("POST /api/jobs/{id}/draft/reject", s.draftReject)
 	mux.HandleFunc("POST /api/jobs/{id}/apply", s.applyJob)
+	mux.HandleFunc("POST /api/jobs/{id}/apply/confirm", s.applyConfirm)
 	mux.HandleFunc("POST /api/jobs/{id}/pin", s.togglePin)
 	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
 	mux.HandleFunc("GET /api/profile", s.getProfile)

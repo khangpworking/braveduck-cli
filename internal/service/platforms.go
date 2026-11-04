@@ -76,15 +76,16 @@ func (s *Service) setup() (*platform.Registry, *vault.Vault, error) {
 
 // PlatformStatus is what anyone may see about a platform: never cookie values.
 type PlatformStatus struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Status      string `json:"status"` // not_connected / connecting / connected / expired / unknown
-	Since       string `json:"since,omitempty"`
-	CheckedAt   string `json:"checked_at,omitempty"`
-	ExpiresHint string `json:"expires_hint,omitempty"`
-	Account     string `json:"account,omitempty"` // masked, e.g. "ng…@gmail.com"
-	Verified    bool   `json:"verified"`          // its logged-in check is confirmed against the real site
-	Builtin     bool   `json:"builtin"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Status      string   `json:"status"` // not_connected / connecting / connected / expired / unknown
+	Since       string   `json:"since,omitempty"`
+	CheckedAt   string   `json:"checked_at,omitempty"`
+	ExpiresHint string   `json:"expires_hint,omitempty"`
+	Account     string   `json:"account,omitempty"` // masked, e.g. "ng…@gmail.com"
+	Verified    bool     `json:"verified"`          // its logged-in check is confirmed against the real site
+	Builtin     bool     `json:"builtin"`
+	Domains     []string `json:"domains"` // the site's hosts (and their subdomains), e.g. to match a job's link
 }
 
 const (
@@ -108,7 +109,7 @@ func (s *Service) Platforms(ctx context.Context) ([]PlatformStatus, error) {
 	}
 	var out []PlatformStatus
 	for _, p := range reg.All() {
-		st := PlatformStatus{ID: p.ID, Name: p.Name, Status: statusNotConnected, Verified: p.Verified, Builtin: p.Builtin}
+		st := PlatformStatus{ID: p.ID, Name: p.Name, Status: statusNotConnected, Verified: p.Verified, Builtin: p.Builtin, Domains: p.Domains}
 		if ps, ok := byID[p.ID]; ok {
 			st.Status, st.Since, st.CheckedAt, st.ExpiresHint, st.Account = ps.Status, ps.CreatedAt, ps.CheckedAt, ps.ExpiresHint, ps.AccountHint
 		}

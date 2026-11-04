@@ -154,6 +154,23 @@ func (s *server) applyJob(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusAccepted, prep, err)
 }
 
+// applyConfirm answers "did you submit it?" after applying on a site
+// braveduck can't check ({"submitted": true|false}).
+func (s *server) applyConfirm(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Submitted bool `json:"submitted"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	j, err := s.svc.ConfirmApplied(r.Context(), id, req.Submitted)
+	reply(w, http.StatusOK, j, err)
+}
+
 func (s *server) draftReject(w http.ResponseWriter, r *http.Request) {
 	if id, ok := pathID(w, r); ok {
 		j, err := s.svc.RejectDraft(r.Context(), id)

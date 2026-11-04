@@ -161,10 +161,15 @@ Every element and its purpose:
 
 ### 5.2 Apply method block (in detail panel)
 Two apply channels, auto-detected per job:
-- **🌐 On-site apply** — jobs on platforms with an automated apply engine
-  (TopCV/VNW/etc.). Shows an **"Approve CV — mark applied"** button (with Undo);
-  the apply-state badge (4.1) tracks the engine (queued/filling/cooldown/failed/
-  manual). Failed/manual states offer a retry or hand-off.
+- **🌐 On-site apply** — jobs on any site the user has a saved login for
+  (TopCV, VietnamWorks, JobOKO, CareerLink, or one added in platforms.json).
+  **"Apply on <site>"** (shown once there's a CV to send: tailored, or the
+  uploaded base CV) opens the job in a visible window with that login; the user
+  submits there, braveduck never does. Afterwards TopCV jobs are confirmed from
+  TopCV's application history; on other sites the card asks **"Did you submit
+  it?"** — **Yes, I applied** moves it to Applied (starting the no-answer
+  clock), **Not yet** clears the question. The apply-state badge (4.1) shows
+  filling/failed; a daily cap and a cooldown between applies protect the account.
 - **✉ Email apply** — jobs applied to by cold email. Shows an editable
   **recipient field** and the **draft email editor** (5.3).
 - Past the Applied stage (Interview/Offer/Closed) there's nothing to apply to, so

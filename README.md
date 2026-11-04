@@ -31,9 +31,10 @@ locally on your disk.
   yet, deadlines this week and applications to follow up; optional desktop
   notifications for new great matches.
 - **Helps you apply.** Your AI tailors a CV (printed to PDF) and drafts the
-  email; on TopCV a visible window opens on the job with your login and you
-  press submit — braveduck never submits for you. Your TopCV application
-  statuses sync back to the board.
+  email; on any site you're logged in to (TopCV, VietnamWorks, JobOKO,
+  CareerLink) a visible window opens on the job with your login and you press
+  submit — braveduck never submits for you. Your TopCV application statuses
+  sync back to the board.
 
 ## Quick start
 
@@ -110,10 +111,12 @@ file, or `BRAVEDUCK_PASSPHRASE`. Also on the board (⚙ Settings → 🔑 Job-si
 
 Linux/WSL needs Chromium's libraries once: `sudo apt install -y libnss3 libasound2t64`.
 
-With a TopCV login, `braveduck sync topcv` (also every 6 h) reads your
-application history and moves those jobs to Applied, and `braveduck apply
-<id>` opens the job in a visible window with your tailored CV ready — you
-review and submit yourself.
+`braveduck apply <id>` (or **Apply on …** on the card) opens the job in a
+visible window with that site's login and your CV ready — you review and
+submit yourself. On TopCV, braveduck then checks your application history;
+on other sites it asks whether you submitted. With a TopCV login,
+`braveduck sync topcv` (also every 6 h) moves the jobs you applied to on
+TopCV to Applied.
 
 ## Why
 
@@ -137,7 +140,7 @@ commands or by whatever AI CLI you already use, via MCP.
 
 1. ~~Core + CLI + local web board~~ ✓
 2. ~~MCP server over the same core~~ ✓
-3. ~~Logins, status sync and assisted apply (TopCV first)~~ ✓ — more sites next
+3. ~~Logins, status sync and assisted apply~~ ✓ (status sync: TopCV only so far)
 4. Community release
 
 ## License
