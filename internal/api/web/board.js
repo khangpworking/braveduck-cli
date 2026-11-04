@@ -357,7 +357,7 @@ function renderJobCard(job, container) {
   
   let pinBtnHtml = "";
   if (job.status === "Saved") {
-    pinBtnHtml = `<button class="icon-btn-sm" title="${pinTitle}" onclick="togglePin('${job.id}')">${pinIcon}</button>`;
+    pinBtnHtml = `<button class="icon-btn-sm" title="${pinTitle}" aria-label="${pinTitle}: ${esc(job.title)}" aria-pressed="${isPinned}" onclick="togglePin('${job.id}')">${pinIcon}</button>`;
   }
 
   // Move-to dropdown items
@@ -381,9 +381,9 @@ function renderJobCard(job, container) {
             ${scoreHtml}
           </div>
           <div class="quick-actions">
-            <a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="icon-btn-sm" title="Open original link" onclick="event.stopPropagation()">↗</a>
+            <a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="icon-btn-sm" title="Open original link" aria-label="Open the listing: ${esc(job.title)}" onclick="event.stopPropagation()">↗</a>
             ${pinBtnHtml}
-            <button class="icon-btn-sm" title="Delete job" style="color:var(--error);" onclick="deleteJobCard('${job.id}')">✕</button>
+            <button class="icon-btn-sm" title="Delete job" aria-label="Delete job: ${esc(job.title)}" style="color:var(--error);" onclick="deleteJobCard('${job.id}')">✕</button>
           </div>
         </div>
       </div>
@@ -408,7 +408,7 @@ function renderJobCard(job, container) {
           ${selectOptions}
         </select>
       </div>
-      <button class="icon-btn expand-btn" title="Toggle Details" onclick="toggleCardDetail('${job.id}')">${isOpen ? "▴" : "▾"}</button>
+      <button class="icon-btn expand-btn" title="Toggle Details" aria-label="Details: ${esc(job.title)}" aria-expanded="${isOpen}" onclick="toggleCardDetail('${job.id}')">${isOpen ? "▴" : "▾"}</button>
     </div>
     
     <!-- Expanded Detail Panel -->

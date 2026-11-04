@@ -1418,3 +1418,36 @@ func TestLocationPickWhileMapLoads(t *testing.T) {
 		t.Fatalf("pin at %s, want the picked place", got)
 	}
 }
+
+// Every button has a name a screen reader can say: its text or aria-label
+// must contain a letter (an icon such as ×, ✕, ▾ or 📍 alone isn't one).
+func TestBoardButtonsHaveNames(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	j, _ := svc.AddJob(ctx, service.NewJob{Title: "Data Analyst", URL: "https://www.topcv.vn/viec-lam/x/1.html"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	page.MustEval(`id => toggleCardDetail(String(id))`, j.ID)
+	page.MustElement(fmt.Sprintf("#detail-%d", j.ID))
+	unnamed := page.MustEval(`() => [...document.querySelectorAll("button, a.icon-btn-sm")]
+		.map(b => ({ name: (b.getAttribute("aria-label") || b.textContent || "").trim(), html: b.outerHTML.slice(0, 120) }))
+		.filter(b => !/\p{L}/u.test(b.name))
+		.map(b => b.html)`).Arr()
+	if len(unnamed) > 0 {
+		t.Fatalf("%d button(s) without a spoken name, e.g. %v", len(unnamed), unnamed[0])
+	}
+	if label := page.MustElement(".card .expand-btn").MustAttribute("aria-label"); label == nil || *label != "Details: Data Analyst" {
+		t.Fatalf("expand button label = %v", label)
+	}
+}
