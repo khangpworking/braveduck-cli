@@ -170,7 +170,7 @@ func TestBoardMobileColumnsToggle(t *testing.T) {
 	defer ts.Close()
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
 	setViewportWidth(page, 390)
-	page.MustElement(".card").MustWaitVisible()
+	waitVisible(page, ".card")
 	page.MustElement("#col-Saved .column-header").MustClick()
 	if page.MustElement(".card").MustVisible() {
 		t.Fatal("mobile header did not collapse its cards")
@@ -180,7 +180,7 @@ func TestBoardMobileColumnsToggle(t *testing.T) {
 		t.Fatal("collapsed column was expanded after reload")
 	}
 	page.MustElement("#col-Saved .column-header").MustClick()
-	page.MustElement(".card").MustWaitVisible()
+	waitVisible(page, ".card")
 	setViewportWidth(page, 1024)
 	page.MustElement("#col-Saved .column-header").MustClick()
 	if !page.MustElement(".card").MustVisible() {
@@ -791,6 +791,16 @@ func TestAskAICVAndDraft(t *testing.T) {
 // setViewportWidth resizes the page and waits until its script sees the new
 // width: Chrome can apply the override after the CDP call returns, and the
 // mobile accordion reads window.innerWidth on click.
+// waitVisible waits until selector matches a rendered element, looking it up
+// afresh each time: the board re-renders its cards, so a handle taken
+// earlier can be detached and would never become visible.
+func waitVisible(page *rod.Page, selector string) {
+	page.MustWait(`sel => {
+		const e = document.querySelector(sel);
+		return !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden";
+	}`, selector)
+}
+
 func setViewportWidth(page *rod.Page, width int) {
 	page.MustSetViewport(width, 844, 1, false)
 	page.MustWait(`w => window.innerWidth === w`, width)
@@ -966,7 +976,7 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 			if !page.MustEval(`() => !!document.querySelector('.card[data-id="1"] #detail-1')`).Bool() {
 				t.Fatal("Show did not reveal and expand the duplicate card")
 			}
-			page.MustElement("#detail-1").MustWaitVisible()
+			waitVisible(page, "#detail-1")
 			if page.MustEval(`() => document.getElementById("addJobDrawer").classList.contains("open")`).Bool() {
 				t.Fatal("Add drawer still open after Show")
 			}
