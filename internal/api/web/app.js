@@ -2213,6 +2213,39 @@ document.addEventListener("DOMContentLoaded", () => {
     await renderSources();
   });
 
+  // Settings menu: one button for the less-used windows. A pick closes the
+  // menu and opens its window (each item keeps its old id and listener).
+  const settingsBtn = document.getElementById("settingsBtn");
+  const settingsMenu = document.getElementById("settingsMenu");
+  const closeSettings = (focusButton) => {
+    if (settingsMenu.hidden) return;
+    settingsMenu.hidden = true;
+    settingsBtn.setAttribute("aria-expanded", "false");
+    if (focusButton) settingsBtn.focus();
+  };
+  settingsBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    if (!settingsMenu.hidden) return closeSettings(false);
+    const r = settingsBtn.getBoundingClientRect();
+    settingsMenu.hidden = false;
+    const left = Math.max(8, Math.min(r.right - settingsMenu.offsetWidth, document.documentElement.clientWidth - settingsMenu.offsetWidth - 8));
+    settingsMenu.style.left = `${left + window.scrollX}px`;
+    settingsMenu.style.top = `${r.bottom + 4 + window.scrollY}px`;
+    settingsBtn.setAttribute("aria-expanded", "true");
+    settingsMenu.querySelector("button").focus();
+  });
+  settingsMenu.addEventListener("click", () => closeSettings(false));
+  settingsMenu.addEventListener("keydown", e => {
+    const items = [...settingsMenu.querySelectorAll("button")];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    if (e.key === "Escape") closeSettings(true);
+  });
+  document.addEventListener("click", e => {
+    if (!settingsMenu.contains(e.target)) closeSettings(false);
+  });
+
   // Search: filters cards as you type; "/" jumps to it, Esc clears it.
   const search = document.getElementById("jobSearch");
   search.addEventListener("input", () => {
