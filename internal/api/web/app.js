@@ -454,7 +454,7 @@ function renderCrawlStatus() {
     unhealthyContainer.innerHTML = unhealthySources
       .map(s => `
         <div class="chip unhealthy" style="justify-content: space-between; display: flex; width: 100%;">
-          <span>⚠️ ${esc(s.name)} (Crawl stalled: ${esc(timeAgo(s.lastRun) || "never run")})</span>
+          <span>⚠️ ${esc(s.name)} — ${s.lastError ? esc(s.lastError) : "no successful run in the last hour"} (last report: ${esc(timeAgo(s.lastRun) || "never")})</span>
           <button class="btn-text" onclick="triggerCrawlerRetry(${jsArg(s.name)})" style="color: #991b1b; text-decoration: underline;">Retry ⟳</button>
         </div>
       `)

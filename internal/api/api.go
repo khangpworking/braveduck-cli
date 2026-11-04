@@ -274,7 +274,7 @@ func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotImplemented, map[string]any{
 		"ok":      false,
 		"source":  r.PathValue("source"),
-		"message": "crawlers aren't wired into braveduck-cli yet — nothing to retry",
+		"message": "braveduck can't restart this source — it's run by its own tool (e.g. fb-watcher); restart it there",
 	})
 }
 

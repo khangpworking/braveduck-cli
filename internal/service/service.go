@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -279,6 +280,43 @@ func (s *Service) Keywords(ctx context.Context) (keyword.Sets, error) {
 // CrawlStatus reports per-source crawl health and today's find count.
 func (s *Service) CrawlStatus(ctx context.Context) (store.CrawlStatusView, error) {
 	return s.st.CrawlStatus(ctx, s.now())
+}
+
+// crawlSourceRE is what a source name may look like: the board shows it and
+// jobs carry it as discovery_source, so keep it a plain id.
+var crawlSourceRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+// ReportCrawl records one run of an external crawler (fb-watcher, …) so the
+// board's crawl panel shows it and flags it when it fails or goes quiet. A
+// failure that follows a success is also put in the activity feed, once.
+func (s *Service) ReportCrawl(ctx context.Context, source string, ok bool, reason string) error {
+	source = strings.ToLower(strings.TrimSpace(source))
+	if !crawlSourceRE.MatchString(source) {
+		return fmt.Errorf("%w: source %q: use lowercase letters, digits, - or _", ErrInvalid, source)
+	}
+	reason = strings.TrimSpace(reason)
+	if len(reason) > 300 {
+		reason = reason[:300]
+	}
+	wasFailing := false
+	if v, err := s.st.CrawlStatus(ctx, s.now()); err == nil {
+		for _, src := range v.Sources {
+			if src.Name == source && src.LastError != "" {
+				wasFailing = true
+			}
+		}
+	}
+	if err := s.st.RecordCrawlRun(ctx, source, ok, reason, s.now()); err != nil {
+		return err
+	}
+	if !ok && !wasFailing {
+		msg := fmt.Sprintf("%s crawl failed", source)
+		if reason != "" {
+			msg += ": " + reason
+		}
+		s.logEvent(ctx, "error", msg)
+	}
+	return nil
 }
 
 // Activity returns the newest activity-feed events.

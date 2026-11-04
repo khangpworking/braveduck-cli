@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,5 +177,34 @@ func TestStats(t *testing.T) {
 	}
 	if st.Resolved != 3 || st.Interviews != 1 || st.Morale == "" {
 		t.Fatalf("rate wrong: %+v", st)
+	}
+}
+
+func TestReportCrawl(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	if err := s.ReportCrawl(ctx, "Face Book", true, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("bad source name = %v", err)
+	}
+	if err := s.ReportCrawl(ctx, "Facebook", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := s.CrawlStatus(ctx)
+	if len(v.Sources) != 1 || v.Sources[0].Name != "facebook" || !v.Sources[0].Healthy {
+		t.Fatalf("crawl status = %+v", v)
+	}
+
+	// The feed gets one line when a source starts failing, not one per poll.
+	s.ReportCrawl(ctx, "facebook", false, "logged out")
+	s.ReportCrawl(ctx, "facebook", false, "logged out")
+	ev, _ := s.Activity(ctx, 10)
+	n := 0
+	for _, e := range ev {
+		if e.Type == "error" {
+			n++
+		}
+	}
+	if n != 1 || !strings.Contains(ev[0].Message, "facebook crawl failed: logged out") {
+		t.Fatalf("feed = %+v, want exactly one failure line", ev)
 	}
 }

@@ -53,6 +53,10 @@ Job-site logins (you log in yourself; braveduck keeps the session, encrypted)
   logout <site>|--all  delete a saved login
   platforms check <site>   re-check whether a saved login still works
 
+Crawlers (external scrapers report their runs; the board flags failures)
+  crawl-report <source> --ok            record a successful run
+  crawl-report <source> --fail "why"    record a failed run
+
 Web board
   serve      run the local web board + JSON API   (--addr, --no-open)
 
@@ -125,6 +129,8 @@ func run(args []string) error {
 		return cmdLogin(ctx, svc, rest)
 	case "logout":
 		return cmdLogout(ctx, svc, rest)
+	case "crawl-report":
+		return cmdCrawlReport(ctx, svc, rest)
 	case "profile":
 		return cmdProfile(ctx, svc)
 	case "rate":
