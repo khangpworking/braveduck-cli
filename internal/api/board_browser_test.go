@@ -151,6 +151,40 @@ func TestBoardClosedOverlaysDoNotTakeFocus(t *testing.T) {
 	checkTabOrder()
 }
 
+// Mobile column headers toggle visibility and remember the choice on reload.
+func TestBoardMobileColumnsToggle(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	if _, err := svc.AddJob(context.Background(), service.NewJob{Title: "Mobile engineer"}); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	setViewportWidth(page, 390)
+	page.MustElement(".card").MustWaitVisible()
+	page.MustElement("#col-Saved .column-header").MustClick()
+	if page.MustElement(".card").MustVisible() {
+		t.Fatal("mobile header did not collapse its cards")
+	}
+	page.MustReload().MustWaitLoad()
+	if page.MustElement(".card").MustVisible() {
+		t.Fatal("collapsed column was expanded after reload")
+	}
+	page.MustElement("#col-Saved .column-header").MustClick()
+	page.MustElement(".card").MustWaitVisible()
+	setViewportWidth(page, 1024)
+	page.MustElement("#col-Saved .column-header").MustClick()
+	if !page.MustElement(".card").MustVisible() {
+		t.Fatal("desktop header collapsed its cards")
+	}
+}
+
 // The board's core promises: hostile job text can't run script, and moves,
 // notes and pins reach the server (they once only touched localStorage), with
 // no JS errors along the way.
@@ -470,6 +504,14 @@ func TestAskAICVAndDraft(t *testing.T) {
 // waits for the element to be stable and uncovered, which can hang while the
 // board re-renders right after load; a DOM click is what a user's click
 // delivers anyway.
+// setViewportWidth resizes the page and waits until its script sees the new
+// width: Chrome can apply the override after the CDP call returns, and the
+// mobile accordion reads window.innerWidth on click.
+func setViewportWidth(page *rod.Page, width int) {
+	page.MustSetViewport(width, 844, 1, false)
+	page.MustWait(`w => window.innerWidth === w`, width)
+}
+
 func clickID(page *rod.Page, id string) {
 	if _, err := page.Timeout(10 * time.Second).Element("#" + id); err != nil {
 		info, ierr := page.Timeout(5 * time.Second).Info()
@@ -572,32 +614,57 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 	svc := service.New(st)
 	svc.SetDataDir(t.TempDir())
 	ctx := context.Background()
-	svc.AddJob(ctx, service.NewJob{Title: `<img src=x onerror="window.__pwned=1">Analyst`, URL: "https://www.topcv.vn/viec-lam/x/1.html"})
+	svc.AddJob(ctx, service.NewJob{Title: `<img src=x onerror="window.__pwned=1">Analyst`, URL: "https://www.topcv.vn/viec-lam/x/1.html", Source: "topcv"})
+	svc.AddJob(ctx, service.NewJob{Title: "Another job", Source: "paste"})
 	ts := httptest.NewServer(Handler(st, svc, testToken))
 	defer ts.Close()
 
-	page := launchBrowser(t).MustPage("")
-	page.MustNavigate(ts.URL).MustWaitLoad()
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
 	page.MustElement(".card")
-	page.MustElement("#openDrawerBtn").MustClick()
-	page.MustElement("#pasteJDTextarea").MustInput("https://www.topcv.vn/viec-lam/x/1.html?ta_source=list")
-	page.MustElement("#extractAddBtn").MustClick()
+	for _, scenario := range []string{"unfiltered", "filtered", "mobile collapsed"} {
+		t.Run(scenario, func(t *testing.T) {
+			switch scenario {
+			case "filtered":
+				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustClick()
+				page.MustElement("#jobSearch").MustInput("not a matching title")
+			case "mobile collapsed":
+				setViewportWidth(page, 390)
+				page.MustElement("#col-Saved .column-header").MustClick()
+				if page.MustElement(`.card[data-id="1"]`).MustVisible() {
+					t.Fatal("mobile column did not collapse before Show")
+				}
+			}
+			page.MustElement("#openDrawerBtn").MustClick()
+			page.MustElement("#pasteJDTextarea").MustSelectAllText().MustInput("https://www.topcv.vn/viec-lam/x/1.html?ta_source=list")
+			page.MustElement("#extractAddBtn").MustClick()
 
-	banner := page.MustElement("#extractResultBanner li")
-	if txt := banner.MustText(); !strings.Contains(txt, "#1") || !strings.Contains(txt, "Analyst") || !strings.Contains(txt, "(saved)") {
-		t.Fatalf("banner = %q, want it to name #1", txt)
-	}
-	if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#extractResultBanner img")`).Bool() {
-		t.Fatal("duplicate's title injected markup into the banner")
-	}
-	if list, _ := svc.ListJobs(ctx, service.ListFilter{}); len(list) != 1 {
-		t.Fatalf("%d jobs, want the duplicate refused", len(list))
-	}
+			page.MustElement("#extractResultBanner").MustWaitVisible()
+			banner := page.MustElement("#extractResultBanner li")
+			if txt := banner.MustText(); !strings.Contains(txt, "#1") || !strings.Contains(txt, "Analyst") || !strings.Contains(txt, "(saved)") {
+				t.Fatalf("banner = %q, want it to name #1", txt)
+			}
+			if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#extractResultBanner img")`).Bool() {
+				t.Fatal("duplicate's title injected markup into the banner")
+			}
+			if list, _ := svc.ListJobs(ctx, service.ListFilter{}); len(list) != 2 {
+				t.Fatalf("%d jobs, want the duplicate refused", len(list))
+			}
 
-	banner.MustElement("button").MustClick()
-	page.MustElement(`#detail-1`)
-	if page.MustEval(`() => document.getElementById("addJobDrawer").classList.contains("open")`).Bool() {
-		t.Fatal("Add drawer still open after Show")
+			banner.MustElement("button").MustClick()
+			if !page.MustEval(`() => !!document.querySelector('.card[data-id="1"] #detail-1')`).Bool() {
+				t.Fatal("Show did not reveal and expand the duplicate card")
+			}
+			page.MustElement("#detail-1").MustWaitVisible()
+			if page.MustEval(`() => document.getElementById("addJobDrawer").classList.contains("open")`).Bool() {
+				t.Fatal("Add drawer still open after Show")
+			}
+			if scenario == "filtered" && !page.MustEval(`() => document.getElementById('jobSearch').value === '' && document.querySelector('input[name="platform-filter"][value="All"]').checked`).Bool() {
+				t.Fatal("Show left the filter controls out of sync with the revealed card")
+			}
+		})
+		if t.Failed() {
+			break
+		}
 	}
 }
 
@@ -841,5 +908,44 @@ func TestBoardSettingsMenu(t *testing.T) {
 	page.Keyboard.MustType(input.Escape)
 	if !page.MustEval(`() => document.getElementById("settingsMenu").hidden && document.activeElement.id === "settingsBtn"`).Bool() {
 		t.Fatal("Esc didn't close the menu and return focus")
+	}
+}
+
+// Great-match notifications: switching them on doesn't notify for matches
+// already on the board; a job rated A afterwards does, once.
+func TestBoardNotifiesNewMatches(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	st.Add(ctx, jobs.Job{Title: "Old match", Status: "saved", Score: 4.5, HasScore: true, ScoreLetter: "A", ScoreStatus: "scored"}, time.Now())
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	// A stand-in Notification that records what the board shows.
+	page.MustEvalOnNewDocument(`window.__shown = [];
+		window.Notification = class { constructor(title, opts) { window.__shown.push(title); } close() {} };
+		Notification.permission = "granted";
+		Notification.requestPermission = async () => "granted";`)
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+
+	page.MustEval(`() => toggleNotify()`)
+	page.MustElementR("#notifyBtn", "great matches: on")
+	if n := page.MustEval(`() => window.__shown.length`).Int(); n != 0 {
+		t.Fatalf("%d notifications on switching on, want none for existing matches", n)
+	}
+
+	st.Add(ctx, jobs.Job{Title: "Fresh match", Company: "Duck Co", Status: "saved", Score: 4.8, HasScore: true, ScoreLetter: "A", ScoreStatus: "scored"}, time.Now())
+	page.MustEval(`() => refreshAppState()`)
+	page.MustEval(`() => refreshAppState()`) // a second refresh mustn't repeat it
+	if got := page.MustEval(`() => window.__shown.join("|")`).Str(); got != "Great match: Fresh match" {
+		t.Fatalf("notifications = %q, want one for the new match", got)
 	}
 }
