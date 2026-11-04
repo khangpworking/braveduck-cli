@@ -402,14 +402,15 @@ func num(v any) string {
 	return ""
 }
 
+// skillSepRE splits a skills string ("Go, SQL; Docker").
+var skillSepRE = regexp.MustCompile(`[,\n;]`)
+
 // skills reads the skills field: a comma/newline string or an array of strings.
 func skills(v any) []string {
 	var raw []string
 	switch t := v.(type) {
 	case string:
-		for _, part := range regexp.MustCompile(`[,\n;]`).Split(t, -1) {
-			raw = append(raw, part)
-		}
+		raw = skillSepRE.Split(t, -1)
 	case []any:
 		for _, e := range t {
 			raw = append(raw, str(e))

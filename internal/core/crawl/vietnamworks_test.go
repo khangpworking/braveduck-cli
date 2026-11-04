@@ -79,7 +79,7 @@ func TestVietnamWorksSearch(t *testing.T) {
 
 func TestVietnamWorksErrors(t *testing.T) {
 	for name, h := range map[string]http.HandlerFunc{
-		"403":         func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "forbidden", 403) },
+		"403":         func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "forbidden", http.StatusForbidden) },
 		"not json":    func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("<html>maintenance</html>")) },
 		"wrong shape": func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(`{"data":{"oops":1}}`)) },
 	} {
