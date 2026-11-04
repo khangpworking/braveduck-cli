@@ -177,27 +177,41 @@ func TestRatingQueueAndSubmit(t *testing.T) {
 	}
 }
 
-// With Jev as the default, a claude-code challenger verdict is stored but leaves
-// the default badge unchanged.
-func TestClaudeCodeChallengerKeepsJevBadge(t *testing.T) {
-	s, _ := newRatingSvc(t)
-	ctx := context.Background()
-	if _, err := s.SetRatingConfig(ctx, rating.Config{ABEnabled: true, Models: []string{jev.DefaultModel, "claude-code"}, DefaultModel: jev.DefaultModel}); err != nil {
-		t.Fatal(err)
-	}
-	job, _ := s.AddJob(ctx, NewJob{Title: "Backend"})
-	if _, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Model: jev.DefaultModel, Score: 4.2, Reasoning: "Jev: B • skills: strong"}); err != nil {
-		t.Fatal(err)
-	}
-	j, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Model: "claude-code", Score: 2.0, Letter: "F", Reasoning: "missing core skills"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if j.ScoreLetter != "B" || j.Score != 4.2 {
-		t.Fatalf("claude-code challenger moved the Jev badge: %+v", j)
-	}
-	if got := j.Ratings["claude-code"]; got.Letter != "F" {
-		t.Fatalf("challenger verdict not stored: %+v", j.Ratings)
+// The legacy claude-code tag owns the badge unless A/B is on and it is only a
+// challenger: then it is stored but leaves the default badge unchanged.
+func TestClaudeCodeBadgeOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		cfg      *rating.Config
+		wantOwns bool
+	}{
+		{"fresh board, no rating config", nil, true},
+		{"A/B on, Jev default, claude-code challenger", &rating.Config{ABEnabled: true, Models: []string{jev.DefaultModel, "claude-code"}, DefaultModel: jev.DefaultModel}, false},
+		{"A/B on, claude-code default", &rating.Config{ABEnabled: true, Models: []string{"claude-code", jev.DefaultModel}, DefaultModel: "claude-code"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := newRatingSvc(t)
+			ctx := context.Background()
+			if tc.cfg != nil {
+				if _, err := s.SetRatingConfig(ctx, *tc.cfg); err != nil {
+					t.Fatal(err)
+				}
+			}
+			job, _ := s.AddJob(ctx, NewJob{Title: "Backend"})
+			if _, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Score: 4.2, Reasoning: "Go match • 5y fits senior bar"}); err != nil {
+				t.Fatal(err)
+			}
+			j, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Model: "claude-code", Score: 2.0, Letter: "F", Reasoning: "missing core skills"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if owns := j.ScoreLetter == "F" && j.Score == 2.0; owns != tc.wantOwns {
+				t.Fatalf("claude-code owns badge = %v, want %v: %+v", owns, tc.wantOwns, j)
+			}
+			if got := j.Ratings["claude-code"]; got.Letter != "F" {
+				t.Fatalf("claude-code verdict not stored: %+v", j.Ratings)
+			}
+		})
 	}
 }
 

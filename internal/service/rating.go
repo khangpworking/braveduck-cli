@@ -283,7 +283,7 @@ func (s *Service) SubmitRating(ctx context.Context, v Verdict) (jobs.Job, error)
 		return jobs.Job{}, err
 	}
 	model := strings.TrimSpace(v.Model)
-	owns := rating.OwnsBoardBadge(model, cfg.DefaultModel)
+	owns := rating.OwnsBoardBadge(model, cfg.DefaultModel, cfg.ABEnabled)
 	if model == "" {
 		model = cfg.DefaultModel
 	}

@@ -95,10 +95,10 @@ func ValidateVerdict(raw RawVerdict) (Verdict, error) {
 
 // OwnsBoardBadge reports whether a verdict from model should also become the
 // board's canonical badge. The empty model always mirrors (the pre-A/B
-// single-rater path); the legacy "claude-code" tag mirrors only when no default
-// rater is configured; otherwise only the configured default rater owns the badge.
-func OwnsBoardBadge(model, defaultModel string) bool {
-	if model == "" || (model == "claude-code" && defaultModel == "") {
+// single-rater path); the legacy "claude-code" tag mirrors unless A/B is on and
+// it is a challenger; otherwise only the configured default rater owns the badge.
+func OwnsBoardBadge(model, defaultModel string, abEnabled bool) bool {
+	if model == "" || (model == "claude-code" && !abEnabled) {
 		return true
 	}
 	return model == defaultModel
