@@ -75,6 +75,28 @@ func addFromContent(ctx context.Context, svc *service.Service, args []string) er
 	return nil
 }
 
+// cmdBackup copies the database: to file if given, else into the backups
+// folder (which keeps the last week's copies).
+func cmdBackup(ctx context.Context, svc *service.Service, args []string) error {
+	if len(args) > 1 {
+		return errors.New("usage: braveduck backup [file]")
+	}
+	if len(args) == 1 {
+		if err := svc.BackupTo(ctx, args[0]); err != nil {
+			return err
+		}
+		fmt.Println("backed up to", args[0])
+		return nil
+	}
+	path, err := svc.Backup(ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Println("backed up to", path)
+	fmt.Println("to restore: stop the board, then copy a backup over braveduck.db")
+	return nil
+}
+
 // cmdToday prints what to act on now (the board's Today panel).
 func cmdToday(ctx context.Context, svc *service.Service) error {
 	groups, err := svc.Today(ctx)
