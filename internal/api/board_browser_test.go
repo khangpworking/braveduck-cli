@@ -843,3 +843,42 @@ func TestBoardSettingsMenu(t *testing.T) {
 		t.Fatal("Esc didn't close the menu and return focus")
 	}
 }
+
+// Great-match notifications: switching them on doesn't notify for matches
+// already on the board; a job rated A afterwards does, once.
+func TestBoardNotifiesNewMatches(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	st.Add(ctx, jobs.Job{Title: "Old match", Status: "saved", Score: 4.5, HasScore: true, ScoreLetter: "A", ScoreStatus: "scored"}, time.Now())
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	// A stand-in Notification that records what the board shows.
+	page.MustEvalOnNewDocument(`window.__shown = [];
+		window.Notification = class { constructor(title, opts) { window.__shown.push(title); } close() {} };
+		Notification.permission = "granted";
+		Notification.requestPermission = async () => "granted";`)
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+
+	page.MustEval(`() => toggleNotify()`)
+	page.MustElementR("#notifyBtn", "great matches: on")
+	if n := page.MustEval(`() => window.__shown.length`).Int(); n != 0 {
+		t.Fatalf("%d notifications on switching on, want none for existing matches", n)
+	}
+
+	st.Add(ctx, jobs.Job{Title: "Fresh match", Company: "Duck Co", Status: "saved", Score: 4.8, HasScore: true, ScoreLetter: "A", ScoreStatus: "scored"}, time.Now())
+	page.MustEval(`() => refreshAppState()`)
+	page.MustEval(`() => refreshAppState()`) // a second refresh mustn't repeat it
+	if got := page.MustEval(`() => window.__shown.join("|")`).Str(); got != "Great match: Fresh match" {
+		t.Fatalf("notifications = %q, want one for the new match", got)
+	}
+}
