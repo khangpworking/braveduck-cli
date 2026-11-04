@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 )
 
 // A model id in a copied rating command is one literal argument, even if it
@@ -171,6 +174,30 @@ func TestRatingQueueAndSubmit(t *testing.T) {
 	ev, _ := s.Activity(ctx, 1)
 	if len(ev) != 1 || ev[0].Type != "rated" {
 		t.Fatalf("last event = %+v, want 'rated'", ev)
+	}
+}
+
+// With Jev as the default, a claude-code challenger verdict is stored but leaves
+// the default badge unchanged.
+func TestClaudeCodeChallengerKeepsJevBadge(t *testing.T) {
+	s, _ := newRatingSvc(t)
+	ctx := context.Background()
+	if _, err := s.SetRatingConfig(ctx, rating.Config{ABEnabled: true, Models: []string{jev.DefaultModel, "claude-code"}, DefaultModel: jev.DefaultModel}); err != nil {
+		t.Fatal(err)
+	}
+	job, _ := s.AddJob(ctx, NewJob{Title: "Backend"})
+	if _, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Model: jev.DefaultModel, Score: 4.2, Reasoning: "Jev: B • skills: strong"}); err != nil {
+		t.Fatal(err)
+	}
+	j, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Model: "claude-code", Score: 2.0, Letter: "F", Reasoning: "missing core skills"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.ScoreLetter != "B" || j.Score != 4.2 {
+		t.Fatalf("claude-code challenger moved the Jev badge: %+v", j)
+	}
+	if got := j.Ratings["claude-code"]; got.Letter != "F" {
+		t.Fatalf("challenger verdict not stored: %+v", j.Ratings)
 	}
 }
 

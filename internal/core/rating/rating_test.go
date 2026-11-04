@@ -118,8 +118,14 @@ func TestOwnsBoardBadge(t *testing.T) {
 	if !OwnsBoardBadge("", "claude-opus-4-8") {
 		t.Error("empty model should own badge")
 	}
-	if !OwnsBoardBadge("claude-code", "gemini-flash") {
-		t.Error("legacy claude-code should own badge")
+	if !OwnsBoardBadge("claude-code", "") {
+		t.Error("legacy claude-code should own badge when no default is configured")
+	}
+	if !OwnsBoardBadge("claude-code", "claude-code") {
+		t.Error("claude-code as the default should own badge")
+	}
+	if OwnsBoardBadge("claude-code", "jev-1.13.0") {
+		t.Error("claude-code as a challenger should NOT own badge")
 	}
 	if !OwnsBoardBadge("gemini-flash", "gemini-flash") {
 		t.Error("default model should own badge")

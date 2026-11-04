@@ -101,10 +101,7 @@ function normalizeJob(j) {
     applied_on: typeof j.expires_at === "string" && j.expires_at.startsWith("applied:") ? j.expires_at.slice("applied:".length) : "",
     // The store keeps the draft as JSON {to, subject, body}; "" = none.
     draft_email: parseDraft(j.draft_email),
-    ratings: Object.fromEntries(Object.entries(j.ratings || {}).map(([model, verdict]) => [model, {
-      ...verdict,
-      letter: verdict.status === "pending" ? "..." : verdict.status === "failed" ? "✕" : verdict.letter
-    }]))
+    ratings: j.ratings || {}
   };
 }
 
