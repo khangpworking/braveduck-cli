@@ -41,6 +41,7 @@ Rating (bring your own AI: braveduck stores no API keys)
   rate <id>            print a rating brief for one job
   rate <id> --score 4.2 --why "..." [--letter B] [--model m]   save a verdict
   rate-config [--ab] [--models a,b,c] [--default a]   show or set the A/B rater config
+  jev [status|enable|rate <id>|rate --all]   rate with Jev (TypeSafe's decision model)
 
 Keywords (crawler filter lists — start empty)
   keywords                       show every list and its terms
@@ -165,6 +166,8 @@ func run(args []string) error {
 		return cmdProfile(ctx, svc)
 	case "rate":
 		return cmdRate(ctx, svc, rest)
+	case "jev":
+		return cmdJev(ctx, svc, rest)
 	case "rate-config":
 		return cmdRateConfig(ctx, svc, rest)
 	case "keywords", "kw":

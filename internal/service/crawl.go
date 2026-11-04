@@ -84,6 +84,15 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 		r, err := s.SyncTopCV(ctx)
 		return CrawlResult{Source: source, Found: r.Found, Added: r.Added}, err
 	}
+	if source == JevRateSource {
+		r, err := s.runJevRate(ctx)
+		if err != nil {
+			_ = s.ReportCrawl(ctx, source, false, err.Error())
+		} else if s.jevIsDefault(ctx) {
+			_ = s.ReportCrawl(ctx, source, true, "")
+		}
+		return r, err
+	}
 	c, ok := cs.crawlers[source]
 	if !ok {
 		return CrawlResult{}, fmt.Errorf("%w: %q isn't a built-in crawler (built-in: %s)", ErrInvalid, source, strings.Join(s.BuiltinCrawlers(), ", "))
@@ -181,7 +190,7 @@ func (s *Service) BuiltinCrawlers() []string {
 
 // builtinSources are the sources braveduck runs itself: crawlers + the sync.
 func (s *Service) builtinSources() map[string]int {
-	m := map[string]int{TopCVSyncSource: defaultSyncEveryMinutes}
+	m := map[string]int{TopCVSyncSource: defaultSyncEveryMinutes, JevRateSource: defaultJevEveryMinutes}
 	for id := range s.crawlers().crawlers {
 		m[id] = DefaultEveryMinutes
 	}
@@ -284,6 +293,9 @@ func (s *Service) runDue(ctx context.Context) {
 		}
 		if sc.Source == TopCVSyncSource && !s.platformConnected(ctx, "topcv") {
 			continue // nothing to sync without a login; don't flag it as failing
+		}
+		if sc.Source == JevRateSource && !s.jevIsDefault(ctx) {
+			continue // Jev isn't the rater; nothing to do
 		}
 		if t, ok := last[sc.Source]; ok && s.now().Sub(t) < time.Duration(sc.EveryMinutes)*time.Minute {
 			continue

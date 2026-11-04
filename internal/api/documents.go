@@ -25,6 +25,12 @@ func (s *server) rateRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// With Jev as the default rater there's nothing to copy: rate now.
+	if cfg, err := s.svc.RatingConfig(r.Context()); err == nil && service.IsJevModel(cfg.DefaultModel) {
+		j, err := s.svc.JevRate(r.Context(), id)
+		reply(w, http.StatusOK, map[string]any{"rated": true, "job": j}, err)
+		return
+	}
 	b, err := s.svc.RateBrief(r.Context(), id)
 	if err != nil {
 		reply(w, 0, nil, err)

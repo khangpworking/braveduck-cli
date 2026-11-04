@@ -56,6 +56,9 @@ func cmdDoctor(dbPath string) error {
 		}
 		fmt.Printf("  profile:    %s (%s)\n", p.Path, state)
 	}
+	if src := service.JevKeySource(); src != "" {
+		fmt.Printf("  jev:        key found (%s)\n", src)
+	}
 	if src, err := svc.KeySource(); err == nil {
 		fmt.Printf("  sessions:   encrypted with %s\n", src)
 	} else {

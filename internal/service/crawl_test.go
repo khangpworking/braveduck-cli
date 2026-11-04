@@ -121,11 +121,18 @@ func TestCrawlSchedules(t *testing.T) {
 	ctx := context.Background()
 	s.ReportCrawl(ctx, "facebook", true, "") // an external source
 
-	got, _ := s.CrawlSchedules(ctx)
-	if len(got) != 3 || got[2].Source != "vietnamworks" || got[2].EveryMinutes != DefaultEveryMinutes || got[2].Configured || !got[2].Builtin ||
-		got[0].Source != "facebook" || got[0].Builtin || got[0].EveryMinutes != 0 ||
-		got[1].Source != TopCVSyncSource || got[1].EveryMinutes != 360 || !got[1].Builtin {
-		t.Fatalf("schedules = %+v", got)
+	got := schedByName(t, s)
+	if v := got["vietnamworks"]; v.EveryMinutes != DefaultEveryMinutes || v.Configured || !v.Builtin {
+		t.Fatalf("vietnamworks = %+v", v)
+	}
+	if f := got["facebook"]; f.Builtin || f.EveryMinutes != 0 {
+		t.Fatalf("facebook = %+v", f)
+	}
+	if ts := got[TopCVSyncSource]; ts.EveryMinutes != 360 || !ts.Builtin {
+		t.Fatalf("topcv-sync = %+v", ts)
+	}
+	if jr := got[JevRateSource]; jr.EveryMinutes != 30 || !jr.Builtin {
+		t.Fatalf("jev-rate = %+v", jr)
 	}
 
 	for _, bad := range []struct {
@@ -142,8 +149,8 @@ func TestCrawlSchedules(t *testing.T) {
 	if _, err := s.SetCrawlSchedule(ctx, "vietnamworks", 0); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = s.CrawlSchedules(ctx)
-	if got[0].EveryMinutes != 5 || got[2].EveryMinutes != 0 || !got[2].Configured {
+	got = schedByName(t, s)
+	if got["facebook"].EveryMinutes != 5 || got["vietnamworks"].EveryMinutes != 0 || !got["vietnamworks"].Configured {
 		t.Fatalf("after set = %+v", got)
 	}
 }
@@ -175,4 +182,17 @@ func TestSchedulerRunsWhenDue(t *testing.T) {
 	if fc.calls.Load() != 2 {
 		t.Fatal("ran while switched off")
 	}
+}
+
+func schedByName(t *testing.T, s *Service) map[string]SourceSchedule {
+	t.Helper()
+	list, err := s.CrawlSchedules(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]SourceSchedule{}
+	for _, sc := range list {
+		m[sc.Source] = sc
+	}
+	return m
 }

@@ -41,6 +41,7 @@ type Service struct {
 	plat        *platformState // see SetDataDir
 	crawl       *crawlState    // see SetCrawlers
 	geo         geocoder       // see SetGeocoder
+	jev         jevAsker       // see SetJev
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.
