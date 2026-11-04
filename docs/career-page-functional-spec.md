@@ -104,7 +104,8 @@ Every element and its purpose:
   - masothue cell: 📅 founding date (linked to tax-registry page), or 🏢 Unknown,
     or 🏢 … while looking up.
   - distance cell: ✅/🟡/🔴 + km from home (≤8 ideal, 8–10 ok, >10 too far), or
-    🚗 … / 📍 ? km when unknown.
+    📍 … while looking up, 📍 unknown / 📍 no address when it can't be placed.
+    No badge until the user has set their location (nothing to measure from).
 - **Footer row**:
   - age ("today" / "Nd") + platform source label + ✉ marker if email-apply.
   - **Expiry badge** (see 7).

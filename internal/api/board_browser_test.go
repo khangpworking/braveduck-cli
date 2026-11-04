@@ -394,8 +394,8 @@ func TestLocationWindow(t *testing.T) {
 	page := b.MustPage("")
 	proto.EmulationSetGeolocationOverride{Latitude: ptrF(10.7725), Longitude: ptrF(106.6980), Accuracy: ptrF(50)}.Call(page)
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	if txt := page.MustElement(".card .card-meta").MustText(); !strings.Contains(txt, "? km") {
-		t.Fatalf("before a location is set, card shows %q", txt)
+	if txt := page.MustElement(".card .card-meta").MustText(); strings.Contains(txt, "km") {
+		t.Fatalf("before a location is set, card shows a distance badge: %q", txt)
 	}
 
 	openModal(t, page, "locationBtn", "locationModalOverlay")
