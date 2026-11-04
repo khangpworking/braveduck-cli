@@ -53,6 +53,7 @@
         <!-- Checkboxes injected by JS dynamically -->
       </div>
       <div class="toolbar-actions">
+        <button class="btn-secondary btn-sm" id="myCVBtn">📄 My CV</button>
         <button class="btn-secondary btn-sm" id="keywordsBtn">⚙ Keywords</button>
         <button class="btn-secondary btn-sm" id="ratingBtn">⚙ Rating</button>
         <button class="btn-secondary btn-sm" id="platformsBtn">🔑 Logins</button>
@@ -199,6 +200,29 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="cvModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">My CV</h3>
+        <button class="btn-close modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
+          Upload your CV once: a PDF, Word (.docx), Markdown (.md) or HTML file, up to 5 MB.
+          braveduck keeps the file on this computer to use when you apply, and copies its text into the
+          <strong>About me</strong> part of your profile, which jobs are rated and CVs are tailored against.
+        </p>
+        <div id="cvStatus" style="font-size: 13px; margin-bottom: var(--spacing-md);"></div>
+        <input type="file" id="cvFileInput" accept=".pdf,.docx,.md,.markdown,.html,.htm" style="font-size: 13px;">
+        <div id="cvResult" style="display: none; margin-top: var(--spacing-md); padding: 12px; border-radius: var(--radius-sm); font-size: 13px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+        <button class="btn-primary btn-sm" id="cvUploadBtn">Upload</button>
       </div>
     </div>
   </div>

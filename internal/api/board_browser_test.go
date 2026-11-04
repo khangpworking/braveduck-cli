@@ -486,3 +486,53 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 		t.Fatal("Add drawer still open after Show")
 	}
 }
+
+// My CV: upload a CV file from the board; its name is shown escaped, its
+// text lands in the profile, and a second upload asks before replacing.
+func TestBoardUploadsCV(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	dir := t.TempDir()
+	svc := service.New(st)
+	svc.SetDataDir(dir)
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	files := t.TempDir()
+	first := filepath.Join(files, `<img src=x onerror="window.__pwned=1">.md`)
+	second := filepath.Join(files, "cv-2026.md")
+	os.WriteFile(first, []byte("# Nguyễn Văn Khang\n\nMarketing AI, 3 năm kinh nghiệm với n8n tại Vịt Vàng."), 0o600)
+	os.WriteFile(second, []byte("# Nguyễn Văn Khang\n\nData analyst, 5 năm kinh nghiệm SQL và Python tại Duck Pay."), 0o600)
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement("#myCVBtn").MustClick()
+	page.MustElementR("#cvStatus", "No CV uploaded yet")
+
+	page.MustElement("#cvFileInput").MustSetFiles(first)
+	page.MustElement("#cvUploadBtn").MustClick()
+	page.MustElementR("#cvResult", "uploaded")
+	page.MustElementR("#cvStatus", "is filled in")
+	if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#cvModalOverlay img")`).Bool() {
+		t.Fatal("the CV's file name injected markup")
+	}
+
+	// The second upload asks before replacing what's in About me.
+	wait, handle := page.MustHandleDialog()
+	page.MustElement("#cvFileInput").MustSetFiles(second)
+	go page.MustElement("#cvUploadBtn").MustClick()
+	if d := wait(); !strings.Contains(d.Message, "About me") {
+		t.Fatalf("dialog = %q", d.Message)
+	}
+	handle(true, "")
+	page.MustElementR("#cvStatus", "cv-2026.md")
+
+	b, err := os.ReadFile(filepath.Join(dir, "profile.md"))
+	if err != nil || !strings.Contains(string(b), "Duck Pay") || strings.Contains(string(b), "Vịt Vàng") {
+		t.Fatalf("profile after replace (%v):\n%s", err, b)
+	}
+}

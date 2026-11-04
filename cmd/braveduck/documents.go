@@ -21,9 +21,65 @@ func idFirst(args []string) (string, []string) {
 	return "", args
 }
 
+// showBaseCV is `braveduck cv`: the uploaded CV and the profile's state.
+func showBaseCV(ctx context.Context, svc *service.Service) error {
+	cv, ok, err := svc.BaseCV(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("no CV uploaded yet — braveduck cv upload <file.pdf|.docx|.md|.html>")
+		return nil
+	}
+	fmt.Printf("your CV: %s (%s, %d KB, uploaded %s)\n  file    %s\n", cv.Name, cv.Kind, (cv.Size+1023)/1024, cv.UploadedAt, cv.Path)
+	return nil
+}
+
+// uploadCV is `braveduck cv upload <file> [--replace]`.
+func uploadCV(ctx context.Context, svc *service.Service, args []string) error {
+	fs := flag.NewFlagSet("cv upload", flag.ContinueOnError)
+	replace := fs.Bool("replace", false, `replace the text already in your profile's "About me"`)
+	var file string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		file, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if file == "" && fs.NArg() == 1 {
+		file = fs.Arg(0)
+	}
+	if file == "" {
+		return errors.New("usage: braveduck cv upload <file.pdf|.docx|.md|.html> [--replace]")
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	cv, err := svc.UploadCV(ctx, file, data, *replace)
+	if errors.Is(err, service.ErrAboutMeFilled) {
+		return fmt.Errorf("%w (run again with --replace)", err)
+	}
+	if err != nil {
+		return err
+	}
+	p, _ := svc.Profile(ctx)
+	fmt.Printf("uploaded your CV: %s\n  kept at  %s\n  its text is now in your profile's About me: %s\n", cv.Name, cv.Path, p.Path)
+	if cv.ProfileFilled {
+		fmt.Println("  add what you're looking for (pay, location, deal-breakers) there too — jobs are rated against it")
+	}
+	return nil
+}
+
 // cmdCV: `cv <id>` prints a brief for any AI; `--file cv.md` saves the CV the
 // AI wrote; `--pdf out.pdf` renders the current CV.
 func cmdCV(ctx context.Context, svc *service.Service, args []string) error {
+	switch {
+	case len(args) == 0:
+		return showBaseCV(ctx, svc)
+	case args[0] == "upload":
+		return uploadCV(ctx, svc, args[1:])
+	}
 	idArg, rest := idFirst(args)
 	fs := flag.NewFlagSet("cv", flag.ContinueOnError)
 	file := fs.String("file", "", "save this Markdown file as the job's tailored CV")
@@ -35,7 +91,7 @@ func cmdCV(ctx context.Context, svc *service.Service, args []string) error {
 		idArg = fs.Arg(0)
 	}
 	if idArg == "" {
-		return errors.New("usage: braveduck cv <id> [--file cv.md | --pdf out.pdf]")
+		return errors.New("usage: braveduck cv upload <file> | braveduck cv <id> [--file cv.md | --pdf out.pdf]")
 	}
 	id, err := parseID(idArg)
 	if err != nil {

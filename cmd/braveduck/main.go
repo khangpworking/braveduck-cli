@@ -85,6 +85,10 @@ Job-site status
                        (also runs as the "topcv-sync" source in crawl-schedule)
 
 CVs and emails (your AI writes them; braveduck stores them and never sends)
+  cv upload <file>            upload your CV (.pdf, .docx, .md, .html): kept for
+                              applying, and its text goes into your profile's
+                              About me (--replace to overwrite what's there)
+  cv                          show the CV you uploaded
   cv <id>                     print a brief to paste into any AI
   cv <id> --file cv.md        save the tailored CV it wrote (new version)
   cv <id> --pdf out.pdf       render the current CV as a PDF
