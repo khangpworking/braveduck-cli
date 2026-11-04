@@ -61,8 +61,13 @@ board. The user is a single person managing their own search.
   localStorage. All real crawl sources always appear (even at 0 cards) so an
   empty source reads as "wired up, nothing today"; paste/other appear only when
   present. NOT a crawler on/off switch.
-- **⚙ Keywords button** — opens the crawler keyword editor (see 8.1).
-- **⚙ Rating button** — opens the AI rating config (see 6.3).
+- **Search box** — filters cards by title, company, location, skills, salary
+  and notes as you type (accents optional); `/` focuses it, Esc clears it.
+- **📄 My CV** and **👤 Profile** — upload the base CV; edit the profile jobs are
+  rated against.
+- **⚙ Settings ▾** — a menu for the less-used windows: search terms & filters
+  (the crawler keyword editor, 8.1), sources & schedule, rating (6.3),
+  job-site logins, location. Arrow keys move through it, Esc closes it.
 
 ### 2.6 System activity log (bottom)
 - A rolling feed of backend events (rater pokes, apply successes/failures) with

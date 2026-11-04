@@ -67,13 +67,18 @@
       <div class="toolbar-actions">
         <button class="btn-secondary btn-sm" id="myCVBtn">📄 My CV</button>
         <button class="btn-secondary btn-sm" id="profileBtn">👤 Profile</button>
-        <button class="btn-secondary btn-sm" id="keywordsBtn">⚙ Keywords</button>
-        <button class="btn-secondary btn-sm" id="ratingBtn">⚙ Rating</button>
-        <button class="btn-secondary btn-sm" id="platformsBtn">🔑 Logins</button>
-        <button class="btn-secondary btn-sm" id="sourcesBtn">⏱ Sources</button>
-        <button class="btn-secondary btn-sm" id="locationBtn">📍 Location</button>
+        <button class="btn-secondary btn-sm" id="settingsBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsMenu">⚙ Settings ▾</button>
       </div>
     </section>
+
+    <!-- Settings menu: outside the toolbar so the toolbar stays a single row -->
+    <div class="settings-menu" id="settingsMenu" role="menu" aria-label="Settings" hidden>
+      <button class="settings-item" role="menuitem" id="keywordsBtn">🔎 Search terms &amp; filters</button>
+      <button class="settings-item" role="menuitem" id="sourcesBtn">⏱ Sources &amp; schedule</button>
+      <button class="settings-item" role="menuitem" id="ratingBtn">⭐ Rating</button>
+      <button class="settings-item" role="menuitem" id="platformsBtn">🔑 Job-site logins</button>
+      <button class="settings-item" role="menuitem" id="locationBtn">📍 Location</button>
+    </div>
 
     <!-- Backfill Rating Banner (Conditionally Visible) -->
 

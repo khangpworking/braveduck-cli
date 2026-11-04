@@ -79,7 +79,7 @@ braveduck logout topcv    # delete the saved login (or: logout --all)
 Built in: TopCV, VietnamWorks, JobOKO and CareerLink. Add any other site in
 `~/.braveduck/platforms.json` (see `docs/specs/platform-sessions.md`). Sessions
 are encrypted (AES-256-GCM) with a key from your OS keychain, a private key
-file, or `BRAVEDUCK_PASSPHRASE`. Also on the board (🔑 Logins) and via MCP
+file, or `BRAVEDUCK_PASSPHRASE`. Also on the board (⚙ Settings → 🔑 Job-site logins) and via MCP
 (`list_platforms`, `connect_platform`, `disconnect_platform`).
 
 Linux/WSL needs Chromium's libraries once: `sudo apt install -y libnss3 libasound2t64`.
