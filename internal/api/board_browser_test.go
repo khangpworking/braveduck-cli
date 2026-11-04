@@ -833,10 +833,29 @@ func TestLocationWindow(t *testing.T) {
 
 	openModal(t, page, "locationBtn", "locationModalOverlay")
 	page.MustElement("#locationModalOverlay.open")
+	page.MustElement("#locationMap.leaflet-container")
 	clickID(page, "useMyLocationBtn")
 	waitUntil(t, func() bool {
 		return strings.Contains(page.MustElement("#locationPicked").MustText(), "10.77250")
 	}, "browser location not picked")
+	page.MustElement("#locationMap .leaflet-marker-icon")
+
+	// Cancelling an unsaved location must discard its visible pin as well.
+	page.MustElement("#locationModalOverlay .modal-close-btn").MustClick()
+	openModal(t, page, "locationBtn", "locationModalOverlay")
+	if page.MustHas("#locationMap .leaflet-marker-icon") {
+		t.Fatal("cancelled unsaved location still has a map pin")
+	}
+	if txt := page.MustElement("#locationPicked").MustText(); txt != "Click the map to place your pin." {
+		t.Fatalf("unsaved location prompt = %q", txt)
+	}
+	if l, err := svc.GetLocation(ctx); err != nil || l.Set {
+		t.Fatalf("cancel saved a location: %+v, %v", l, err)
+	}
+	clickID(page, "useMyLocationBtn")
+	waitUntil(t, func() bool {
+		return strings.Contains(page.MustElement("#locationPicked").MustText(), "10.77250")
+	}, "browser location not picked again")
 	page.MustElement("#maxKmInput").MustSelectAllText().MustInput("8")
 	clickID(page, "saveLocationBtn")
 	waitUntil(t, func() bool { l, _ := svc.GetLocation(ctx); return l.Set && l.MaxKM == 8 }, "location not saved")
@@ -854,6 +873,15 @@ func TestLocationWindow(t *testing.T) {
 	page.MustElementR("#placeResults button", "Bình Thạnh").MustClick()
 	if txt := page.MustElement("#locationPicked").MustText(); !strings.Contains(txt, "Landmark 81") {
 		t.Fatalf("search result not picked: %q", txt)
+	}
+	page.MustElement("#locationModalOverlay .modal-close-btn").MustClick()
+	openModal(t, page, "locationBtn", "locationModalOverlay")
+	page.MustElement("#locationMap .leaflet-marker-icon")
+	if txt := page.MustElement("#locationPicked").MustText(); !strings.Contains(txt, "10.77250") {
+		t.Fatalf("cancelled replacement did not restore saved location: %q", txt)
+	}
+	if l, err := svc.GetLocation(ctx); err != nil || !l.Set || l.Lat != 10.7725 || l.Lng != 106.6980 || l.MaxKM != 8 {
+		t.Fatalf("cancel changed the saved location: %+v, %v", l, err)
 	}
 }
 
