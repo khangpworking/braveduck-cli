@@ -47,6 +47,7 @@ type Job struct {
 	ScoreStatus    string                 `json:"score_status"` // pending/scored/failed
 	ScoreReasoning string                 `json:"score_reasoning"`
 	Ratings        map[string]ModelRating `json:"ratings,omitempty"`
+	Dealbreakers   []string               `json:"dealbreakers,omitempty"` // computed by the service (Dealbreakers), not stored
 
 	// Apply pipeline.
 	ApplyMethod    string `json:"apply_method"` // email/platform

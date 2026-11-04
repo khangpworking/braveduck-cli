@@ -184,6 +184,7 @@ func cmdShow(ctx context.Context, svc *service.Service, args []string) error {
 	p("status", j.Status)
 	p("score", scoreCell(j))
 	p("salary", j.Salary)
+	p("dealbreakers", strings.Join(j.Dealbreakers, ", "))
 	p("source", j.DiscoverySource)
 	p("url", j.URL)
 	p("apply", strings.TrimSpace(j.ApplyMethod+" "+j.ApplyState))

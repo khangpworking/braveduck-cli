@@ -51,13 +51,16 @@ func TextDealbreakers(j Job) []string {
 const yearMS = 31557600000.0 // 365.25 days, matching the JS constant
 
 // GeoDealbreakers returns the geo/company-derived dealbreaker labels (resolve
-// async on pin).
-func GeoDealbreakers(j Job, now time.Time) []string {
+// async on pin). maxKM is the user's maximum commute (10 when unset).
+func GeoDealbreakers(j Job, now time.Time, maxKM float64) []string {
 	out := []string{}
-	// >10km is the dealbreaker, but cap at 80km: a real HCMC-metro commute never
-	// exceeds that, so anything beyond is a wrong-province geocode — suppress it
-	// rather than show a bogus "1131km".
-	if j.CompanyGeoStatus == "ok" && j.HasDistance && j.CompanyDistanceKM > 10 && j.CompanyDistanceKM <= 80 {
+	if maxKM <= 0 {
+		maxKM = 10
+	}
+	// Beyond the maximum commute is the dealbreaker, but cap at 80km: a real
+	// metro commute never exceeds that, so anything beyond is a wrong-province
+	// geocode — suppress it rather than show a bogus "1131km".
+	if j.CompanyGeoStatus == "ok" && j.HasDistance && j.CompanyDistanceKM > maxKM && j.CompanyDistanceKM <= 80 {
 		out = append(out, "Xa "+itoa(int(math.Round(j.CompanyDistanceKM)))+"km")
 	}
 	if ad := j.CompanyActiveDate; dateOnlyRE.MatchString(ad) {
@@ -72,8 +75,10 @@ func GeoDealbreakers(j Job, now time.Time) []string {
 }
 
 // Dealbreakers returns the combined text + geo dealbreaker labels for a job.
-func Dealbreakers(j Job, now time.Time) []string {
-	return append(TextDealbreakers(j), GeoDealbreakers(j, now)...)
+// The service puts them on every job it returns (Job.Dealbreakers), so the
+// board, the CLI and MCP show the same ones.
+func Dealbreakers(j Job, now time.Time, maxKM float64) []string {
+	return append(TextDealbreakers(j), GeoDealbreakers(j, now, maxKM)...)
 }
 
 // itoa avoids pulling strconv for one integer format.

@@ -184,23 +184,23 @@ func TestGeoDealbreakers(t *testing.T) {
 		return false
 	}
 	// >10km, within cap → "Xa 12km"
-	if got := GeoDealbreakers(Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 12, HasDistance: true}, now); !has(got, "Xa 12km") {
+	if got := GeoDealbreakers(Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 12, HasDistance: true}, now, 10); !has(got, "Xa 12km") {
 		t.Errorf("12km should flag: %v", got)
 	}
 	// >80km → wrong-province geocode, suppressed
-	if got := GeoDealbreakers(Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 90, HasDistance: true}, now); len(got) != 0 {
+	if got := GeoDealbreakers(Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 90, HasDistance: true}, now, 10); len(got) != 0 {
 		t.Errorf("90km should be suppressed: %v", got)
 	}
 	// close → none
-	if got := GeoDealbreakers(Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 5, HasDistance: true}, now); len(got) != 0 {
+	if got := GeoDealbreakers(Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 5, HasDistance: true}, now, 10); len(got) != 0 {
 		t.Errorf("5km should be fine: %v", got)
 	}
 	// company under 2 years old
-	if got := GeoDealbreakers(Job{CompanyActiveDate: "2025-01-01"}, now); !has(got, "Cty <2 năm") {
+	if got := GeoDealbreakers(Job{CompanyActiveDate: "2025-01-01"}, now, 10); !has(got, "Cty <2 năm") {
 		t.Errorf("1.5yr-old company should flag: %v", got)
 	}
 	// established company
-	if got := GeoDealbreakers(Job{CompanyActiveDate: "2020-01-01"}, now); has(got, "Cty <2 năm") {
+	if got := GeoDealbreakers(Job{CompanyActiveDate: "2020-01-01"}, now, 10); has(got, "Cty <2 năm") {
 		t.Errorf("6yr-old company should not flag: %v", got)
 	}
 }
@@ -220,4 +220,38 @@ func TestDaysAreLocalCalendarDays(t *testing.T) {
 	if a := AppliedStateOf("applied:2026-11-01", early); a.DaysSince != 2 {
 		t.Errorf("DaysSince = %d, want 2", a.DaysSince)
 	}
+}
+
+// The board's cases: whole words and negations, and the user's own limit.
+func TestDealbreakerCases(t *testing.T) {
+	for jd, want := range map[string]bool{
+		"Thời gian làm việc: T2-T7, 8h-17h.":                  true,
+		"Làm việc thứ 2 - thứ 6, nghỉ thứ 7 và chủ nhật.":     false,
+		"Mã tin HT7-2026, làm việc thứ 2 đến thứ 6.":          false,
+		"Thứ 2 - Thứ 6 và sáng Thứ 7":                         true,
+		"Working hours Monday - Saturday, 8:00 - 17:00 daily": true,
+	} {
+		if got := hasLabel(TextDealbreakers(Job{FullJD: jd}), "Làm T7"); got != want {
+			t.Errorf("%q: Làm T7 = %v, want %v", jd, got, want)
+		}
+	}
+	if got := TextDealbreakers(Job{Salary: "Thương lượng"}); !hasLabel(got, "Lương thỏa thuận") {
+		t.Error("VietnamWorks' Thương lượng not flagged")
+	}
+	far := Job{CompanyGeoStatus: "ok", CompanyDistanceKM: 12, HasDistance: true}
+	if got := GeoDealbreakers(far, now, 15); len(got) != 0 {
+		t.Errorf("12 km within a 15 km limit flagged: %v", got)
+	}
+	if got := GeoDealbreakers(far, now, 0); !hasLabel(got, "Xa 12km") {
+		t.Errorf("unset limit (10 km): %v", got)
+	}
+}
+
+func hasLabel(labels []string, want string) bool {
+	for _, l := range labels {
+		if l == want {
+			return true
+		}
+	}
+	return false
 }

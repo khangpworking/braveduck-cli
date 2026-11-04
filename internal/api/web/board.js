@@ -19,26 +19,10 @@ function formatSalary(s) {
 
 // payUndisclosed: no salary, or a word instead of a figure — thỏa thuận /
 // thương lượng / cạnh tranh / negotiable / competitive, any case or accents.
+// Decides the 💰 chip; the "Lương thỏa thuận" pill comes from the server.
 function payUndisclosed(salary) {
   const s = foldText(salary).trim();
   return !s || /thoa thuan|thuong luong|canh tranh|negotiable|competitive/.test(s);
-}
-
-// worksSaturday: the job text says Saturday is a working day ("thứ 2 - thứ
-// 7", "T7", "Saturday"), as a whole word, and not negated ("nghỉ thứ 7",
-// "không làm T7", "trừ thứ 7", "off on Saturday", "Saturdays off").
-function worksSaturday(jd) {
-  const text = foldText(jd);
-  const re = /(^|[^a-z0-9])(t7|thu 7|thu bay|saturdays?)(?=$|[^a-z0-9])/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const before = text.slice(Math.max(0, m.index - 14), m.index + m[1].length);
-    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 8);
-    const negated = /(nghi|khong lam|khong|tru|off|except|no)\s*(on\s*)?(lam\s*)?(vao\s*)?(ngay\s*)?$/.test(before) ||
-      /^\s*(off|nghi)\b/.test(after);
-    if (!negated) return true;
-  }
-  return false;
 }
 
 function renderBoard() {
@@ -197,24 +181,9 @@ function renderJobCard(job, container) {
     cardEl.classList.remove("dragging");
   });
 
-  // Calculate Dealbreakers
-  const dealbreakers = [];
-  if (worksSaturday(job.jd_full)) {
-    dealbreakers.push("⛔ Làm T7");
-  }
-  if (payUndisclosed(job.salary)) {
-    dealbreakers.push("⛔ Lương thỏa thuận");
-  }
-  const maxKm = (AppState.location && AppState.location.max_km) || 10;
-  if (job.company_geo_status === "ok" && job.company_distance_km > maxKm) {
-    dealbreakers.push(`⛔ ${Math.round(job.company_distance_km)} km away`);
-  }
-  if (job.company_active_date && job.company_active_date !== "🏢 …" && job.company_active_date !== "🏢 Unknown") {
-    const year = new Date(job.company_active_date).getFullYear();
-    if (new Date().getFullYear() - year < 2) {
-      dealbreakers.push(`⛔ Cty <2 năm (${year})`);
-    }
-  }
+  // Dealbreakers come with the job, computed once by the server
+  // (jobs.Dealbreakers: Saturday work, unstated pay, too far, a new company).
+  const dealbreakers = (job.dealbreakers || []).map(d => `⛔ ${esc(d)}`);
 
   const dealbreakersHtml = dealbreakers
     .map(db => `<span class="badge dealbreaker">${db}</span>`)
