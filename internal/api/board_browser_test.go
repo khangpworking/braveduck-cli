@@ -72,7 +72,7 @@ func TestBoardControlsFitNarrowViewports(t *testing.T) {
 	for _, width := range []int{320, 390, 768, 1024, 1280} {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			page.MustSetViewport(width, 844, 1, false)
-			page.MustElement(".drawer").MustWaitStable()
+			page.MustElement(".top-nav").MustWaitStable()
 			// Each control and statistic must fit in the viewport, and the
 			// button's center must actually receive a pointer click once it is
 			// scrolled into view (only vertical scrolling is fine).
@@ -96,6 +96,58 @@ func TestBoardControlsFitNarrowViewports(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Closed overlays must not intercept Tab navigation; opening them makes their
+// inputs focusable again. Opacity alone leaves invisible forms in the tab order.
+func TestBoardClosedOverlaysDoNotTakeFocus(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement(".column")
+
+	checkTabOrder := func() {
+		t.Helper()
+		page.MustEval(`() => document.getElementById('openDrawerBtn').focus()`)
+		limit := page.MustEval(`() => document.querySelectorAll('button, input, textarea, select, a[href], [tabindex]').length + 2`).Int()
+		for i := 0; i < limit; i++ {
+			page.Keyboard.MustType(input.Tab)
+			if hidden := page.MustEval(`() => {
+				const el = document.activeElement;
+				return el.closest('.modal-overlay:not(.open), .drawer:not(.open)') ? el.outerHTML : '';
+			}`).Str(); hidden != "" {
+				t.Fatalf("Tab focused a closed overlay: %s", hidden)
+			}
+			if page.MustEval(`() => document.activeElement.id === 'openDrawerBtn'`).Bool() {
+				return
+			}
+		}
+		t.Fatal("Tab did not return to the board's Add Job button")
+	}
+	checkTabOrder()
+
+	clickID(page, "openDrawerBtn")
+	page.MustElement("#pasteJDTextarea").MustFocus()
+	if !page.MustEval(`() => document.activeElement.id === 'pasteJDTextarea'`).Bool() {
+		t.Fatal("open drawer input cannot receive focus")
+	}
+	clickID(page, "closeDrawerBtn")
+
+	openModal(t, page, "ratingBtn", "ratingModalOverlay")
+	page.MustElement("#defaultModelInput").MustFocus()
+	if !page.MustEval(`() => document.activeElement.id === 'defaultModelInput'`).Bool() {
+		t.Fatal("open modal input cannot receive focus")
+	}
+	page.MustElement("#ratingModalOverlay .modal-close-btn").MustClick()
+	page.MustElement("#ratingModalOverlay .modal-footer .modal-close-btn").MustWaitInvisible()
+	checkTabOrder()
 }
 
 // The board's core promises: hostile job text can't run script, and moves,
