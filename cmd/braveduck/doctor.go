@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
 	"github.com/khangpworking/braveduck-cli/internal/service"
@@ -56,6 +57,11 @@ func cmdDoctor(dbPath string) error {
 		}
 		fmt.Printf("  profile:    %s (%s)\n", p.Path, state)
 	}
+	if su, err := svc.Setup(ctx); err == nil {
+		for _, line := range setupLines(su) {
+			fmt.Println(line)
+		}
+	}
 	if src := service.JevKeySource(); src != "" {
 		fmt.Printf("  jev:        key found (%s)\n", src)
 	}
@@ -76,4 +82,37 @@ func cmdDoctor(dbPath string) error {
 	}
 	fmt.Println("  status:     healthy")
 	return nil
+}
+
+// setupLines is doctor's view of the board's "Get started" steps: what's
+// done, and the command for what isn't.
+func setupLines(su service.SetupStatus) []string {
+	mark := func(ok bool) string {
+		if ok {
+			return "✓"
+		}
+		return "✗"
+	}
+	lines := []string{
+		fmt.Sprintf("  setup:      %s CV / about me   %s", mark(su.CV || su.AboutMe), ifNot(su.CV || su.AboutMe, "braveduck cv upload <file.pdf|.docx|.md|.html>")),
+		fmt.Sprintf("              %s what you want   %s", mark(su.Wants), ifNot(su.Wants, "edit the profile (👤 Profile on the board) — roles, pay, location, deal-breakers")),
+		fmt.Sprintf("              %s search terms    %s", mark(su.SearchQueries > 0), ifNot(su.SearchQueries > 0, `braveduck keywords add search_queries "your role"`)),
+	}
+	if su.SearchQueries > 0 {
+		lines[2] = fmt.Sprintf("              ✓ search terms    %d", su.SearchQueries)
+	}
+	lines = append(lines,
+		fmt.Sprintf("              %s location        %s", mark(su.Location), ifNot(su.Location, "optional: 📍 Location on the board, for job distances")),
+		fmt.Sprintf("              %s TopCV login     %s", mark(su.TopCV), ifNot(su.TopCV, "optional: braveduck login topcv, for status sync and apply")))
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], " ")
+	}
+	return lines
+}
+
+func ifNot(ok bool, hint string) string {
+	if ok {
+		return ""
+	}
+	return hint
 }

@@ -14,10 +14,26 @@ no accounts, and no stored passwords. You authenticate with TopCV / VietnamWorks
 etc. directly in a real browser; braveduck only ever holds an encrypted session
 locally on your disk.
 
-> Status: **early.** The job pipeline, the web board, the MCP server, AI
-> rating and job-site logins work; CV/draft generation, status sync and
-> auto-apply are not wired yet. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the build plan and
-> [`docs/`](./docs) for the feature spec and UI reference.
+> Status: **early, used daily.** Finding, rating, tailoring and applying all
+> work for one user on their own machine. See [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+> for the design and [`docs/`](./docs) for the feature spec.
+
+## What it does
+
+- **Finds jobs.** Built-in crawlers for VietnamWorks and CareerLink run on a
+  schedule from your search terms; paste a TopCV, VietnamWorks, JobOKO,
+  CareerLink or Facebook link (or plain job text) to add one yourself.
+  Duplicates are caught however a job arrives.
+- **Rates them against you.** Upload your CV and say what you want; every job
+  gets an A–F score with reasons — from Jev (TypeSafe's decision model) by
+  default, or from your own AI (Claude Code, any chat).
+- **Tells you what to do next.** *Today* lists the best matches not applied to
+  yet, deadlines this week and applications to follow up; optional desktop
+  notifications for new great matches.
+- **Helps you apply.** Your AI tailors a CV (printed to PDF) and drafts the
+  email; on TopCV a visible window opens on the job with your login and you
+  press submit — braveduck never submits for you. Your TopCV application
+  statuses sync back to the board.
 
 ## Quick start
 
@@ -28,9 +44,15 @@ go install github.com/khangpworking/braveduck-cli/cmd/braveduck@latest
 braveduck cv upload ~/Downloads/my-cv.pdf   # .pdf .docx .md .html — fills your profile, kept for applying
 braveduck add https://www.topcv.vn/viec-lam/...   # TopCV, VietnamWorks, JobOKO, CareerLink
 braveduck add https://www.facebook.com/groups/.../posts/.../ - < post.txt   # Facebook: link + post text
+braveduck keywords add search_queries "n8n" "marketing ai"   # what the crawlers search for
+braveduck crawl        # fetch new jobs now (they also run on a schedule while the board is up)
+braveduck today        # what to act on now
 braveduck list
 braveduck serve        # web board on http://127.0.0.1:8080
 ```
+
+A new board walks you through the same steps (**Get started**: CV → what
+you're looking for → search terms). Everything else is under **⚙ Settings**.
 
 Data lives in `~/.braveduck/braveduck.db` (override with `--db` or `BRAVEDUCK_DB`).
 `braveduck doctor` checks your setup.
@@ -47,24 +69,28 @@ exposes the board as tools (`list_jobs`, `add_job`, `set_status`, `get_stats`,
 …). Codex and other MCP clients work the same way: point them at
 `braveduck mcp`.
 
-### Rate jobs with your own AI
+### How jobs are rated
 
-braveduck never calls an AI itself and stores no API keys. You describe
-yourself once, and whatever AI you already use does the judging:
+Rating compares each job with your profile (`~/.braveduck/profile.md`, also
+editable on the board under 👤 Profile). `braveduck cv upload` fills its
+"About me" part from your CV; add your target roles, minimum pay, location and
+deal-breakers. Rating stays off while the profile is empty.
 
-```bash
-braveduck profile      # creates ~/.braveduck/profile.md — fill in what applies, any language
-```
+- **Jev (default).** braveduck sends your profile and the job's text to
+  TypeSafe's Jev decision model (`api.typesafe.ai`) and stores the verdict —
+  every 30 minutes for new jobs while the board runs. Key in
+  `~/.config/jev-route/typesafe.env`; `braveduck jev status` shows what is
+  sent. See `docs/specs/jev-rating.md`.
+- **Your own AI.** From an agent over MCP, ask *"rate my unrated jobs"*
+  (`get_rating_queue` → `submit_rating`). From any chat, `braveduck rate`
+  prints a ready-to-paste brief and the AI answers with
+  `braveduck rate 12 --score 4.2 --why "..."` lines. Claude can run as an A/B
+  challenger next to Jev (`braveduck rate-config`).
 
-- **From an agent (MCP):** ask *"rate my unrated jobs"*. The agent calls
-  `get_rating_queue`, judges each job against your profile and the rubric, and
-  saves each verdict with `submit_rating`.
-- **From any AI chat:** `braveduck rate` prints a ready-to-paste brief; the AI
-  answers with lines like `braveduck rate 12 --score 4.2 --why "..."` that you
-  run to save the scores.
-
-Scores are 1.0-5.0 with letters A-F, and the reasons show on each card.
-Rating stays off while the profile is still the blank template.
+Scores are 1.0–5.0 with letters A–F; the reasons show on each card. Tailored
+CVs and emails are written the same bring-your-own-AI way (`braveduck cv <id>`,
+`braveduck draft <id>`): braveduck stores what your AI writes and never sends
+email itself.
 
 ### Log in to job sites (sessions)
 
@@ -83,7 +109,11 @@ file, or `BRAVEDUCK_PASSPHRASE`. Also on the board (⚙ Settings → 🔑 Job-si
 (`list_platforms`, `connect_platform`, `disconnect_platform`).
 
 Linux/WSL needs Chromium's libraries once: `sudo apt install -y libnss3 libasound2t64`.
-Using a session to sync statuses or apply is a later step.
+
+With a TopCV login, `braveduck sync topcv` (also every 6 h) reads your
+application history and moves those jobs to Applied, and `braveduck apply
+<id>` opens the job in a visible window with your tailored CV ready — you
+review and submit yourself.
 
 ## Why
 
@@ -99,13 +129,15 @@ commands or by whatever AI CLI you already use, via MCP.
   session, nothing more.
 - **BYO agent.** The MCP server plugs into your existing Claude Code / Codex /
   agy — you don't have to adopt a new agent.
+- **You stay in control.** braveduck never submits an application, never
+  sends an email, and only crawls what job sites' robots.txt allows.
 - **One binary.** `go install` and go.
 
 ## Roadmap
 
-1. Core + CLI + local web board (single user, parity with the reference spec)
-2. MCP server over the same core
-3. Local browser (CDP) login + apply for TopCV / VNW / JobOKO / CareerLink
+1. ~~Core + CLI + local web board~~ ✓
+2. ~~MCP server over the same core~~ ✓
+3. ~~Logins, status sync and assisted apply (TopCV first)~~ ✓ — more sites next
 4. Community release
 
 ## License
