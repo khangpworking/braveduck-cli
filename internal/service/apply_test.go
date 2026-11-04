@@ -143,3 +143,18 @@ func TestAssistApplyOnOtherSitesAsks(t *testing.T) {
 		t.Fatalf("submitted: %v %+v", err, got)
 	}
 }
+
+// Two applies started together can't both pass the cooldown: the check and
+// the record are one step.
+func TestReserveApplyIsAtomic(t *testing.T) {
+	s, _ := applySvc(t)
+	ctx := context.Background()
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() { errs <- s.reserveApply(ctx) }()
+	}
+	a, b := <-errs, <-errs
+	if (a == nil) == (b == nil) || !(errors.Is(a, ErrApplyLimit) || errors.Is(b, ErrApplyLimit)) {
+		t.Fatalf("results %v / %v, want exactly one to pass", a, b)
+	}
+}

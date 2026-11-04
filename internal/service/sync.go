@@ -139,7 +139,19 @@ func (s *Service) SyncTopCV(ctx context.Context) (SyncResult, error) {
 			}
 		}
 		if j.Status == "saved" || j.Status == "waiting" {
-			if err := s.st.SetStatus(ctx, j.ID, "applied", s.now()); err == nil {
+			// Moving to Applied starts the no-answer clock, from the day
+			// TopCV says it was sent (else today).
+			applied := "applied"
+			p := store.JobPatch{Status: &applied}
+			if jobs.ParseExpiry(j.ExpiresAt).Kind != jobs.KindApplied {
+				d := a.AppliedDate()
+				if d == "" {
+					d = s.now().Format("2006-01-02")
+				}
+				anchor := jobs.AppliedPrefix + d
+				p.ExpiresAt = &anchor
+			}
+			if err := s.st.Patch(ctx, j.ID, p, s.now()); err == nil {
 				res.Moved++
 			}
 		}

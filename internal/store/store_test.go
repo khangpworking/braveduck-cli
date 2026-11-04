@@ -195,3 +195,23 @@ func TestBackup(t *testing.T) {
 		t.Fatal("overwrote an existing file")
 	}
 }
+
+// CloseIfUnchanged closes only while the job is as the caller read it.
+func TestCloseIfUnchanged(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	id, _ := s.Add(ctx, jobs.Job{Title: "x", Status: "saved", Notes: "mine"}, now)
+	j, _ := s.Get(ctx, id)
+	if ok, err := s.CloseIfUnchanged(ctx, id, "saved", "2000-01-01T00:00:00Z", "swept", now); ok || err != nil {
+		t.Fatalf("stale updated_at closed it: %v %v", ok, err)
+	}
+	if ok, err := s.CloseIfUnchanged(ctx, id, "applied", j.UpdatedAt, "swept", now); ok || err != nil {
+		t.Fatalf("stale status closed it: %v %v", ok, err)
+	}
+	if ok, err := s.CloseIfUnchanged(ctx, id, "saved", j.UpdatedAt, "swept", now); !ok || err != nil {
+		t.Fatalf("unchanged job not closed: %v %v", ok, err)
+	}
+	if got, _ := s.Get(ctx, id); got.Status != "closed" || got.Notes != "swept\nmine" {
+		t.Fatalf("after = %q / %q", got.Status, got.Notes)
+	}
+}

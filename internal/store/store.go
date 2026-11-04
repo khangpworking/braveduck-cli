@@ -573,3 +573,19 @@ func (s *Store) Backup(ctx context.Context, dest string) error {
 	}
 	return os.Chmod(dest, 0o600)
 }
+
+// CloseIfUnchanged moves job id to Closed with note prepended to its notes,
+// only while its status and updated_at are still the ones the caller read —
+// a concurrent edit or move wins. It reports whether the job was closed.
+func (s *Store) CloseIfUnchanged(ctx context.Context, id int64, status, updatedAt, note string, now time.Time) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE jobs SET status = 'closed',
+		notes = CASE WHEN COALESCE(notes, '') = '' THEN ? ELSE ? || char(10) || notes END,
+		updated_at = ?
+		WHERE id = ? AND status = ? AND COALESCE(updated_at, '') = ?`,
+		note, note, now.UTC().Format(time.RFC3339), id, status, updatedAt)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
