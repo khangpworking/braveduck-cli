@@ -52,6 +52,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "list_jobs", "List jobs on the board, newest first. Optionally filter by lane (status) or discovery source.", readOnly, t.listJobs)
 	add(srv, "get_job", "Get one job with every field (JD, score, apply state, notes...).", readOnly, t.getJob)
 	add(srv, "get_stats", "Funnel counts per lane plus the interview rate and morale line.", readOnly, t.getStats)
+	add(srv, "get_today", "What the user should act on now: the best-rated jobs not applied to yet, postings that close within a week, and applications waiting a week or more for an answer. Empty groups are left out.", readOnly, t.getToday)
 	add(srv, "get_keywords", "The crawler keyword filter lists.", readOnly, t.getKeywords)
 	add(srv, "get_rating_config", "The A/B rater config: which model ids score jobs and which one owns the board badge.", readOnly, t.getRatingConfig)
 	add(srv, "get_crawl_status", "Per-source crawl health and how many jobs were found today.", readOnly, t.getCrawlStatus)
@@ -298,6 +299,15 @@ func (t tools) getJob(ctx context.Context, in idIn) (jobs.Job, error) {
 
 func (t tools) getStats(ctx context.Context, _ struct{}) (service.Stats, error) {
 	return t.svc.Stats(ctx)
+}
+
+type todayOut struct {
+	Groups []service.TodayGroup `json:"groups"`
+}
+
+func (t tools) getToday(ctx context.Context, _ struct{}) (todayOut, error) {
+	g, err := t.svc.Today(ctx)
+	return todayOut{g}, err
 }
 
 func (t tools) getKeywords(ctx context.Context, _ struct{}) (keyword.Sets, error) {

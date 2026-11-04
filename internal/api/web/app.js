@@ -88,8 +88,6 @@ function normalizeJob(j) {
           ? j.skills.split(",").map(s => s.trim()).filter(Boolean)
           : []),
     expires_at: decodeExpiresAt(j.expires_at),
-    // "applied:YYYY-MM-DD" starts the wait-for-an-answer clock (Today's follow-ups).
-    applied_on: typeof j.expires_at === "string" && j.expires_at.startsWith("applied:") ? j.expires_at.slice("applied:".length) : "",
     // The store keeps the draft as JSON {to, subject, body}; "" = none.
     draft_email: parseDraft(j.draft_email),
     ratings: j.ratings || {}
@@ -568,6 +566,7 @@ async function refreshAppState() {
 
   renderAll();
   renderSetup();
+  notifyNewMatches(AppState.jobs);
 }
 
 function renderAll() {
@@ -602,48 +601,79 @@ function renderStatPills() {
   `;
 }
 
-// --- Today -------------------------------------------------------------------
-// What to act on now: the best-rated jobs not applied to yet, deadlines in
-// the coming week, and applications that have waited a week for an answer.
-const DAY_MS = 24 * 60 * 60 * 1000;
+// --- Great-match notifications --------------------------------------------------
+// While the board is open, a job newly rated A or B pops a desktop
+// notification; clicking it opens the card. Opt-in (⚙ Settings), remembered
+// per browser. Jobs already rated when it's switched on don't notify.
+const NOTIFY_KEY = "notify_matches";
+const NOTIFIED_KEY = "notified_match_ids";
 
-function todayGroups(jobs, now = new Date()) {
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const daysUntil = iso => Math.round((new Date(`${iso}T00:00:00`) - startOfToday) / DAY_MS);
-  const open = j => j.status === "Saved" || j.status === "Waiting to apply";
-
-  const top = jobs
-    .filter(j => open(j) && j.score_status === "scored" && (j.score_letter === "A" || j.score_letter === "B"))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(j => ({ job: j, why: `${j.score_letter} · ${Number(j.score).toFixed(1)}` }));
-
-  const deadlines = jobs
-    .filter(j => open(j) && /^\d{4}-\d{2}-\d{2}$/.test(j.expires_at))
-    .map(j => ({ job: j, days: daysUntil(j.expires_at) }))
-    .filter(d => d.days >= 0 && d.days <= 7)
-    .sort((a, b) => a.days - b.days)
-    .slice(0, 3)
-    .map(d => ({ job: d.job, why: d.days === 0 ? "closes today" : d.days === 1 ? "closes tomorrow" : `closes in ${d.days} days` }));
-
-  const followUps = jobs
-    .filter(j => j.status === "Applied" && /^\d{4}-\d{2}-\d{2}$/.test(j.applied_on))
-    .map(j => ({ job: j, days: -daysUntil(j.applied_on) }))
-    .filter(d => d.days >= 7)
-    .sort((a, b) => b.days - a.days)
-    .slice(0, 3)
-    .map(d => ({ job: d.job, why: `applied ${d.days} days ago` }));
-
-  return [
-    { title: "Best matches to apply for", items: top },
-    { title: "Deadlines this week", items: deadlines },
-    { title: "Follow up", items: followUps },
-  ].filter(g => g.items.length);
+function greatMatches(jobs) {
+  return jobs.filter(j => j.score_status === "scored" && (j.score_letter === "A" || j.score_letter === "B")
+    && (j.status === "Saved" || j.status === "Waiting to apply"));
 }
 
-function renderToday() {
+function notifyOn() {
+  return localStorage.getItem(NOTIFY_KEY) === "on" && "Notification" in window && Notification.permission === "granted";
+}
+
+function renderNotifyButton() {
+  document.getElementById("notifyBtn").textContent = `🔔 Notify me of great matches: ${notifyOn() ? "on" : "off"}`;
+}
+
+function markMatchesSeen(jobs) {
+  localStorage.setItem(NOTIFIED_KEY, JSON.stringify(greatMatches(jobs).map(j => j.id)));
+}
+
+async function toggleNotify() {
+  if (notifyOn()) {
+    localStorage.setItem(NOTIFY_KEY, "off");
+    showToast("Match notifications off", "info");
+  } else if (!("Notification" in window)) {
+    showToast("This browser can't show notifications", "error");
+  } else {
+    const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm !== "granted") {
+      showToast("Notifications are blocked for this page in your browser settings", "error");
+    } else {
+      localStorage.setItem(NOTIFY_KEY, "on");
+      markMatchesSeen(AppState.jobs); // only matches rated from now on
+      showToast("You'll be notified of new A and B matches while the board is open", "success");
+    }
+  }
+  renderNotifyButton();
+}
+
+function notifyNewMatches(jobs) {
+  if (!notifyOn()) return;
+  let seen;
+  try { seen = new Set(JSON.parse(localStorage.getItem(NOTIFIED_KEY) || "[]")); } catch { seen = new Set(); }
+  const fresh = greatMatches(jobs).filter(j => !seen.has(j.id)).sort((a, b) => b.score - a.score);
+  // A few at most: rated while the board was closed shouldn't mean a flood.
+  for (const j of fresh.slice(0, 3)) {
+    const n = new Notification(`Great match: ${j.title}`, {
+      body: `${j.score_letter} · ${Number(j.score).toFixed(1)}${j.company ? ` — ${j.company}` : ""}`,
+      tag: `braveduck-job-${j.id}`
+    });
+    n.onclick = () => { window.focus(); showJobCard(j.id); n.close(); };
+  }
+  if (fresh.length > 3) {
+    const n = new Notification(`${fresh.length - 3} more great matches`, { body: "See Today on the board.", tag: "braveduck-more" });
+    n.onclick = () => { window.focus(); n.close(); };
+  }
+  markMatchesSeen(jobs);
+}
+
+// --- Today -------------------------------------------------------------------
+// What to act on now, from GET /api/today (the same list `braveduck today`
+// and MCP get_today give).
+async function renderToday() {
   const list = document.getElementById("todayList");
-  const groups = todayGroups(AppState.jobs);
+  let groups = [];
+  try {
+    const res = await apiFetch(`${API_BASE}/today`);
+    if (res.ok) groups = await res.json();
+  } catch {}
   if (!groups.length) {
     list.innerHTML = `<div class="today-empty">Nothing needs you today. New jobs are found and rated in the background.</div>`;
     return;
@@ -652,7 +682,7 @@ function renderToday() {
     <div class="today-group">
       <div class="today-group-title">${esc(g.title)}</div>
       <ul>${g.items.map(it => `
-        <li><button class="today-item" data-job="${esc(it.job.id)}">${esc(it.job.title)}<span class="today-why">${esc(it.why)}</span></button></li>`).join("")}
+        <li><button class="today-item" data-job="${esc(String(it.job_id))}">${esc(it.title)}<span class="today-why">${esc(it.why)}</span></button></li>`).join("")}
       </ul>
     </div>`).join("");
   list.querySelectorAll("button[data-job]").forEach(btn => btn.addEventListener("click", () => showJobCard(btn.dataset.job)));
@@ -2249,6 +2279,8 @@ document.addEventListener("DOMContentLoaded", () => {
     settingsMenu.querySelector("button").focus();
   });
   settingsMenu.addEventListener("click", () => closeSettings(false));
+  document.getElementById("notifyBtn").addEventListener("click", toggleNotify);
+  renderNotifyButton();
   settingsMenu.addEventListener("keydown", e => {
     const items = [...settingsMenu.querySelectorAll("button")];
     const i = items.indexOf(document.activeElement);

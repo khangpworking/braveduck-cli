@@ -75,6 +75,28 @@ func addFromContent(ctx context.Context, svc *service.Service, args []string) er
 	return nil
 }
 
+// cmdToday prints what to act on now (the board's Today panel).
+func cmdToday(ctx context.Context, svc *service.Service) error {
+	groups, err := svc.Today(ctx)
+	if err != nil {
+		return err
+	}
+	if len(groups) == 0 {
+		fmt.Println("nothing needs you today")
+		return nil
+	}
+	for i, g := range groups {
+		if i > 0 {
+			fmt.Println()
+		}
+		fmt.Println(g.Title)
+		for _, it := range g.Items {
+			fmt.Printf("  #%-4d %s  (%s)\n", it.JobID, trunc(it.Title, 60), it.Why)
+		}
+	}
+	return nil
+}
+
 func cmdList(ctx context.Context, svc *service.Service, args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	status := fs.String("status", "", "filter by lane")

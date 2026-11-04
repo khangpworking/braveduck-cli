@@ -70,6 +70,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("GET /api/profile", s.getProfile)
 	mux.HandleFunc("PUT /api/profile", s.putProfile)
 	mux.HandleFunc("GET /api/setup", s.getSetup)
+	mux.HandleFunc("GET /api/today", s.getToday)
 	mux.HandleFunc("GET /api/cv", s.getBaseCV)
 	mux.HandleFunc("POST /api/cv", s.uploadBaseCV)
 	mux.HandleFunc("GET /api/cv/file", s.baseCVFile)
@@ -338,7 +339,20 @@ func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"ok": true, "source": source, "result": res,
-		"message": fmt.Sprintf("%d new job(s) from %s", res.Added, source)}, err)
+		"message": crawlMessage(source, res)}, err)
+}
+
+// crawlMessage sums up a crawl for the board's toast: what's new, and what
+// was found but skipped (already on the board, or filtered out).
+func crawlMessage(source string, res service.CrawlResult) string {
+	msg := fmt.Sprintf("%d new job(s) from %s", res.Added, source)
+	if res.Duplicates > 0 {
+		msg += fmt.Sprintf(" · %d already on the board", res.Duplicates)
+	}
+	if res.Filtered > 0 {
+		msg += fmt.Sprintf(" · %d filtered out", res.Filtered)
+	}
+	return msg
 }
 
 func (s *server) putKeywords(w http.ResponseWriter, r *http.Request) {
