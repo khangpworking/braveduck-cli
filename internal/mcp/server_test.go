@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
@@ -79,7 +78,7 @@ func TestListsEveryTool(t *testing.T) {
 		"list_jobs", "get_job", "add_job", "update_job", "delete_job", "set_status",
 		"pin_job", "keep_job", "get_keywords", "get_rating_config", "set_rating_config",
 		"get_stats", "get_crawl_status", "get_activity",
-		"get_profile", "get_rating_queue", "rate_job", "submit_rating",
+		"get_profile", "update_profile", "get_rating_queue", "rate_job", "submit_rating",
 		"list_platforms", "connect_platform", "disconnect_platform",
 		"get_crawl_schedule", "set_crawl_schedule",
 		"ask_model", "cv_brief", "submit_cv", "draft_brief", "submit_draft", "reject_draft",
@@ -213,8 +212,9 @@ func TestRatingFlow(t *testing.T) {
 		t.Fatalf("queue with empty profile = %q (IsError=%v), want an error naming %s", text(res), res.IsError, p.Path)
 	}
 
-	if err := os.WriteFile(p.Path, []byte("Backend engineer, 5 years Go."), 0o600); err != nil {
-		t.Fatal(err)
+	call(t, cs, "update_profile", map[string]any{"text": "Backend engineer, 5 years Go."}, &p)
+	if !p.Filled {
+		t.Fatalf("profile after update_profile = %+v", p)
 	}
 	var q service.RatingBrief
 	call(t, cs, "get_rating_queue", map[string]any{}, &q)

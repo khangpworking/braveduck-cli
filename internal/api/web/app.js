@@ -564,6 +564,7 @@ async function refreshAppState() {
   AppState.activity = await APIClient.getActivity();
 
   renderAll();
+  renderSetup();
 }
 
 function renderAll() {
@@ -1508,6 +1509,78 @@ async function saveAskPaste() {
   }
 }
 
+// --- Get started + profile -------------------------------------------------------
+// The steps ratings and crawls need. Each opens the window that does it.
+const SETUP_STEPS = [
+  { key: "cv", title: "Upload your CV", hint: "Its text becomes the \"About me\" part of your profile.", action: "Upload CV", open: () => document.getElementById("myCVBtn").click() },
+  { key: "wants", title: "Say what you're looking for", hint: "Roles, minimum pay, where you can work, deal-breakers.", action: "Edit profile", open: () => openProfile() },
+  { key: "search_queries", title: "Add search terms", hint: "What the crawlers search job sites for, e.g. \"n8n\".", action: "Add terms", open: () => document.getElementById("keywordsBtn").click() },
+];
+
+async function renderSetup() {
+  const card = document.getElementById("setupCard");
+  const res = await apiFetch(`${API_BASE}/setup`);
+  if (!res.ok) return;
+  const st = await res.json();
+  // "About me" written by hand counts as the CV step too.
+  const done = { cv: st.cv || st.about_me, wants: st.wants, search_queries: st.search_queries > 0 };
+  card.hidden = st.done;
+  if (st.done) return;
+  document.getElementById("setupSteps").innerHTML = SETUP_STEPS.map((step, i) => `
+    <li class="setup-step${done[step.key] ? " done" : ""}">
+      <span class="setup-step-title">${done[step.key] ? "✓" : `${i + 1}.`} ${esc(step.title)}</span>
+      <span class="setup-step-hint">${esc(step.hint)}</span>
+      ${done[step.key] ? "" : `<button class="btn-secondary btn-sm" data-setup="${esc(step.key)}">${esc(step.action)}</button>`}
+    </li>`).join("");
+  card.querySelectorAll("button[data-setup]").forEach(btn => {
+    btn.addEventListener("click", () => SETUP_STEPS.find(s => s.key === btn.dataset.setup).open());
+  });
+}
+
+async function openProfile() {
+  const status = document.getElementById("profileStatus");
+  const text = document.getElementById("profileText");
+  document.getElementById("profileModalOverlay").classList.add("open");
+  const res = await apiFetch(`${API_BASE}/profile`);
+  const p = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    status.innerText = `Couldn't load your profile: ${p.error || res.status}`;
+    return;
+  }
+  text.value = p.text || "";
+  renderProfileStatus(p);
+}
+
+function renderProfileStatus(p) {
+  document.getElementById("profileStatus").innerHTML = p.filled
+    ? `✓ Filled in, so jobs can be rated. Saved at <code>${esc(p.path)}</code>.`
+    : `Still empty, so no job can be rated yet. Saved at <code>${esc(p.path)}</code>.`;
+}
+
+async function saveProfile() {
+  const btn = document.getElementById("saveProfileBtn");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    const res = await apiFetch(`${API_BASE}/profile`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: document.getElementById("profileText").value })
+    });
+    const p = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(`Couldn't save: ${p.error || res.status}`, "error");
+      return;
+    }
+    renderProfileStatus(p);
+    showToast("Profile saved", "success");
+    renderSetup();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save";
+  }
+}
+
 // --- My CV (the base CV) -------------------------------------------------------
 async function renderMyCV() {
   const status = document.getElementById("cvStatus");
@@ -1570,6 +1643,7 @@ async function uploadMyCV(replace) {
     input.value = "";
     showToast("CV uploaded", "success");
     renderMyCV();
+    renderSetup();
   } finally {
     btn.disabled = false;
     btn.textContent = "Upload";
@@ -2053,6 +2127,10 @@ document.addEventListener("DOMContentLoaded", () => {
     await renderSources();
   });
 
+  const profileModal = document.getElementById("profileModalOverlay");
+  document.getElementById("profileBtn").addEventListener("click", openProfile);
+  document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
+
   const cvModal = document.getElementById("cvModalOverlay");
   document.getElementById("myCVBtn").addEventListener("click", async () => {
     document.getElementById("cvResult").style.display = "none";
@@ -2075,6 +2153,7 @@ document.addEventListener("DOMContentLoaded", () => {
       platformsModal.classList.remove("open");
       sourcesModal.classList.remove("open");
       cvModal.classList.remove("open");
+      profileModal.classList.remove("open");
       document.getElementById("askModalOverlay").classList.remove("open");
       document.getElementById("locationModalOverlay").classList.remove("open");
     });
