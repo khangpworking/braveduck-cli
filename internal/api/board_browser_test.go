@@ -166,7 +166,7 @@ func TestBoardMobileColumnsToggle(t *testing.T) {
 	ts := httptest.NewServer(Handler(st, svc, testToken))
 	defer ts.Close()
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	page.MustSetViewport(390, 844, 1, false)
+	setViewportWidth(page, 390)
 	page.MustElement(".card").MustWaitVisible()
 	page.MustElement("#col-Saved .column-header").MustClick()
 	if page.MustElement(".card").MustVisible() {
@@ -178,7 +178,7 @@ func TestBoardMobileColumnsToggle(t *testing.T) {
 	}
 	page.MustElement("#col-Saved .column-header").MustClick()
 	page.MustElement(".card").MustWaitVisible()
-	page.MustSetViewport(1024, 844, 1, false)
+	setViewportWidth(page, 1024)
 	page.MustElement("#col-Saved .column-header").MustClick()
 	if !page.MustElement(".card").MustVisible() {
 		t.Fatal("desktop header collapsed its cards")
@@ -504,6 +504,14 @@ func TestAskAICVAndDraft(t *testing.T) {
 // waits for the element to be stable and uncovered, which can hang while the
 // board re-renders right after load; a DOM click is what a user's click
 // delivers anyway.
+// setViewportWidth resizes the page and waits until its script sees the new
+// width: Chrome can apply the override after the CDP call returns, and the
+// mobile accordion reads window.innerWidth on click.
+func setViewportWidth(page *rod.Page, width int) {
+	page.MustSetViewport(width, 844, 1, false)
+	page.MustWait(`w => window.innerWidth === w`, width)
+}
+
 func clickID(page *rod.Page, id string) {
 	if _, err := page.Timeout(10 * time.Second).Element("#" + id); err != nil {
 		info, ierr := page.Timeout(5 * time.Second).Info()
@@ -620,7 +628,7 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustClick()
 				page.MustElement("#jobSearch").MustInput("not a matching title")
 			case "mobile collapsed":
-				page.MustSetViewport(390, 844, 1, false)
+				setViewportWidth(page, 390)
 				page.MustElement("#col-Saved .column-header").MustClick()
 				if page.MustElement(`.card[data-id="1"]`).MustVisible() {
 					t.Fatal("mobile column did not collapse before Show")
