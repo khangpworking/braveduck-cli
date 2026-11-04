@@ -841,7 +841,7 @@ func TestLocationWindow(t *testing.T) {
 	page.MustElement("#locationMap .leaflet-marker-icon")
 
 	// Cancelling an unsaved location must discard its visible pin as well.
-	page.MustElement("#locationModalOverlay .modal-close-btn").MustClick()
+	page.MustElement("#locationModalOverlay .modal-close-btn").MustEval(`() => this.click()`)
 	openModal(t, page, "locationBtn", "locationModalOverlay")
 	if page.MustHas("#locationMap .leaflet-marker-icon") {
 		t.Fatal("cancelled unsaved location still has a map pin")
@@ -870,11 +870,11 @@ func TestLocationWindow(t *testing.T) {
 	openModal(t, page, "locationBtn", "locationModalOverlay")
 	page.MustElement("#placeSearch").MustInput("Landmark 81")
 	clickID(page, "placeSearchBtn")
-	page.MustElementR("#placeResults button", "Bình Thạnh").MustClick()
+	page.MustElementR("#placeResults button", "Bình Thạnh").MustEval(`() => this.click()`)
 	if txt := page.MustElement("#locationPicked").MustText(); !strings.Contains(txt, "Landmark 81") {
 		t.Fatalf("search result not picked: %q", txt)
 	}
-	page.MustElement("#locationModalOverlay .modal-close-btn").MustClick()
+	page.MustElement("#locationModalOverlay .modal-close-btn").MustEval(`() => this.click()`)
 	openModal(t, page, "locationBtn", "locationModalOverlay")
 	page.MustElement("#locationMap .leaflet-marker-icon")
 	if txt := page.MustElement("#locationPicked").MustText(); !strings.Contains(txt, "10.77250") {
@@ -1378,4 +1378,43 @@ func TestBoardApplyOnAnySite(t *testing.T) {
 
 	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustEval(`() => this.click()`)
 	waitUntil(t, func() bool { j, _ := svc.GetJob(ctx, asked.ID); return j.Status == "applied" && j.ApplyState == "sent" }, "confirming didn't move the job to Applied")
+}
+
+// A point picked while the map library is still loading (your location, a
+// search result) gets its pin once the map is ready, instead of being
+// replaced by the saved location.
+func TestLocationPickWhileMapLoads(t *testing.T) {
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	svc.SetGeocoder(boardFakeGeo{})
+	ctx := context.Background()
+	if _, err := svc.SetLocation(ctx, geo.Point{Lat: 21.0285, Lng: 105.8542}, "Hà Nội (saved)", 10); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card, #kanbanBoard")
+	// Load the real library, then make the window's wait for it hang until
+	// released: the window opens with no map yet.
+	page.MustEval(`async () => { await loadLeaflet(); leafletReady = new Promise(r => window.__releaseMap = () => r()); }`)
+	page.MustEval(`() => { openLocationWindow(); }`)
+	page.MustElement("#locationModalOverlay.open")
+
+	page.MustElement("#placeSearch").MustInput("Landmark 81")
+	clickID(page, "placeSearchBtn")
+	page.MustElementR("#placeResults button", "Bình Thạnh").MustEval(`() => this.click()`)
+	page.MustEval(`() => window.__releaseMap()`)
+
+	page.MustElement("#locationMap .leaflet-marker-icon")
+	if txt := page.MustElement("#locationPicked").MustText(); !strings.Contains(txt, "Landmark 81") {
+		t.Fatalf("pick made while the map loaded was replaced: %q", txt)
+	}
+	if got := page.MustEval(`() => { const p = locMarker.getLatLng(); return p.lat.toFixed(4) + "," + p.lng.toFixed(4); }`).Str(); got != "10.7949,106.7219" {
+		t.Fatalf("pin at %s, want the picked place", got)
+	}
 }

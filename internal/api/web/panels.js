@@ -70,6 +70,7 @@ async function openLocationWindow() {
   document.getElementById("maxKmInput").value = cur.max_km || 10;
   document.getElementById("placeResults").innerHTML = "";
   picked = cur.set ? { lat: cur.lat, lng: cur.lng, label: cur.label } : null;
+  const openedWith = picked;
   document.getElementById("locationPicked").textContent = cur.set
     ? `Saved: ${cur.label || ""} (${cur.lat.toFixed(5)}, ${cur.lng.toFixed(5)})` : "Click the map to place your pin.";
   try {
@@ -86,7 +87,10 @@ async function openLocationWindow() {
     locMap.on("click", e => pickPoint(e.latlng.lat, e.latlng.lng, ""));
   }
   setTimeout(() => locMap.invalidateSize(), 50);
-  if (cur.set) pickPoint(cur.lat, cur.lng, cur.label);
+  // A point picked while the map library loaded (your location, a search
+  // result) wins over the saved one, and gets its pin now.
+  if (picked && picked !== openedWith) pickPoint(picked.lat, picked.lng, picked.label);
+  else if (cur.set) pickPoint(cur.lat, cur.lng, cur.label);
   else if (locMarker) { locMarker.remove(); locMarker = null; }
 }
 
