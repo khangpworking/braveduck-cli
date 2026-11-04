@@ -1263,3 +1263,29 @@ a:hover {
   background: #fef9c3;
   border: 1px solid #fde68a;
 }
+
+/* A folded lane (desktop): a narrow strip with its name and count. */
+@media (min-width: 769px) {
+  .column-header {
+    cursor: pointer;
+  }
+  .column.folded {
+    width: 52px;
+    min-width: 52px;
+    padding: var(--spacing-sm) 4px;
+  }
+  .column.folded .column-header {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    border-bottom: none;
+  }
+  .column.folded .column-title {
+    writing-mode: vertical-rl;
+    font-size: 15px;
+  }
+  .column.folded .column-cards,
+  .column.folded .column-sort {
+    display: none;
+  }
+}

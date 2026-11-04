@@ -181,10 +181,17 @@ func TestBoardMobileColumnsToggle(t *testing.T) {
 	}
 	page.MustElement("#col-Saved .column-header").MustClick()
 	waitVisible(page, ".card")
+	// On a desktop the header folds the lane to a strip instead (and a
+	// second click unfolds it); the phone accordion's state isn't touched.
 	setViewportWidth(page, 1024)
-	page.MustElement("#col-Saved .column-header").MustClick()
-	if !page.MustElement(".card").MustVisible() {
-		t.Fatal("desktop header collapsed its cards")
+	page.MustElement("#col-Saved .column-header").MustEval(`() => this.click()`)
+	if page.MustElement(".card").MustVisible() || !page.MustHas("#col-Saved.folded") {
+		t.Fatal("desktop header didn't fold its lane")
+	}
+	page.MustElement("#col-Saved .column-header").MustEval(`() => this.click()`)
+	waitVisible(page, ".card")
+	if v := page.MustEval(`() => localStorage.getItem("col_collapsed_Saved")`).Str(); v != "false" {
+		t.Fatalf("desktop folding changed the phone accordion state to %q", v)
 	}
 }
 
