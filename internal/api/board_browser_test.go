@@ -308,6 +308,7 @@ func TestAskAICVAndDraft(t *testing.T) {
 	page.MustElement(".card")
 	page.MustEval(`() => toggleCardDetail("1")`)
 	page.MustElementR("button", "Ask your AI to tailor it").MustClick()
+	page.MustElement("#askModalOverlay.open") // the request is fetched before the window opens
 	if p := page.MustElement("#askPrompt").MustText(); !strings.Contains(p, "tailor my CV for job #1") {
 		t.Fatalf("prompt = %q", p)
 	}
