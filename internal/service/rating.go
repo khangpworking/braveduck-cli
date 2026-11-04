@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 )
@@ -141,7 +142,8 @@ type RatingBrief struct {
 	Profile      string      `json:"profile"`
 	ProfilePath  string      `json:"profile_path"`
 	Rubric       string      `json:"rubric"`
-	DefaultModel string      `json:"default_model"` // its verdicts become the board badge
+	DefaultModel string      `json:"default_model"`   // its verdicts become the board badge
+	Model        string      `json:"model,omitempty"` // selected rater for an on-demand request
 	Jobs         []RatingJob `json:"jobs"`
 }
 
@@ -214,6 +216,45 @@ func (s *Service) RateBrief(ctx context.Context, id int64) (RatingBrief, error) 
 	return s.brief(ctx, []jobs.Job{j})
 }
 
+// RatingRequest either contains a prompt for the selected external rater or
+// the result of an immediate Jev rating. Model names the verdict's owner.
+type RatingRequest struct {
+	Prompt string    `json:"prompt,omitempty"`
+	Brief  string    `json:"brief,omitempty"`
+	Model  string    `json:"model"`
+	Rated  bool      `json:"rated,omitempty"`
+	Job    *jobs.Job `json:"job,omitempty"`
+}
+
+// RequestRating honors an explicit model; an empty choice uses the default.
+// Choosing a challenger must never silently invoke the default Jev rater.
+func (s *Service) RequestRating(ctx context.Context, id int64, model string) (RatingRequest, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		cfg, err := s.RatingConfig(ctx)
+		if err != nil {
+			return RatingRequest{}, err
+		}
+		model = cfg.DefaultModel
+	}
+	if IsJevModel(model) {
+		j, err := s.JevRate(ctx, id)
+		if err != nil {
+			return RatingRequest{}, err
+		}
+		// JevRate records the actual supported Jev model, including when it
+		// is a challenger and leaves the top-level board badge unchanged.
+		return RatingRequest{Model: jev.DefaultModel, Rated: true, Job: &j}, nil
+	}
+	b, err := s.RateBrief(ctx, id)
+	if err != nil {
+		return RatingRequest{}, err
+	}
+	b.Model = model
+	prompt := fmt.Sprintf("%s Submit the verdict with model %q.", AgentPrompt("rate", id, b.Jobs[0].Title), model)
+	return RatingRequest{Model: model, Prompt: prompt, Brief: RenderRatingBrief(b)}, nil
+}
+
 // Verdict is a rater's answer for one job.
 type Verdict struct {
 	JobID     int64
@@ -242,7 +283,7 @@ func (s *Service) SubmitRating(ctx context.Context, v Verdict) (jobs.Job, error)
 		return jobs.Job{}, err
 	}
 	model := strings.TrimSpace(v.Model)
-	owns := rating.OwnsBoardBadge(model, cfg.DefaultModel)
+	owns := rating.OwnsBoardBadge(model, cfg.DefaultModel, cfg.ABEnabled)
 	if model == "" {
 		model = cfg.DefaultModel
 	}

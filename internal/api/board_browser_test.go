@@ -22,7 +22,9 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/crawl"
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -619,6 +621,113 @@ func TestBoardRefresh(t *testing.T) {
 	}
 }
 
+// Rating is available without A/B mode, honors the selected model, and shows
+// saved challenger verdicts without changing the default model's badge.
+func TestBoardRating(t *testing.T) {
+	for _, scenario := range []string{"normal", "selected_model", "saved_challenger"} {
+		t.Run(scenario, func(t *testing.T) {
+			st, err := store.Open(":memory:")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			svc := service.New(st)
+			dir := t.TempDir()
+			svc.SetDataDir(dir)
+			svc.SetJev(apiFakeJev{})
+			if err := os.WriteFile(filepath.Join(dir, "profile.md"), []byte("Backend engineer, Go and Postgres."), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			cfg := rating.Config{Models: []string{"default-rater", "rival-one"}, DefaultModel: "default-rater", ABEnabled: scenario != "normal"}
+			if scenario == "selected_model" {
+				cfg.Models[0], cfg.DefaultModel = jev.DefaultModel, jev.DefaultModel
+			}
+			if _, err := svc.SetRatingConfig(ctx, cfg); err != nil {
+				t.Fatal(err)
+			}
+			job, err := svc.AddJob(ctx, service.NewJob{Title: "Go Engineer"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "saved_challenger" {
+				for _, v := range []service.Verdict{
+					{JobID: job.ID, Model: "default-rater", Score: 4.7, Reasoning: "Strong default match"},
+					{JobID: job.ID, Model: "rival-one", Score: 2, Reasoning: `<img src=x onerror="window.__pwned=1"> Missing core skills`},
+				} {
+					if _, err := svc.SubmitRating(ctx, v); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			ts := httptest.NewServer(Handler(st, svc, testToken))
+			defer ts.Close()
+			page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+			page.MustElement(".card")
+			page.MustEval(`() => toggleCardDetail("1")`)
+			if scenario == "saved_challenger" {
+				if text := page.MustElement("#detail-1").MustText(); !strings.Contains(text, "rival-one: F 2") || !strings.Contains(text, "Missing core skills") {
+					t.Fatalf("saved challenger missing: %s", text)
+				}
+				if page.MustEval(`() => !!window.__pwned || !!document.querySelector('#detail-1 img')`).Bool() {
+					t.Fatal("challenger reasoning interpreted as HTML")
+				}
+				if badge := page.MustElement(".card-actions-group > div:first-child > .score-badge:last-child").MustText(); !strings.Contains(badge, "A") || !strings.Contains(badge, "4.7") {
+					t.Fatalf("challenger replaced default badge: %q", badge)
+				}
+				return
+			}
+			if scenario == "normal" {
+				if !page.MustEval(`() => [...document.querySelectorAll('#detail-1 button')].some(b => b.textContent.trim() === 'Rate')`).Bool() {
+					t.Fatal("normal card has no Rate action")
+				}
+				page.MustElementR("#detail-1 button", "^Rate$").MustClick()
+			} else {
+				page.MustElement("#askModelSelect-1").MustSelect("rival-one")
+				page.MustElementR("#detail-1 button", "^Ask Model$").MustClick()
+			}
+			if err := page.Timeout(5 * time.Second).Wait(rod.Eval(`() => !!document.querySelector('#askModalOverlay.open') || !!document.querySelector('.card .score-badge')?.textContent.includes('4.2')`)); err != nil {
+				j, _ := svc.GetJob(ctx, job.ID)
+				t.Fatalf("rating request did not finish: %v; score status %q; toast %q", err, j.ScoreStatus, page.MustElement("#toastContainer").MustText())
+			}
+			wantModel := "default-rater"
+			if scenario == "selected_model" {
+				wantModel = "rival-one"
+			}
+			if prompt := page.MustElement("#askPrompt").MustText(); !strings.Contains(prompt, wantModel) {
+				t.Fatalf("rating prompt does not name %q: %q", wantModel, prompt)
+			}
+			if j, _ := svc.GetJob(ctx, job.ID); j.ScoreStatus == "scored" {
+				t.Fatal("request for user's AI ran the default Jev rater")
+			}
+			// Capture the clipboard boundary, so the assertion covers the actual
+			// full brief offered by the button without OS clipboard permissions.
+			page.MustEval(`() => Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText: async text => { window.copiedBrief = text; }}})`)
+			page.MustElementR("#askModalOverlay button", "Copy full brief").MustClick()
+			if brief := page.MustEval(`() => window.copiedBrief`).Str(); !strings.Contains(brief, "--model '"+wantModel+"'") {
+				t.Fatalf("copied brief loses selected model: %q", brief)
+			}
+			if scenario == "selected_model" {
+				// Reverse the roles: Jev can also be a challenger, and the success
+				// toast must describe its score rather than the unscored badge.
+				page.MustEval(`() => document.getElementById('askModalOverlay').classList.remove('open')`)
+				cfg.DefaultModel = "rival-one"
+				if _, err := svc.SetRatingConfig(ctx, cfg); err != nil {
+					t.Fatal(err)
+				}
+				page.MustEval(`async () => { await refreshAppState(); }`)
+				page.MustElement("#askModelSelect-1").MustSelect(jev.DefaultModel)
+				page.MustElementR("#detail-1 button", "^Ask Model$").MustClick()
+				page.MustWait(`() => document.getElementById('toastContainer').textContent.includes('Rated B 4.2')`)
+				page.MustWait(`() => document.getElementById('detail-1').textContent.includes('jev-1.13.0: B 4.2')`)
+				if j, _ := svc.GetJob(ctx, job.ID); j.ScoreStatus == "scored" {
+					t.Fatal("Jev challenger replaced the default badge")
+				}
+			}
+		})
+	}
+}
+
 // The CV/email flow on the board: Ask your AI shows the request, the user
 // pastes what their AI wrote, the CV downloads as a real PDF, and the draft
 // appears for review.
@@ -794,18 +903,18 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			switch scenario {
 			case "filtered":
-				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustClick()
+				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustEval(`() => this.click()`)
 				page.MustElement("#jobSearch").MustInput("not a matching title")
 			case "mobile collapsed":
 				setViewportWidth(page, 390)
-				page.MustElement("#col-Saved .column-header").MustClick()
+				page.MustElement("#col-Saved .column-header").MustEval(`() => this.click()`)
 				if page.MustElement(`.card[data-id="1"]`).MustVisible() {
 					t.Fatal("mobile column did not collapse before Show")
 				}
 			}
-			page.MustElement("#openDrawerBtn").MustClick()
+			page.MustElement("#openDrawerBtn").MustEval(`() => this.click()`)
 			page.MustElement("#pasteJDTextarea").MustSelectAllText().MustInput("https://www.topcv.vn/viec-lam/x/1.html?ta_source=list")
-			page.MustElement("#extractAddBtn").MustClick()
+			page.MustElement("#extractAddBtn").MustEval(`() => this.click()`)
 
 			page.MustElement("#extractResultBanner").MustWaitVisible()
 			banner := page.MustElement("#extractResultBanner li")
@@ -819,7 +928,7 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 				t.Fatalf("%d jobs, want the duplicate refused", len(list))
 			}
 
-			banner.MustElement("button").MustClick()
+			banner.MustElement("button").MustEval(`() => this.click()`)
 			if !page.MustEval(`() => !!document.querySelector('.card[data-id="1"] #detail-1')`).Bool() {
 				t.Fatal("Show did not reveal and expand the duplicate card")
 			}
@@ -860,11 +969,11 @@ func TestBoardUploadsCV(t *testing.T) {
 
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	page.MustElement("#myCVBtn").MustClick()
+	page.MustElement("#myCVBtn").MustEval(`() => this.click()`)
 	page.MustElementR("#cvStatus", "No CV uploaded yet")
 
 	page.MustElement("#cvFileInput").MustSetFiles(first)
-	page.MustElement("#cvUploadBtn").MustClick()
+	page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
 	page.MustElementR("#cvResult", "uploaded")
 	page.MustElementR("#cvStatus", "is filled in")
 	if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#cvModalOverlay img")`).Bool() {
@@ -874,7 +983,7 @@ func TestBoardUploadsCV(t *testing.T) {
 	// The second upload asks before replacing what's in About me.
 	wait, handle := page.MustHandleDialog()
 	page.MustElement("#cvFileInput").MustSetFiles(second)
-	go page.MustElement("#cvUploadBtn").MustClick()
+	go page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
 	if d := wait(); !strings.Contains(d.Message, "About me") {
 		t.Fatalf("dialog = %q", d.Message)
 	}
@@ -911,7 +1020,7 @@ func TestBoardGetStarted(t *testing.T) {
 	}
 
 	// Step 2 opens the editor on the real profile template.
-	page.MustElement(`#setupSteps button[data-setup="wants"]`).MustClick()
+	page.MustElement(`#setupSteps button[data-setup="wants"]`).MustEval(`() => this.click()`)
 	page.MustElementR("#profileStatus", "Still empty")
 	text := page.MustElement("#profileText")
 	if v := text.MustProperty("value").Str(); !strings.Contains(v, "# What I'm looking for") {
@@ -1037,7 +1146,7 @@ func TestBoardToday(t *testing.T) {
 		}
 	}
 
-	page.MustElementR("#todayList button", "Closes soon").MustClick()
+	page.MustElementR("#todayList button", "Closes soon").MustEval(`() => this.click()`)
 	page.MustElement(`.card.flash`)
 }
 
@@ -1057,19 +1166,19 @@ func TestBoardSettingsMenu(t *testing.T) {
 
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	page.MustElement("#settingsBtn").MustClick()
+	page.MustElement("#settingsBtn").MustEval(`() => this.click()`)
 	page.MustElement(`#settingsBtn[aria-expanded="true"]`)
 	if items := page.MustElement("#settingsMenu").MustText(); !strings.Contains(items, "Search terms") || !strings.Contains(items, "Job-site logins") {
 		t.Fatalf("menu = %q", items)
 	}
-	page.MustElement("#sourcesBtn").MustClick()
+	page.MustElement("#sourcesBtn").MustEval(`() => this.click()`)
 	page.MustElement("#sourcesModalOverlay.open")
 	if !page.MustEval(`() => document.getElementById("settingsMenu").hidden`).Bool() {
 		t.Fatal("menu still open after a pick")
 	}
 	page.MustEval(`() => document.querySelector("#sourcesModalOverlay .modal-close-btn").click()`)
 
-	page.MustElement("#settingsBtn").MustClick()
+	page.MustElement("#settingsBtn").MustEval(`() => this.click()`)
 	page.Keyboard.MustType(input.ArrowDown)
 	if id := page.MustEval(`() => document.activeElement.id`).Str(); id != "sourcesBtn" {
 		t.Fatalf("ArrowDown focused %q, want the second item", id)
@@ -1239,6 +1348,6 @@ func TestBoardApplyOnAnySite(t *testing.T) {
 		t.Fatal("an Apply button for a site without a login")
 	}
 
-	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustClick()
+	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustEval(`() => this.click()`)
 	waitUntil(t, func() bool { j, _ := svc.GetJob(ctx, asked.ID); return j.Status == "applied" && j.ApplyState == "sent" }, "confirming didn't move the job to Applied")
 }

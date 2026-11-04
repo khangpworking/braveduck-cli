@@ -1,13 +1,42 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 )
+
+// A model id in a copied rating command is one literal argument, even if it
+// contains shell metacharacters. The shell only calls this harmless function.
+func TestRatingBriefModelArgument(t *testing.T) {
+	model := "rival'$(printf expanded)`printf expanded`"
+	brief := RenderRatingBrief(RatingBrief{Model: model})
+	var command string
+	for _, line := range strings.Split(brief, "\n") {
+		if strings.HasPrefix(line, "braveduck rate ") {
+			command = strings.NewReplacer("<id>", "1", "<1.0-5.0>", "4.2", "<point>", "match").Replace(line)
+		}
+	}
+	if command == "" {
+		t.Fatal("rating command missing from brief")
+	}
+	out, err := exec.Command("sh", "-c", "braveduck() { printf '%s\\0' \"$@\"; };\n"+command).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := bytes.Split(out, []byte{0})
+	if len(args) < 5 || string(args[2]) != "--model" || string(args[3]) != model {
+		t.Fatalf("copied command changed model argument: %q", args)
+	}
+}
 
 func TestTemplateCountsAsEmpty(t *testing.T) {
 	if profileFilled(profileTemplate) {
@@ -145,6 +174,44 @@ func TestRatingQueueAndSubmit(t *testing.T) {
 	ev, _ := s.Activity(ctx, 1)
 	if len(ev) != 1 || ev[0].Type != "rated" {
 		t.Fatalf("last event = %+v, want 'rated'", ev)
+	}
+}
+
+// The legacy claude-code tag owns the badge unless A/B is on and it is only a
+// challenger: then it is stored but leaves the default badge unchanged.
+func TestClaudeCodeBadgeOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		cfg      *rating.Config
+		wantOwns bool
+	}{
+		{"fresh board, no rating config", nil, true},
+		{"A/B on, Jev default, claude-code challenger", &rating.Config{ABEnabled: true, Models: []string{jev.DefaultModel, "claude-code"}, DefaultModel: jev.DefaultModel}, false},
+		{"A/B on, claude-code default", &rating.Config{ABEnabled: true, Models: []string{"claude-code", jev.DefaultModel}, DefaultModel: "claude-code"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := newRatingSvc(t)
+			ctx := context.Background()
+			if tc.cfg != nil {
+				if _, err := s.SetRatingConfig(ctx, *tc.cfg); err != nil {
+					t.Fatal(err)
+				}
+			}
+			job, _ := s.AddJob(ctx, NewJob{Title: "Backend"})
+			if _, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Score: 4.2, Reasoning: "Go match • 5y fits senior bar"}); err != nil {
+				t.Fatal(err)
+			}
+			j, err := s.SubmitRating(ctx, Verdict{JobID: job.ID, Model: "claude-code", Score: 2.0, Letter: "F", Reasoning: "missing core skills"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if owns := j.ScoreLetter == "F" && j.Score == 2.0; owns != tc.wantOwns {
+				t.Fatalf("claude-code owns badge = %v, want %v: %+v", owns, tc.wantOwns, j)
+			}
+			if got := j.Ratings["claude-code"]; got.Letter != "F" {
+				t.Fatalf("claude-code verdict not stored: %+v", j.Ratings)
+			}
+		})
 	}
 }
 

@@ -285,7 +285,13 @@ func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, erro
 // Get returns the job with the given id, or sql.ErrNoRows when absent.
 func (s *Store) Get(ctx context.Context, id int64) (jobs.Job, error) {
 	row := s.db.QueryRowContext(ctx, "SELECT "+selectCols+" FROM jobs WHERE id = ?", id)
-	return scanJob(row)
+	j, err := scanJob(row)
+	if err != nil {
+		return j, err
+	}
+	list := []jobs.Job{j}
+	err = s.loadRatings(ctx, list)
+	return list[0], err
 }
 
 // ListFilter narrows List; empty fields mean "no filter on that column".
@@ -326,7 +332,16 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]jobs.Job, error) {
 		}
 		out = append(out, j)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := s.loadRatings(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Update overwrites every column of an existing job (by j.ID) and stamps
