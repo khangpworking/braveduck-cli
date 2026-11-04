@@ -67,7 +67,11 @@ board. The user is a single person managing their own search.
   rated against.
 - **⚙ Settings ▾** — a menu for the less-used windows: search terms & filters
   (the crawler keyword editor, 8.1), sources & schedule, rating (6.3),
-  job-site logins, location. Arrow keys move through it, Esc closes it.
+  job-site logins, location, and **🔔 Notify me of great matches** (opt-in:
+  while the board is open, a job newly rated A or B shows a desktop
+  notification that opens its card; at most 3 at a time, then a "N more"
+  summary; matches already rated when it's switched on don't notify).
+  Arrow keys move through it, Esc closes it.
 
 ### 2.6 System activity log (bottom)
 - A rolling feed of backend events (rater pokes, apply successes/failures) with
