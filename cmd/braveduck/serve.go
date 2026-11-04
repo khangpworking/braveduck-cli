@@ -63,6 +63,9 @@ func cmdServe(ctx context.Context, st *store.Store, svc *service.Service, args [
 		_ = srv.Shutdown(sc)
 	}()
 
+	// Built-in crawlers run on their schedules while the board is up.
+	go svc.RunScheduler(ctx, time.Minute)
+
 	fmt.Printf("braveduck board on %s  (Ctrl-C to stop)\n", url)
 	if !*noOpen {
 		openBrowser(url)

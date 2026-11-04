@@ -229,6 +229,22 @@ const APIClient = {
     return body;
   },
 
+  async getCrawlSchedule() {
+    const res = await apiFetch(`${API_BASE}/crawl-schedule`);
+    return res.ok ? res.json() : [];
+  },
+
+  async setCrawlSchedule(source, everyMinutes) {
+    const res = await apiFetch(`${API_BASE}/crawl-schedule/${encodeURIComponent(source)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ every_minutes: everyMinutes })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
   async getRatingConfig() {
     const res = await apiFetch(`${API_BASE}/rating-config`);
     return res.json();
@@ -256,7 +272,9 @@ const APIClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(keywords)
     });
-    return res.json();
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
   },
 
   async getCrawlStatus() {
@@ -311,6 +329,71 @@ async function renderPlatforms() {
         <div style="display: flex; gap: 6px;">${action}</div>
       </div>`;
   }).join("");
+}
+
+// Readable names for keyword lists (keys mirror internal/core/keyword.Lists).
+const KEYWORD_LABELS = {
+  search_queries: "Search queries — what crawlers search for (comma-separated)",
+  positive_title: "Keep only titles containing one of these",
+  negative_title: "Drop if the title contains",
+  negative_content: "Drop if the title or description contains",
+  negative_company: "Drop these companies"
+};
+
+// --- Job sources (schedule) panel -----------------------------------------------
+const EVERY_CHOICES = [[0, "Off"], [5, "Every 5 min"], [15, "Every 15 min"], [30, "Every 30 min"], [60, "Every hour"],
+  [120, "Every 2 hours"], [360, "Every 6 hours"], [720, "Every 12 hours"], [1440, "Once a day"]];
+
+async function renderSources() {
+  const list = document.getElementById("sourcesList");
+  const [scheds, status] = await Promise.all([APIClient.getCrawlSchedule(), APIClient.getCrawlStatus()]);
+  const health = {};
+  ((status && status.sources) || []).forEach(s => { health[s.name] = s; });
+  list.innerHTML = scheds.map(sc => {
+    const h = health[sc.source];
+    const state = !h ? "never run" : h.healthy ? `ok · ${h.count} new today` : `⚠️ ${h.lastError || "no recent run"}`;
+    // Built-ins hit someone else's server: no 5-minute option.
+    const choices = EVERY_CHOICES.filter(([m]) => !(sc.builtin && m > 0 && m < 15));
+    if (!choices.some(([m]) => m === sc.every_minutes)) choices.push([sc.every_minutes, `Every ${sc.every_minutes} min`]);
+    const options = choices.map(([m, label]) =>
+      `<option value="${m}" ${m === sc.every_minutes ? "selected" : ""}>${esc(label)}</option>`).join("");
+    const unset = !sc.builtin && !sc.configured ? `<option value="" selected disabled>Not set (tool's own default)</option>` : "";
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
+        <div>
+          <strong>${esc(sc.source)}</strong>
+          <div style="font-size: 12px; color: var(--muted);">${sc.builtin ? "built-in" : "own tool"} · ${esc(state)}</div>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <select class="text-input" style="width: auto; padding: 4px 8px; font-size: 12px;"
+                  onchange="changeSchedule(${jsArg(sc.source)}, this)">${unset}${options}</select>
+          ${sc.builtin ? `<button class="btn-secondary btn-sm" onclick="crawlNow(${jsArg(sc.source)}, this)">Crawl now</button>` : ""}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function changeSchedule(source, select) {
+  try {
+    await APIClient.setCrawlSchedule(source, Number(select.value));
+    showToast(`${source}: ${select.options[select.selectedIndex].text.toLowerCase()}`, "success");
+  } catch (e) {
+    showToast(`Couldn't change the schedule: ${e.message}`, "error");
+  }
+  renderSources();
+}
+
+async function crawlNow(source, btn) {
+  btn.disabled = true;
+  btn.textContent = "Crawling…";
+  try {
+    const r = await APIClient.retryCrawl(source);
+    showToast(r.message || "Done", r.ok === false ? "error" : "success");
+  } catch (e) {
+    showToast(`Crawl failed: ${e.message}`, "error");
+  }
+  renderSources();
+  refreshAppState();
 }
 
 async function connectPlatform(id) {
@@ -482,7 +565,7 @@ async function triggerCrawlerRetry(sourceName) {
   if (result && result.ok === false) {
     showToast(result.message || `Couldn't retry ${sourceName}`, "error");
   } else {
-    showToast(`Crawler ${sourceName} recovered successfully!`, "success");
+    showToast(result.message || `${sourceName} crawled`, "success");
   }
   refreshAppState();
 }
@@ -1548,7 +1631,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     container.innerHTML = Object.keys(kw).map(source => `
       <div class="form-group">
-        <label for="kw-${esc(source)}">${esc(source)} Crawler Keywords</label>
+        <label for="kw-${esc(source)}">${esc(KEYWORD_LABELS[source] || source)}</label>
         <textarea id="kw-${esc(source)}" class="textarea-input" style="height: 60px;" oninput="previewKeywordMatches()">${esc(kw[source].join(", "))}</textarea>
       </div>
     `).join("");
@@ -1564,9 +1647,14 @@ document.addEventListener("DOMContentLoaded", () => {
       kw[source] = ta.value.split(",").map(w => w.trim()).filter(Boolean);
     });
     
-    await APIClient.updateKeywords(kw);
+    try {
+      await APIClient.updateKeywords(kw);
+    } catch (e) {
+      showToast(`Couldn't save keywords: ${e.message}`, "error");
+      return;
+    }
     keywordsModal.classList.remove("open");
-    showToast("Keyword configurations saved!", "success");
+    showToast("Keywords saved.", "success");
     refreshAppState();
   });
 
@@ -1610,6 +1698,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
 
+  const sourcesModal = document.getElementById("sourcesModalOverlay");
+  document.getElementById("sourcesBtn").addEventListener("click", async () => {
+    sourcesModal.classList.add("open");
+    await renderSources();
+  });
+
   const platformsModal = document.getElementById("platformsModalOverlay");
   document.getElementById("platformsBtn").addEventListener("click", async () => {
     platformsModal.classList.add("open");
@@ -1622,6 +1716,7 @@ document.addEventListener("DOMContentLoaded", () => {
       keywordsModal.classList.remove("open");
       ratingModal.classList.remove("open");
       platformsModal.classList.remove("open");
+      sourcesModal.classList.remove("open");
     });
   });
 

@@ -49,6 +49,11 @@ var migrations = []string{
 	`ALTER TABLE crawl_runs ADD COLUMN last_success_at TEXT;
 	 ALTER TABLE crawl_runs ADD COLUMN last_ok INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE crawl_runs ADD COLUMN last_error TEXT;`,
+	// 5: how often each source fetches new jobs (0 = off), for every source.
+	`CREATE TABLE IF NOT EXISTS crawl_schedule (
+	   source        TEXT PRIMARY KEY,
+	   every_minutes INTEGER NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

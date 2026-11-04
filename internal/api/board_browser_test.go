@@ -14,6 +14,7 @@ import (
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/crawl"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -181,5 +182,63 @@ func TestRatingSettings(t *testing.T) {
 	msg := page.MustElement("#ratingConfigError").MustWaitVisible().MustText()
 	if !strings.Contains(msg, "at most 3") {
 		t.Fatalf("error shown = %q", msg)
+	}
+}
+
+// Keywords saved on the board reach the store (PUT /api/keywords used to 404),
+// and the Sources window changes a schedule and runs "Crawl now".
+func TestKeywordsAndSources(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	fc := &boardFakeCrawler{}
+	svc.SetCrawlers(fc)
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	ctx := context.Background()
+
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement("#keywordsBtn").MustClick()
+	page.MustElement("#kw-search_queries").MustInput("n8n, ai automation")
+	page.MustElement("#saveKeywordsBtn").MustClick()
+	waitUntil(t, func() bool {
+		k, _ := svc.Keywords(ctx)
+		return len(k["search_queries"]) == 2
+	}, "search queries not saved")
+
+	page.MustElement("#sourcesBtn").MustClick()
+	page.MustElement("#sourcesList select")
+	page.MustEval(`() => { const s = document.querySelector("#sourcesList select"); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
+	waitUntil(t, func() bool {
+		sc, _ := svc.CrawlSchedules(ctx)
+		return len(sc) == 1 && sc[0].EveryMinutes == 360
+	}, "schedule not saved")
+
+	page.MustElementR("button", "Crawl now").MustClick()
+	waitUntil(t, func() bool {
+		l, _ := svc.ListJobs(ctx, service.ListFilter{Source: "vietnamworks"})
+		return len(l) == 1
+	}, "Crawl now didn't add the job")
+}
+
+type boardFakeCrawler struct{}
+
+func (boardFakeCrawler) Name() string { return "vietnamworks" }
+func (boardFakeCrawler) Search(context.Context, string) ([]crawl.Listing, error) {
+	return []crawl.Listing{{Title: "n8n Engineer", Company: "Duck Co", URL: "https://www.vietnamworks.com/x-1-jv"}}, nil
+}
+
+func waitUntil(t *testing.T, cond func() bool, msg string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal(msg)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

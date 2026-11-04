@@ -39,6 +39,7 @@ type Service struct {
 
 	profilePath string         // see SetProfilePath / SetDataDir
 	plat        *platformState // see SetDataDir
+	crawl       *crawlState    // see SetCrawlers
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.
@@ -140,6 +141,16 @@ func (s *Service) AddFromContent(ctx context.Context, content string) (jobs.Job,
 
 // add applies the rules every new job gets, stores it, and logs it.
 func (s *Service) add(ctx context.Context, j jobs.Job) (jobs.Job, error) {
+	saved, err := s.addQuiet(ctx, j)
+	if err == nil {
+		s.logEvent(ctx, "added", fmt.Sprintf("Added %q", saved.Title))
+	}
+	return saved, err
+}
+
+// addQuiet is add without the activity line, for bulk adds (a crawl logs one
+// summary line instead of one per job).
+func (s *Service) addQuiet(ctx context.Context, j jobs.Job) (jobs.Job, error) {
 	j.Status = "saved"
 	j.ScoreStatus = "pending" // queued for a rater
 	if j.DiscoverySource == "" && j.URL != "" {
@@ -158,12 +169,7 @@ func (s *Service) add(ctx context.Context, j jobs.Job) (jobs.Job, error) {
 	if err != nil {
 		return jobs.Job{}, err
 	}
-	saved, err := s.st.Get(ctx, id)
-	if err != nil {
-		return jobs.Job{}, err
-	}
-	s.logEvent(ctx, "added", fmt.Sprintf("Added %q", saved.Title))
-	return saved, nil
+	return s.st.Get(ctx, id)
 }
 
 // Patch names the board-editable fields to change; nil leaves a field as is.
@@ -275,6 +281,47 @@ func (s *Service) SetRatingConfig(ctx context.Context, c rating.Config) (rating.
 // Keywords returns every crawler keyword list.
 func (s *Service) Keywords(ctx context.Context) (keyword.Sets, error) {
 	return s.st.AllKeywords(ctx)
+}
+
+// SetKeywords replaces the named keyword lists (lists not mentioned are left
+// alone) and returns every list afterwards.
+func (s *Service) SetKeywords(ctx context.Context, sets keyword.Sets) (keyword.Sets, error) {
+	for key := range sets {
+		if _, ok := keyword.ListByKey(key); !ok {
+			return nil, fmt.Errorf("%w: unknown keyword list %q (lists: %s)", ErrInvalid, key, strings.Join(keyword.Keys(), ", "))
+		}
+	}
+	for key, want := range sets {
+		have, err := s.st.ListKeywords(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		keep := map[string]bool{}
+		var add []string
+		for _, t := range want {
+			if t = strings.TrimSpace(t); t != "" && !keep[t] {
+				keep[t] = true
+				add = append(add, t)
+			}
+		}
+		var drop []string
+		for _, t := range have {
+			if !keep[t] {
+				drop = append(drop, t)
+			}
+		}
+		if len(drop) > 0 {
+			if _, err := s.st.RemoveKeywords(ctx, key, drop); err != nil {
+				return nil, err
+			}
+		}
+		if len(add) > 0 {
+			if _, err := s.st.AddKeywords(ctx, key, add); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return s.Keywords(ctx)
 }
 
 // CrawlStatus reports per-source crawl health and today's find count.

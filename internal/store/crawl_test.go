@@ -51,3 +51,20 @@ func TestCrawlRunHealth(t *testing.T) {
 		t.Fatalf("after recovery = %+v", src)
 	}
 }
+
+func TestStaleAfterFollowsSchedule(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	s.RecordCrawlRun(ctx, "vietnamworks", true, "", now)
+	s.SetCrawlSchedule(ctx, "vietnamworks", 6*60) // every 6 hours
+	if src := source(t, s, now.Add(3*time.Hour), "vietnamworks"); !src.Healthy {
+		t.Fatal("a 6-hourly source flagged stalled after 3 hours")
+	}
+	if src := source(t, s, now.Add(13*time.Hour), "vietnamworks"); src.Healthy {
+		t.Fatal("silent for over twice its interval but still healthy")
+	}
+	got, _ := s.CrawlSchedules(ctx)
+	if got["vietnamworks"] != 360 {
+		t.Fatalf("schedules = %v", got)
+	}
+}

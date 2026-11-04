@@ -73,13 +73,18 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "list_platforms", "Job sites braveduck can hold a login for, and whether the user is logged in to each (status only — never session data).", readOnly, t.listPlatforms)
 	add(srv, "connect_platform", "Open a browser window on the user's screen so THEY can log in to a job site (braveduck never sees the password). Returns at once with status 'connecting'; poll list_platforms to see when it becomes 'connected'. Only call this when the user asks to connect a site.", write, t.connectPlatform)
 	add(srv, "disconnect_platform", "Delete the saved login for a job site.", destructive, t.disconnectPlatform)
+	add(srv, "crawl", "Fetch new jobs now from braveduck's built-in crawlers (or one `source`, e.g. vietnamworks), using the user's search_queries keyword list and filters. Returns found / filtered / added counts.", write, t.crawl)
+	add(srv, "retry_crawl", "Same as crawl, for one source (the board's Retry).", write, t.retryCrawl)
+	add(srv, "get_crawl_schedule", "How often each job source fetches new jobs (every_minutes; 0 = off).", readOnly, t.getCrawlSchedule)
+	add(srv, "set_crawl_schedule", "Set how often a source fetches new jobs: every_minutes 0 (off) or 15-1440 for built-in crawlers (5-1440 for external tools).", idempotentWrite, t.setCrawlSchedule)
+	add(srv, "set_keywords", "Replace one or more keyword lists. search_queries are what crawlers search for; positive_title / negative_title / negative_content / negative_company filter results. Lists you don't pass are left alone.", idempotentWrite, t.setKeywords)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
 	// until its subsystem lands (spec: "surface now, body later").
 	for _, name := range []string{
 		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
-		"apply_job", "crawl", "retry_crawl", "set_keywords",
+		"apply_job",
 	} {
 		addStub(srv, name)
 	}
@@ -203,6 +208,28 @@ type disconnectOut struct {
 	Deleted bool `json:"deleted"`
 }
 
+type crawlIn struct {
+	Source string `json:"source,omitempty" jsonschema:"built-in source id, e.g. vietnamworks; all built-in crawlers when omitted"`
+}
+
+type crawlOut struct {
+	Results []service.CrawlResult `json:"results"`
+	Errors  []string              `json:"errors,omitempty"`
+}
+
+type schedulesOut struct {
+	Sources []service.SourceSchedule `json:"sources"`
+}
+
+type scheduleIn struct {
+	Source       string `json:"source" jsonschema:"source id, e.g. vietnamworks or facebook"`
+	EveryMinutes int    `json:"every_minutes" jsonschema:"0 = off, else minutes between runs"`
+}
+
+type keywordsIn struct {
+	Lists map[string][]string `json:"lists" jsonschema:"list key → full replacement list of terms"`
+}
+
 type queueIn struct {
 	Limit int `json:"limit,omitempty" jsonschema:"how many jobs (default 10)"`
 }
@@ -324,4 +351,44 @@ func (t tools) connectPlatform(_ context.Context, in platformIn) (service.Platfo
 func (t tools) disconnectPlatform(ctx context.Context, in platformIn) (disconnectOut, error) {
 	deleted, err := t.svc.Disconnect(ctx, in.Platform)
 	return disconnectOut{deleted}, err
+}
+
+func (t tools) crawl(ctx context.Context, in crawlIn) (crawlOut, error) {
+	sources := t.svc.BuiltinCrawlers()
+	if in.Source != "" {
+		sources = []string{in.Source}
+	}
+	var out crawlOut
+	for _, src := range sources {
+		res, err := t.svc.Crawl(ctx, src)
+		if err != nil {
+			if in.Source != "" {
+				return out, err
+			}
+			out.Errors = append(out.Errors, fmt.Sprintf("%s: %v", src, err))
+			continue
+		}
+		out.Results = append(out.Results, res)
+	}
+	return out, nil
+}
+
+func (t tools) retryCrawl(ctx context.Context, in crawlIn) (crawlOut, error) {
+	if in.Source == "" {
+		return crawlOut{}, fmt.Errorf("%w: source is required", service.ErrInvalid)
+	}
+	return t.crawl(ctx, in)
+}
+
+func (t tools) getCrawlSchedule(ctx context.Context, _ struct{}) (schedulesOut, error) {
+	sc, err := t.svc.CrawlSchedules(ctx)
+	return schedulesOut{sc}, err
+}
+
+func (t tools) setCrawlSchedule(ctx context.Context, in scheduleIn) (service.SourceSchedule, error) {
+	return t.svc.SetCrawlSchedule(ctx, in.Source, in.EveryMinutes)
+}
+
+func (t tools) setKeywords(ctx context.Context, in keywordsIn) (keyword.Sets, error) {
+	return t.svc.SetKeywords(ctx, keyword.Sets(in.Lists))
 }
