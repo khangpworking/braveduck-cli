@@ -32,6 +32,7 @@ Jobs
              it from stdin). Job text on its own works too.
   add --title ...   add a job field by field (--company, --url, --salary, --source, --jd)
   today      what to act on now: best matches, deadlines this week, follow-ups
+  export [--json] [--out file]   every job as CSV (or full JSON records)
   backup [file]   copy the database now (default: ~/.braveduck/backups/, where
              the running board also keeps a daily copy for a week)
   list       list jobs            (--status, --source)
@@ -151,6 +152,8 @@ func run(args []string) error {
 		return cmdToday(ctx, svc)
 	case "backup":
 		return cmdBackup(ctx, svc, rest)
+	case "export":
+		return cmdExport(ctx, svc, rest)
 	case "list", "ls":
 		return cmdList(ctx, svc, rest)
 	case "show", "get":
