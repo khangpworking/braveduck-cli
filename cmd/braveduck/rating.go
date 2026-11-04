@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 )
 
@@ -59,7 +60,7 @@ func cmdRate(ctx context.Context, svc *service.Service, args []string) error {
 		if err != nil {
 			return friendly(err, id)
 		}
-		fmt.Printf("job #%d rated %s %.1f\n", j.ID, j.ScoreLetter, j.Score)
+		fmt.Println(ratedLine(j, *model))
 		return nil
 	}
 
@@ -84,4 +85,17 @@ func cmdRate(ctx context.Context, svc *service.Service, args []string) error {
 	}
 	fmt.Print(service.RenderRatingBrief(brief))
 	return nil
+}
+
+// ratedLine reports the verdict just saved: the board's badge for the
+// default rater, or the challenger's own rating (which doesn't move the badge).
+func ratedLine(j jobs.Job, model string) string {
+	if r, ok := j.Ratings[model]; ok && model != "" {
+		line := fmt.Sprintf("job #%d: %s rated %s %.1f", j.ID, model, r.Letter, r.Score)
+		if j.ScoreLetter != "" && j.ScoreLetter != r.Letter {
+			line += fmt.Sprintf(" (the board's badge stays %s %.1f)", j.ScoreLetter, j.Score)
+		}
+		return line
+	}
+	return fmt.Sprintf("job #%d rated %s %.1f", j.ID, j.ScoreLetter, j.Score)
 }

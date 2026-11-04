@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 )
 
@@ -21,5 +22,17 @@ func TestSetupLines(t *testing.T) {
 	}
 	if strings.Contains(got, " \n") {
 		t.Errorf("trailing spaces:\n%q", got)
+	}
+}
+
+func TestRatedLine(t *testing.T) {
+	j := jobs.Job{ID: 7, ScoreLetter: "B", Score: 3.9, Ratings: map[string]jobs.ModelRating{
+		"jev-1.13.0": {Letter: "B", Score: 3.9}, "rival-one": {Letter: "F", Score: 2.0},
+	}}
+	if got := ratedLine(j, "rival-one"); got != "job #7: rival-one rated F 2.0 (the board's badge stays B 3.9)" {
+		t.Errorf("challenger = %q", got)
+	}
+	if got := ratedLine(j, ""); got != "job #7 rated B 3.9" {
+		t.Errorf("default = %q", got)
 	}
 }
