@@ -97,8 +97,6 @@ function normalizeJob(j) {
           ? j.skills.split(",").map(s => s.trim()).filter(Boolean)
           : []),
     expires_at: decodeExpiresAt(j.expires_at),
-    // "applied:YYYY-MM-DD" is when the application was sent (the no-reply clock).
-    applied_on: typeof j.expires_at === "string" && j.expires_at.startsWith("applied:") ? j.expires_at.slice("applied:".length) : "",
     // The store keeps the draft as JSON {to, subject, body}; "" = none.
     draft_email: parseDraft(j.draft_email),
     ratings: j.ratings || {}

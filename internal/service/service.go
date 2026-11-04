@@ -67,9 +67,16 @@ func (s *Service) ListJobs(ctx context.Context, f ListFilter) ([]jobs.Job, error
 	}
 	maxKM := s.maxKM(ctx)
 	for i := range list {
-		list[i].Dealbreakers = jobs.Dealbreakers(list[i], s.now(), maxKM)
+		decorate(&list[i], s.now(), maxKM)
 	}
 	return list, err
+}
+
+// decorate fills the fields computed on read: dealbreakers and the expiry
+// clock, so every face shows the same ones.
+func decorate(j *jobs.Job, now time.Time, maxKM float64) {
+	j.Dealbreakers = jobs.Dealbreakers(*j, now, maxKM)
+	j.Clock = jobs.ClockOf(*j, now)
 }
 
 // maxKM is the user's maximum commute, for the "too far" dealbreaker.
@@ -84,7 +91,7 @@ func (s *Service) maxKM(ctx context.Context) float64 {
 func (s *Service) GetJob(ctx context.Context, id int64) (jobs.Job, error) {
 	j, err := s.st.Get(ctx, id)
 	if err == nil {
-		j.Dealbreakers = jobs.Dealbreakers(j, s.now(), s.maxKM(ctx))
+		decorate(&j, s.now(), s.maxKM(ctx))
 	}
 	return j, notFound(err)
 }

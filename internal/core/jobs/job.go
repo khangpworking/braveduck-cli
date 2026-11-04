@@ -48,6 +48,7 @@ type Job struct {
 	ScoreReasoning string                 `json:"score_reasoning"`
 	Ratings        map[string]ModelRating `json:"ratings,omitempty"`
 	Dealbreakers   []string               `json:"dealbreakers,omitempty"` // computed by the service (Dealbreakers), not stored
+	Clock          *Clock                 `json:"clock,omitempty"`        // computed by the service (ClockOf), not stored
 
 	// Apply pipeline.
 	ApplyMethod    string `json:"apply_method"` // email/platform
