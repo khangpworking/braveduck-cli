@@ -1,13 +1,39 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// A model id in a copied rating command is one literal argument, even if it
+// contains shell metacharacters. The shell only calls this harmless function.
+func TestRatingBriefModelArgument(t *testing.T) {
+	model := "rival'$(printf expanded)`printf expanded`"
+	brief := RenderRatingBrief(RatingBrief{Model: model})
+	var command string
+	for _, line := range strings.Split(brief, "\n") {
+		if strings.HasPrefix(line, "braveduck rate ") {
+			command = strings.NewReplacer("<id>", "1", "<1.0-5.0>", "4.2", "<point>", "match").Replace(line)
+		}
+	}
+	if command == "" {
+		t.Fatal("rating command missing from brief")
+	}
+	out, err := exec.Command("sh", "-c", "braveduck() { printf '%s\\0' \"$@\"; };\n"+command).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := bytes.Split(out, []byte{0})
+	if len(args) < 5 || string(args[2]) != "--model" || string(args[3]) != model {
+		t.Fatalf("copied command changed model argument: %q", args)
+	}
+}
 
 func TestTemplateCountsAsEmpty(t *testing.T) {
 	if profileFilled(profileTemplate) {
