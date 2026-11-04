@@ -30,12 +30,12 @@ func TestClassifyApply(t *testing.T) {
 
 func TestPlatformOf(t *testing.T) {
 	cases := map[string]Platform{
-		"https://www.topcv.vn/viec-lam/x":     PlatformTopCV,
-		"https://vietnamworks.com/j":          PlatformVNW,
-		"https://careerlink.vn/j":             PlatformCareerLink,
-		"https://vn.joboko.com/j":             PlatformJobOKO,
-		"https://linkedin.com/jobs/1":         PlatformNone,
-		"":                                    PlatformNone,
+		"https://www.topcv.vn/viec-lam/x": PlatformTopCV,
+		"https://vietnamworks.com/j":      PlatformVNW,
+		"https://careerlink.vn/j":         PlatformCareerLink,
+		"https://vn.joboko.com/j":         PlatformJobOKO,
+		"https://linkedin.com/jobs/1":     PlatformNone,
+		"":                                PlatformNone,
 	}
 	for url, want := range cases {
 		if got := PlatformOf(url); got != want {

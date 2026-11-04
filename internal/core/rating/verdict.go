@@ -16,10 +16,10 @@ var (
 
 // Verdict errors (strict verdict validation).
 var (
-	errBadID      = errors.New("bad id")
-	errBadScore   = errors.New("score must be 1.0-5.0")
-	errBadLetter  = errors.New("letter must be A|B|C|D|F")
-	errShortWhy   = errors.New("reasoning too short")
+	errBadID     = errors.New("bad id")
+	errBadScore  = errors.New("score must be 1.0-5.0")
+	errBadLetter = errors.New("letter must be A|B|C|D|F")
+	errShortWhy  = errors.New("reasoning too short")
 )
 
 // DefaultRubric is a short, generic scoring skeleton. It is intentionally NOT

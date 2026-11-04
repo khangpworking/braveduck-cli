@@ -19,8 +19,8 @@ import (
 
 // Warn once the deadline is this close; hard-clear once it's this far past.
 const (
-	WarningDays     = 10
-	ClearGraceDays  = 7
+	WarningDays      = 10
+	ClearGraceDays   = 7
 	ApplySilenceDays = 20 // silence after applying before the delete countdown begins (delete at 20+7=27)
 )
 
