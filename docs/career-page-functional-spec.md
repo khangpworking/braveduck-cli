@@ -109,8 +109,12 @@ Every element and its purpose:
 - **Dealbreaker pills** (red ⛔) — surface the user's hard no-gos without needing
   to expand. Four detectors: *Làm T7* (Saturday work, from JD text),
   *Lương thỏa thuận* (negotiable/undisclosed pay, from salary field),
-  *Xa Nkm* (>10 km from home), *Cty <2 năm* (company founded <2 years ago). Only
-  shown when detected. Geo ones resolve after pinning and update live.
+  *Xa Nkm* (beyond the user's maximum commute, default 10 km; ignored past
+  80 km as a bad geocode), *Cty <2 năm* (company founded <2 years ago). Only
+  shown when detected. Computed once on the server (`jobs.Dealbreakers`) and
+  sent with each job, so the board, `braveduck show` and MCP agree. Geo ones
+  update live once a distance is known. (*Cty <2 năm* needs a company founding
+  date, which braveduck can't look up yet.)
 - **Job title** — links to the original posting in a new tab.
 - **Score badge** — the default AI rater's verdict: letter grade (A–F) + numeric
   score, color-coded. States: `scoring…`, `score failed`, `stuck · retry`
