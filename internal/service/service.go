@@ -36,7 +36,8 @@ type Service struct {
 	st  *store.Store
 	now func() time.Time
 
-	profilePath string // see SetProfilePath
+	profilePath string         // see SetProfilePath / SetDataDir
+	plat        *platformState // see SetDataDir
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.

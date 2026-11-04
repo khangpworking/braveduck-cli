@@ -47,6 +47,12 @@ Keywords (crawler filter lists — start empty)
   keywords rm  <list> <term>...  remove terms from a list
   keywords check <id>            test a stored job against the filter
 
+Job-site logins (you log in yourself; braveduck keeps the session, encrypted)
+  platforms            list sites and whether you're logged in
+  login <site>         open a browser window to log in to a site
+  logout <site>|--all  delete a saved login
+  platforms check <site>   re-check whether a saved login still works
+
 Web board
   serve      run the local web board + JSON API   (--addr, --no-open)
 
@@ -96,7 +102,7 @@ func run(args []string) error {
 	defer st.Close()
 	ctx := context.Background()
 	svc := service.New(st)
-	svc.SetProfilePath(profilePathFor(resolved))
+	svc.SetDataDir(filepath.Dir(resolved))
 
 	switch cmd {
 	case "add":
@@ -113,6 +119,12 @@ func run(args []string) error {
 		return cmdToggle(ctx, svc, rest, "keep")
 	case "rm", "delete":
 		return cmdDelete(ctx, svc, rest)
+	case "platforms":
+		return cmdPlatforms(ctx, svc, rest)
+	case "login":
+		return cmdLogin(ctx, svc, rest)
+	case "logout":
+		return cmdLogout(ctx, svc, rest)
 	case "profile":
 		return cmdProfile(ctx, svc)
 	case "rate":
@@ -122,7 +134,7 @@ func run(args []string) error {
 	case "keywords", "kw":
 		return cmdKeywords(ctx, st, rest)
 	case "serve":
-		return cmdServe(ctx, st, rest)
+		return cmdServe(ctx, st, svc, rest)
 	case "mcp":
 		// Runs until the client closes stdin; Ctrl-C/SIGTERM also end it.
 		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -175,17 +187,27 @@ func openStore(dbPath string) (*store.Store, string, error) {
 		}
 		dbPath = p
 	}
+	// The data dir holds the profile (a CV), the session key and the sealed
+	// sessions: owner-only, and tightened if an older braveduck made it 0755.
 	if dir := filepath.Dir(dbPath); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, "", err
+		}
+		if dbPath == defaultPath() {
+			_ = os.Chmod(dir, 0o700)
 		}
 	}
 	st, err := store.Open(dbPath)
+	if err == nil {
+		for _, f := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+			_ = os.Chmod(f, 0o600) // best effort; missing -wal/-shm is fine
+		}
+	}
 	return st, dbPath, err
 }
 
-// profilePathFor puts profile.md next to the database, so a --db sandbox keeps
-// its own profile and the default lands in ~/.braveduck/profile.md.
-func profilePathFor(dbPath string) string {
-	return filepath.Join(filepath.Dir(dbPath), "profile.md")
+// defaultPath is defaultDBPath without the error, for comparisons.
+func defaultPath() string {
+	p, _ := defaultDBPath()
+	return p
 }

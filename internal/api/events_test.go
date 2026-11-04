@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
@@ -22,7 +23,7 @@ func TestEventsStreamsChangesFromOtherProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	ts := httptest.NewServer(Handler(st, testToken))
+	ts := httptest.NewServer(Handler(st, service.New(st), testToken))
 	defer ts.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())

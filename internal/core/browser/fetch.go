@@ -3,14 +3,9 @@ package browser
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"runtime"
-	"strconv"
 	"time"
 
 	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/launcher/flags"
 	"github.com/go-rod/rod/lib/proto"
 )
 
@@ -24,40 +19,11 @@ func Fetch(ctx context.Context, u string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	bin, err := EnsureBinary(ctx)
+	browser, cleanup, err := launch(ctx, launchOpts{Headless: true})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("cloakbrowser: %w", err)
 	}
-
-	fpPlatform := "windows"
-	if runtime.GOOS == "darwin" {
-		fpPlatform = "macos"
-	}
-	seed := strconv.Itoa(10000 + rand.Intn(90000))
-
-	l := launcher.New().
-		Bin(bin).
-		Context(ctx).
-		Headless(true).
-		Set(flags.Flag("no-sandbox")).
-		Set(flags.Flag("fingerprint"), seed).
-		Set(flags.Flag("fingerprint-platform"), fpPlatform).
-		Set(flags.Flag("lang"), "vi-VN").
-		Set(flags.Flag("fingerprint-timezone"), "Asia/Ho_Chi_Minh").
-		Delete(flags.Flag("enable-automation")).
-		Delete(flags.Flag("enable-unsafe-swiftshader"))
-
-	controlURL, err := l.Launch()
-	if err != nil {
-		return "", fmt.Errorf("cloakbrowser: launch: %w", err)
-	}
-	defer l.Cleanup()
-
-	browser := rod.New().ControlURL(controlURL).Context(ctx)
-	if err := browser.Connect(); err != nil {
-		return "", fmt.Errorf("cloakbrowser: connect: %w", err)
-	}
-	defer browser.Close()
+	defer cleanup()
 
 	// The board only needs the DOM and its ld+json — not pixels. Block images,
 	// media, fonts, and stylesheets so a listing renders in a fraction of the

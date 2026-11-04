@@ -14,9 +14,9 @@ no accounts, and no stored passwords. You authenticate with TopCV / VietnamWorks
 etc. directly in a real browser; braveduck only ever holds an encrypted session
 locally on your disk.
 
-> Status: **early.** The job pipeline, the web board, the MCP server and
-> AI rating work; CV/draft generation, platform login and auto-apply are not
-> wired yet. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the build plan and
+> Status: **early.** The job pipeline, the web board, the MCP server, AI
+> rating and job-site logins work; CV/draft generation, status sync and
+> auto-apply are not wired yet. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the build plan and
 > [`docs/`](./docs) for the feature spec and UI reference.
 
 ## Quick start
@@ -63,6 +63,25 @@ braveduck profile      # creates ~/.braveduck/profile.md — fill in what applie
 
 Scores are 1.0-5.0 with letters A-F, and the reasons show on each card.
 Rating stays off while the profile is still the blank template.
+
+### Log in to job sites (sessions)
+
+braveduck can act on job sites as you, with **no password ever stored**:
+
+```bash
+braveduck login topcv     # a browser window opens; you log in there yourself
+braveduck platforms       # who you're logged in to
+braveduck logout topcv    # delete the saved login (or: logout --all)
+```
+
+Built in: TopCV, VietnamWorks, JobOKO and CareerLink. Add any other site in
+`~/.braveduck/platforms.json` (see `docs/specs/platform-sessions.md`). Sessions
+are encrypted (AES-256-GCM) with a key from your OS keychain, a private key
+file, or `BRAVEDUCK_PASSPHRASE`. Also on the board (🔑 Logins) and via MCP
+(`list_platforms`, `connect_platform`, `disconnect_platform`).
+
+Linux/WSL needs Chromium's libraries once: `sudo apt install -y libnss3 libasound2t64`.
+Using a session to sync statuses or apply is a later step.
 
 ## Why
 

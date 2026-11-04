@@ -122,6 +122,29 @@ func EnsureBinary(ctx context.Context) (string, error) {
 	return binPath, nil
 }
 
+// Provisioned reports whether the browser is ready without a download (an
+// override binary, or an already-cached build), so callers can warn before a
+// first, slow download.
+func Provisioned() bool {
+	if strings.TrimSpace(os.Getenv("CLOAKBROWSER_BINARY_PATH")) != "" {
+		return true
+	}
+	tag, err := platformTag()
+	if err != nil {
+		return false
+	}
+	version, ok := pinnedVersions[tag]
+	if !ok {
+		return false
+	}
+	root, err := cacheRoot()
+	if err != nil {
+		return false
+	}
+	fi, err := os.Stat(filepath.Join(root, binaryRelPath(version)))
+	return err == nil && !fi.IsDir()
+}
+
 // download fetches, checksum-verifies, and extracts the Chromium archive into
 // root/chromium-{version}. It tries CloakBrowser's CDN first, then the GitHub
 // release mirror, for both the archive and the SHA256SUMS manifest.
@@ -150,27 +173,22 @@ func download(ctx context.Context, root, tag, version string) error {
 		return err
 	}
 
-	tmp, err := os.CreateTemp(root, "cloak-dl-*"+ext)
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	tmp.Close()
-	defer os.Remove(tmpPath)
-
-	var dlErr error
-	got := false
-	for _, u := range archiveURLs {
-		if err := downloadTo(ctx, u, tmpPath, want); err != nil {
-			dlErr = err
-			continue
+	// Older builds left random-named temp files behind when interrupted.
+	if stale, _ := filepath.Glob(filepath.Join(root, "cloak-dl-*")); len(stale) > 0 {
+		for _, f := range stale {
+			_ = os.Remove(f)
 		}
-		got = true
-		break
 	}
-	if !got {
-		return fmt.Errorf("cloakbrowser: download failed: %w", dlErr)
+
+	// The archive is ~200 MB and some mirrors serve it at tens of KB/s, so a
+	// download can take hours: it is resumable (a fixed .part file kept across
+	// attempts and across runs) and only a *stall* aborts it, never its total
+	// duration. Nothing is trusted until the whole file matches the checksum.
+	tmpPath := filepath.Join(root, archiveName+".part")
+	if err := fetchResumable(ctx, archiveURLs, tmpPath, want); err != nil {
+		return fmt.Errorf("cloakbrowser: download failed: %w", err)
 	}
+	defer os.Remove(tmpPath)
 
 	staging, err := os.MkdirTemp(root, "cloak-stage-*")
 	if err != nil {
@@ -229,42 +247,122 @@ func expectedSHA(ctx context.Context, urls []string, archiveName string) (string
 	return "", fmt.Errorf("cloakbrowser: no checksum for %s: %w", archiveName, lastErr)
 }
 
-// downloadTo streams url to dst, verifying its SHA-256 against want before the
-// file is trusted. A mismatch or non-200 is an error and leaves dst overwritten
-// (the caller retries the next mirror or aborts).
-func downloadTo(ctx context.Context, url, dst, want string) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+// stallTimeout aborts a transfer that receives no bytes for this long (the
+// next attempt resumes). Overridable in tests.
+var stallTimeout = 60 * time.Second
+
+// maxRounds bounds the attempts across all mirrors; each one resumes where
+// the last stopped, so rounds only matter for flaky links.
+const maxRounds = 20
+
+// fetchResumable downloads to dst from the first mirror that works, resuming
+// across stalls, errors and mirrors, then verifies the SHA-256. On a checksum
+// mismatch the partial file is discarded and the download restarts once from
+// scratch (a resume may have stitched a bad fragment).
+func fetchResumable(ctx context.Context, urls []string, dst, want string) error {
+	var lastErr error
+	restarted := false
+	for round := 0; round < maxRounds; round++ {
+		u := urls[round%len(urls)]
+		if err := downloadTo(ctx, u, dst); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			lastErr = err
+			continue
+		}
+		ok, err := fileHasSHA(dst, want)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		_ = os.Remove(dst)
+		lastErr = fmt.Errorf("checksum mismatch from %s", u)
+		if restarted {
+			return lastErr
+		}
+		restarted = true
+	}
+	return lastErr
+}
+
+// downloadTo appends url's remaining bytes to dst (asking for a Range from
+// dst's current size). A server that ignores the Range gets a fresh copy. It
+// returns an error if the server sends nothing for stallTimeout.
+func downloadTo(ctx context.Context, url, dst string) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	var have int64
+	if fi, err := os.Stat(dst); err == nil {
+		have = fi.Size()
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
+	}
+	if have > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", have))
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cloakbrowser: GET %s: %s", url, resp.Status)
-	}
 
-	f, err := os.Create(dst)
+	flags := os.O_WRONLY | os.O_CREATE
+	switch {
+	case resp.StatusCode == http.StatusPartialContent && have > 0:
+		flags |= os.O_APPEND
+	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && have > 0:
+		return nil // already complete; the checksum decides
+	case resp.StatusCode == http.StatusOK:
+		flags |= os.O_TRUNC
+	default:
+		return fmt.Errorf("GET %s: %s", url, resp.Status)
+	}
+	f, err := os.OpenFile(dst, flags, 0o644)
 	if err != nil {
 		return err
 	}
+
+	// Watchdog: every read that returns bytes pushes the deadline out.
+	timer := time.AfterFunc(stallTimeout, cancel)
+	defer timer.Stop()
+	_, err = io.Copy(f, readFunc(func(p []byte) (int, error) {
+		n, err := resp.Body.Read(p)
+		if n > 0 {
+			timer.Reset(stallTimeout)
+		}
+		return n, err
+	}))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil && ctx.Err() != nil {
+		return fmt.Errorf("stalled: no data from %s for %s", url, stallTimeout)
+	}
+	return err
+}
+
+type readFunc func([]byte) (int, error)
+
+func (f readFunc) Read(p []byte) (int, error) { return f(p) }
+
+// fileHasSHA reports whether the file at path hashes to want (hex SHA-256).
+func fileHasSHA(path, want string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(f, h), resp.Body); err != nil {
-		f.Close()
-		return err
+	if _, err := io.Copy(h, f); err != nil {
+		return false, err
 	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != want {
-		return fmt.Errorf("cloakbrowser: checksum mismatch for %s (got %s, want %s)", url, got, want)
-	}
-	return nil
+	return hex.EncodeToString(h.Sum(nil)) == want, nil
 }
 
 // httpGet is a small GET-into-memory helper for the checksum manifest (tiny).

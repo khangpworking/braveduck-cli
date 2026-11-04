@@ -210,6 +210,25 @@ const APIClient = {
     return res.json();
   },
 
+  async getPlatforms() {
+    const res = await apiFetch(`${API_BASE}/platforms`);
+    return res.ok ? res.json() : [];
+  },
+
+  async connectPlatform(id) {
+    const res = await apiFetch(`${API_BASE}/platforms/${encodeURIComponent(id)}/login`, { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
+  async disconnectPlatform(id) {
+    const res = await apiFetch(`${API_BASE}/platforms/${encodeURIComponent(id)}/login`, { method: "DELETE" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
   async getRatingConfig() {
     const res = await apiFetch(`${API_BASE}/rating-config`);
     return res.json();
@@ -266,7 +285,64 @@ const APIClient = {
 };
 
 // UI Rendering Logic
+// --- Job-site logins panel -----------------------------------------------------
+const PLATFORM_STATUS = {
+  not_connected: ["Not connected", "var(--muted)"],
+  connecting: ["Waiting for you to log in in the browser window…", "#b45309"],
+  connected: ["Logged in ✓", "var(--success-border)"],
+  expired: ["Logged out — connect again", "var(--error)"],
+  unknown: ["Saved (login check not verified yet)", "#b45309"]
+};
+
+async function renderPlatforms() {
+  const list = document.getElementById("platformsList");
+  const platforms = await APIClient.getPlatforms();
+  list.innerHTML = platforms.map(p => {
+    const [label, color] = PLATFORM_STATUS[p.status] || [p.status, "var(--muted)"];
+    const saved = p.status !== "not_connected" && p.status !== "connecting";
+    const action = p.status === "connecting" ? ""
+      : saved
+        ? `<button class="btn-secondary btn-sm" onclick="disconnectPlatform(${jsArg(p.id)})">Disconnect</button>
+           <button class="btn-secondary btn-sm" onclick="connectPlatform(${jsArg(p.id)})">Log in again</button>`
+        : `<button class="btn-primary btn-sm" onclick="connectPlatform(${jsArg(p.id)})">Connect</button>`;
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
+        <div>
+          <strong>${esc(p.name)}</strong>${p.account ? ` <span style="font-size: 12px; color: var(--muted);">${esc(p.account)}</span>` : ""}
+          <div style="font-size: 12px; color: ${color};">${esc(label)}</div>
+        </div>
+        <div style="display: flex; gap: 6px;">${action}</div>
+      </div>`;
+  }).join("");
+}
+
+async function connectPlatform(id) {
+  try {
+    await APIClient.connectPlatform(id);
+    showToast("A browser window opened — log in there.", "info");
+  } catch (e) {
+    showToast(`Couldn't start login: ${e.message}`, "error");
+  }
+  renderPlatforms();
+}
+
+async function disconnectPlatform(id) {
+  if (!confirm("Delete this saved login?")) return;
+  try {
+    await APIClient.disconnectPlatform(id);
+    showToast("Login deleted.", "success");
+  } catch (e) {
+    showToast(`Couldn't disconnect: ${e.message}`, "error");
+  }
+  renderPlatforms();
+}
+
 async function refreshAppState() {
+  // A login finishing writes the session, which triggers a live update; keep
+  // an open logins panel current too.
+  if (document.getElementById("platformsModalOverlay").classList.contains("open")) {
+    renderPlatforms();
+  }
   AppState.jobs = await APIClient.getJobs();
   AppState.ratingConfig = await APIClient.getRatingConfig();
   AppState.crawlStatus = await APIClient.getCrawlStatus();
@@ -1563,11 +1639,18 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("backfillBanner").style.display = "none";
   });
 
+  const platformsModal = document.getElementById("platformsModalOverlay");
+  document.getElementById("platformsBtn").addEventListener("click", async () => {
+    platformsModal.classList.add("open");
+    await renderPlatforms();
+  });
+
   // General Modal close logic
   document.querySelectorAll(".modal-close-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       keywordsModal.classList.remove("open");
       ratingModal.classList.remove("open");
+      platformsModal.classList.remove("open");
     });
   });
 

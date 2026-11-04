@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/api"
+	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 // cmdServe boots the local web board + JSON API and (unless --no-open) opens the
 // user's browser at it. This is the "install and a board pops up" entry point.
-func cmdServe(ctx context.Context, st *store.Store, args []string) error {
+func cmdServe(ctx context.Context, st *store.Store, svc *service.Service, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fs.String("addr", "127.0.0.1:8080", "listen address (host:port)")
 	noOpen := fs.Bool("no-open", false, "don't auto-open the browser")
@@ -49,7 +50,7 @@ func cmdServe(ctx context.Context, st *store.Store, args []string) error {
 	}
 
 	srv := &http.Server{
-		Handler:           api.Handler(st, hex.EncodeToString(tok)),
+		Handler:           api.Handler(st, svc, hex.EncodeToString(tok)),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests inherit ctx, so Ctrl-C also ends long-lived event streams
 		// instead of Shutdown waiting on them.

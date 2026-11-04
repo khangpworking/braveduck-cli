@@ -55,6 +55,7 @@
       <div class="toolbar-actions">
         <button class="btn-secondary btn-sm" id="keywordsBtn">⚙ Keywords</button>
         <button class="btn-secondary btn-sm" id="ratingBtn">⚙ Rating</button>
+        <button class="btn-secondary btn-sm" id="platformsBtn">🔑 Logins</button>
       </div>
     </section>
 
@@ -133,6 +134,25 @@
   </div>
 
   <!-- Rating Config Modal -->
+  <div class="modal-overlay" id="platformsModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Job-site logins</h3>
+        <button class="btn-close modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
+          Connect opens a browser window on this computer. You log in there yourself;
+          braveduck never sees your password and keeps only the session, encrypted.
+        </p>
+        <div id="platformsList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="ratingModalOverlay">
     <div class="modal">
       <div class="modal-header">
