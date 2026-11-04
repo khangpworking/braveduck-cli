@@ -34,7 +34,7 @@ jobs:
       - name: go mod tidy
         run: go mod tidy && git diff --exit-code go.mod go.sum
       - name: board JS syntax
-        run: node --check internal/api/web/app.js
+        run: for f in internal/api/web/*.js; do node --check "$f" || exit 1; done
       - name: unit tests (race detector)
         run: go test -race -count=1 ./...
 

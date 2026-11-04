@@ -332,6 +332,13 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="app.js"></script>
+  <!-- The board's script, in order: one global scope (classic scripts, no build step). -->
+  <script src="core.js"></script>  <!-- API client, HTML safety, field adapters, app state -->
+  <script src="panels.js"></script>  <!-- settings windows: logins, location, sources -->
+  <script src="widgets.js"></script>  <!-- refreshing state; header, Today, crawl panel, filters, notifications -->
+  <script src="board.js"></script>  <!-- the kanban board, cards and card details -->
+  <script src="actions.js"></script>  <!-- card actions: ask your AI, setup, profile, CV, email, apply, drag and drop -->
+  <script src="live.js"></script>  <!-- live updates, toasts, the activity strip, time helpers -->
+  <script src="main.js"></script>  <!-- start-up: wires every button and window -->
 </body>
 </html>
