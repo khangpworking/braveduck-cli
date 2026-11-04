@@ -3,19 +3,21 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
-	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 // Clearing the board (docs/career-page-functional-spec.md §7): a Saved or
 // Waiting job whose posting closed ClearGraceDays ago, or an application with
 // no answer ApplySilenceDays+ClearGraceDays after it was sent, moves to
 // Closed with a note saying why. Nothing is deleted — dragging the card back
-// undoes it — and pinned or kept jobs are never touched.
+// undoes it (and keeps it) — and pinned or kept jobs are never touched.
+
+// sweptNote starts the note the sweep adds; moving such a card out of
+// Closed marks it kept (UpdateJob), so the sweep leaves it alone after.
+const sweptNote = "Closed automatically:"
 
 // sweepEvery is how often the scheduler clears the board.
 const sweepEvery = time.Hour
@@ -37,12 +39,14 @@ func (s *Service) SweepExpired(ctx context.Context) (int, error) {
 		if note == "" {
 			continue
 		}
-		notes := strings.TrimSpace(note + "\n" + j.Notes)
-		closed := "closed"
-		if err := s.st.Patch(ctx, j.ID, store.JobPatch{Status: &closed, Notes: &notes}, now); err != nil {
+		// Only if the job is still as read: an edit or a move made meanwhile wins.
+		ok, err := s.st.CloseIfUnchanged(ctx, j.ID, j.Status, j.UpdatedAt, note, now)
+		if err != nil {
 			return moved, err
 		}
-		moved++
+		if ok {
+			moved++
+		}
 	}
 	if moved > 0 {
 		s.logEvent(ctx, "moved", fmt.Sprintf("Moved %d expired job(s) to Closed (drag one back to keep it)", moved))
@@ -58,12 +62,12 @@ func sweepNote(j jobs.Job, now time.Time) string {
 	switch j.Status {
 	case "saved", "waiting":
 		if jobs.IsClearable(j.ExpiresAt, now) {
-			return fmt.Sprintf("Closed automatically: the posting closed on %s.", jobs.ParseExpiry(j.ExpiresAt).Date)
+			return fmt.Sprintf("%s the posting closed on %s.", sweptNote, jobs.ParseExpiry(j.ExpiresAt).Date)
 		}
 	case "applied":
 		if jobs.IsAppliedClearable(j.ExpiresAt, now) {
 			a := jobs.AppliedStateOf(j.ExpiresAt, now)
-			return fmt.Sprintf("Closed automatically: no answer %d days after applying.", a.DaysSince)
+			return fmt.Sprintf("%s no answer %d days after applying.", sweptNote, a.DaysSince)
 		}
 	}
 	return ""

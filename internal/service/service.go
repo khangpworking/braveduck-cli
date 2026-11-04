@@ -265,6 +265,12 @@ func (s *Service) UpdateJob(ctx context.Context, id int64, p Patch) (jobs.Job, e
 	if err != nil {
 		return jobs.Job{}, err
 	}
+	// Dragging a card the sweep closed back out keeps it: without that the
+	// next hourly sweep would close it again.
+	if p.Status != nil && *p.Status != "closed" && before.Status == "closed" && strings.Contains(before.Notes, sweptNote) {
+		keep := true
+		p.Keep = &keep
+	}
 	// Applying starts the no-answer clock (Today's follow-ups, the sweep),
 	// counted from today unless the job already has its applied date.
 	if p.Status != nil && *p.Status == "applied" && (before.Status == "saved" || before.Status == "waiting") &&

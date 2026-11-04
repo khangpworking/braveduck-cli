@@ -85,3 +85,27 @@ func TestSweepIfDueRunsHourly(t *testing.T) {
 		t.Fatalf("closed = %d, last = %v, want the sweep to run and record now", len(list), last)
 	}
 }
+
+// Dragging a swept card back out of Closed keeps it, so the next sweep
+// doesn't close it again.
+func TestSweptCardDraggedBackStays(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	id, _ := s.st.Add(ctx, jobs.Job{Title: "old", Status: "saved", ExpiresAt: "expire:" + s.now().AddDate(0, 0, -10).Format("2006-01-02")}, s.now())
+	if n, _ := s.SweepExpired(ctx); n != 1 {
+		t.Fatalf("first sweep moved %d, want 1", n)
+	}
+	j, err := s.SetStatus(ctx, id, "saved")
+	if err != nil || !j.Keep {
+		t.Fatalf("dragged back: %v keep=%v, want kept", err, j.Keep)
+	}
+	if n, _ := s.SweepExpired(ctx); n != 0 {
+		t.Fatalf("second sweep moved %d, want the kept card left alone", n)
+	}
+	// A card closed by hand isn't marked kept when reopened.
+	m, _ := s.AddJob(ctx, NewJob{Title: "by hand"})
+	s.SetStatus(ctx, m.ID, "closed")
+	if j, _ := s.SetStatus(ctx, m.ID, "saved"); j.Keep {
+		t.Fatal("reopening a hand-closed card marked it kept")
+	}
+}

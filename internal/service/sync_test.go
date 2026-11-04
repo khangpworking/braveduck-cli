@@ -38,6 +38,9 @@ func TestSyncTopCV(t *testing.T) {
 	if j.Status != "applied" || j.TopcvStatus != topcv.StatusSent || !strings.Contains(j.ApplyDetail, "(22-06-2026)") {
 		t.Fatalf("saved job after sync = status %q topcv %q detail %q", j.Status, j.TopcvStatus, j.ApplyDetail)
 	}
+	if !strings.HasPrefix(j.ExpiresAt, "applied:") {
+		t.Fatalf("moved to Applied without starting the no-answer clock: expires_at %q", j.ExpiresAt)
+	}
 	if j, _ := s.GetJob(ctx, interview.ID); j.Status != "interview" || j.TopcvStatus != topcv.StatusSeen {
 		t.Fatalf("a job already past Applied must not move back: %q / %q", j.Status, j.TopcvStatus)
 	}

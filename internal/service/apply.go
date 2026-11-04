@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/apply"
@@ -121,6 +122,29 @@ func (s *Service) AssistApply(ctx context.Context, id int64) (ApplyResult, error
 	if err != nil {
 		return ApplyResult{}, err
 	}
+	if err := s.reserveApply(ctx); err != nil {
+		return ApplyResult{}, err
+	}
+	return s.assistWith(ctx, id, prep)
+}
+
+// applyMu makes checking the apply limits and recording the attempt one
+// step, so applies started together can't all pass the cap and cooldown.
+var applyMu sync.Mutex
+
+// reserveApply checks the daily cap and cooldown and, if they allow it,
+// records this attempt at once (before any window opens).
+func (s *Service) reserveApply(ctx context.Context) error {
+	applyMu.Lock()
+	defer applyMu.Unlock()
+	if err := s.checkApplyLimits(ctx); err != nil {
+		return err
+	}
+	return s.st.RecordApplyAttempt(ctx, s.now())
+}
+
+// assistWith runs a prepared, reserved apply: the window, then the check.
+func (s *Service) assistWith(ctx context.Context, id int64, prep ApplyPrep) (ApplyResult, error) {
 	site, err := s.platform(prep.SiteID)
 	if err != nil {
 		return ApplyResult{}, err
@@ -131,7 +155,6 @@ func (s *Service) AssistApply(ctx context.Context, id int64) (ApplyResult, error
 		_ = s.st.SetApplyState(ctx, id, "", "", s.now())
 		return res, err
 	}
-	_ = s.st.RecordApplyAttempt(ctx, s.now())
 
 	if site.ID != "topcv" {
 		// No history braveduck can read on this site: the user says.
@@ -243,8 +266,11 @@ func (s *Service) StartAssistApply(id int64) (ApplyPrep, error) {
 	if err != nil {
 		return ApplyPrep{}, err
 	}
+	if err := s.reserveApply(ctx); err != nil {
+		return ApplyPrep{}, err
+	}
 	go func() {
-		res, err := s.AssistApply(ctx, id)
+		res, err := s.assistWith(ctx, id, prep)
 		switch {
 		case err != nil:
 			s.logEvent(ctx, "error", fmt.Sprintf("Apply on %s (job #%d): %v", prep.Site, id, err))
