@@ -21,6 +21,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/crawl"
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -642,4 +643,52 @@ func TestBoardSearchAndCards(t *testing.T) {
 	if got := cards(); got != "Data Analyst|Kỹ Sư AI|Marketing Executive" {
 		t.Fatalf("after Esc = %q, want every card back", got)
 	}
+}
+
+// Today lists what to act on: the best-rated open jobs, deadlines this week
+// and week-old applications; a click opens the card.
+func TestBoardToday(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	now := time.Now()
+	day := func(d int) string { return now.AddDate(0, 0, d).Format("2006-01-02") }
+	for _, j := range []jobs.Job{
+		{Title: "Great match", Status: "saved", Score: 4.6, HasScore: true, ScoreLetter: "A", ScoreStatus: "scored"},
+		{Title: "Weak match", Status: "saved", Score: 2.1, HasScore: true, ScoreLetter: "D", ScoreStatus: "scored"},
+		{Title: "Closes soon", Status: "saved", ExpiresAt: "expire:" + day(2)},
+		{Title: "Closes next month", Status: "saved", ExpiresAt: "expire:" + day(30)},
+		{Title: "Waiting for an answer", Status: "applied", ExpiresAt: "applied:" + day(-10)},
+		{Title: "Just applied", Status: "applied", ExpiresAt: "applied:" + day(-2)},
+	} {
+		if _, err := st.Add(ctx, j, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	today := page.MustElement("#todayList").MustText()
+	for _, want := range []string{"Great match", "A · 4.6", "Closes soon", "closes in 2 days", "Waiting for an answer", "applied 10 days ago"} {
+		if !strings.Contains(today, want) {
+			t.Errorf("Today is missing %q:\n%s", want, today)
+		}
+	}
+	for _, not := range []string{"Weak match", "Closes next month", "Just applied"} {
+		if strings.Contains(today, not) {
+			t.Errorf("Today lists %q:\n%s", not, today)
+		}
+	}
+
+	page.MustElementR("#todayList button", "Closes soon").MustClick()
+	page.MustElement(`.card.flash`)
 }

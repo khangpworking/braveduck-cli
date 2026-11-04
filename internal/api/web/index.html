@@ -33,11 +33,15 @@
 
     <!-- Top Widgets Row -->
     <section class="widgets-row">
-      <!-- Morale Widget -->
-      <div class="widget cream-callout" id="moraleWidget">
-        <div class="morale-rate" id="moraleRate">—</div>
-        <div class="morale-subline" id="moraleSubline">calculating morale...</div>
-        <div class="morale-message" id="moraleMessage">Loading stats...</div>
+      <!-- Today: what to act on now, plus the interview-rate line -->
+      <div class="widget soft-card today-widget" id="todayWidget">
+        <h3 class="widget-title">Today</h3>
+        <div id="todayList" class="today-list"></div>
+        <div class="today-stats" id="moraleWidget">
+          <span class="today-rate" id="moraleRate">—</span>
+          <span id="moraleSubline"></span>
+          <div class="morale-message" id="moraleMessage"></div>
+        </div>
       </div>
       
       <!-- Crawl Status Widget -->
