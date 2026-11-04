@@ -19,6 +19,15 @@ async function apiFetch(url, opts = {}) {
   return res;
 }
 
+async function readAPIJSON(path) {
+  const res = await apiFetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // --- HTML safety -------------------------------------------------------------
 // Job fields come from scraped third-party pages, so treat every one as hostile
 // text. Anything interpolated into an innerHTML template goes through esc();
@@ -126,8 +135,7 @@ const AppState = {
 // API Client Wrapper (mirrors REST-API-CONTRACT.md)
 const APIClient = {
   async getJobs() {
-    const res = await apiFetch(`${API_BASE}/jobs`);
-    const data = await res.json();
+    const data = await readAPIJSON('/jobs');
     return Array.isArray(data) ? data.map(normalizeJob) : [];
   },
 
@@ -251,8 +259,7 @@ const APIClient = {
   },
 
   async getRatingConfig() {
-    const res = await apiFetch(`${API_BASE}/rating-config`);
-    return res.json();
+    return readAPIJSON('/rating-config');
   },
 
   async updateRatingConfig(config) {
@@ -283,14 +290,11 @@ const APIClient = {
   },
 
   async getCrawlStatus() {
-    const res = await apiFetch(`${API_BASE}/crawl-status`);
-    return res.json();
+    return readAPIJSON('/crawl-status');
   },
 
   async getActivity() {
-    const res = await apiFetch(`${API_BASE}/activity`);
-    if (!res.ok) return [];
-    const events = await res.json();
+    const events = await readAPIJSON('/activity');
     // Server timestamps are ISO; the feed renders a plain clock.
     return (events || []).map(e => ({
       ...e,
@@ -551,24 +555,42 @@ async function disconnectPlatform(id) {
   renderPlatforms();
 }
 
+let refreshGeneration = 0;
+
 async function refreshAppState() {
+  const generation = ++refreshGeneration;
+  let location = AppState.location;
   try {
     const res = await apiFetch(`${API_BASE}/location`);
-    if (res.ok) AppState.location = await res.json();
+    if (res.ok) location = await res.json();
   } catch {}
-  // A login finishing writes the session, which triggers a live update; keep
-  // an open logins panel current too.
-  if (document.getElementById("platformsModalOverlay").classList.contains("open")) {
-    renderPlatforms();
+  try {
+    const jobs = await APIClient.getJobs();
+    const ratingConfig = await APIClient.getRatingConfig();
+    const crawlStatus = await APIClient.getCrawlStatus();
+    const activity = await APIClient.getActivity();
+    // Requests can finish out of order, or the user can begin editing after
+    // one starts. Commit a complete snapshot only while it is still current
+    // and safe to replace the card DOM. Focusout retries a deferred refresh.
+    if (generation !== refreshGeneration) return;
+    if (isEditingCard()) {
+      refreshPending = true;
+      return;
+    }
+    refreshPending = false;
+    Object.assign(AppState, { location, jobs, ratingConfig, crawlStatus, activity });
+    renderAll();
+    renderSetup();
+    notifyNewMatches(AppState.jobs);
+    // A login finishing writes the session, which triggers a live update.
+    if (document.getElementById("platformsModalOverlay").classList.contains("open")) {
+      renderPlatforms();
+    }
+  } catch (e) {
+    if (generation === refreshGeneration) {
+      showToast(`Couldn't refresh board: ${e.message}`, "error");
+    }
   }
-  AppState.jobs = await APIClient.getJobs();
-  AppState.ratingConfig = await APIClient.getRatingConfig();
-  AppState.crawlStatus = await APIClient.getCrawlStatus();
-  AppState.activity = await APIClient.getActivity();
-
-  renderAll();
-  renderSetup();
-  notifyNewMatches(AppState.jobs);
 }
 
 function renderAll() {
@@ -1950,17 +1972,19 @@ function setupColumnDragEvents(colEl) {
 // Quick stage jump dropdown logic
 async function moveStageDropdown(id, selectEl) {
   const status = selectEl.value;
-  await transitionCardStatus(id, status);
+  await transitionCardStatus(id, status, selectEl);
 }
 
-async function transitionCardStatus(id, newStatus) {
+async function transitionCardStatus(id, newStatus, committedEl) {
   const j = AppState.jobs.find(item => item.id === id);
   if (!j || j.status === newStatus) return;
   try {
     await APIClient.updateJob(id, { status: newStatus });
     showToast(`Job moved to ${newStatus}`, "success");
+    if (committedEl && document.activeElement === committedEl) committedEl.blur();
   } catch (e) {
     showToast(`Couldn't move job: ${e.message}`, "error");
+    if (committedEl && committedEl.value === newStatus) committedEl.value = j.status;
   }
   refreshAppState();
 }
