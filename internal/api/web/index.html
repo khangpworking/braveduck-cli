@@ -93,10 +93,10 @@
 
   <!-- Add-Job Drawer (Paste Form) -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
-  <div class="drawer" id="addJobDrawer">
+  <div class="drawer" id="addJobDrawer" role="dialog" aria-modal="true" aria-label="Add job">
     <div class="drawer-header">
       <h2 class="drawer-title">Add Job</h2>
-      <button class="btn-close" id="closeDrawerBtn">×</button>
+      <button class="btn-close" aria-label="Close" id="closeDrawerBtn">×</button>
     </div>
     <div class="drawer-body">
       <!-- Result banner -->
@@ -120,10 +120,10 @@
 
   <!-- Keywords Config Modal -->
   <div class="modal-overlay" id="keywordsModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Crawler Keywords Configuration">
       <div class="modal-header">
         <h3 class="modal-title">Crawler Keywords Configuration</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <div id="keywordsForm">
@@ -149,10 +149,10 @@
 
   <!-- Rating Config Modal -->
   <div class="modal-overlay" id="locationModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Your location">
       <div class="modal-header">
         <h3 class="modal-title">Your location</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px 0;">
@@ -178,10 +178,10 @@
   </div>
 
   <div class="modal-overlay" id="askModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Ask your AI">
       <div class="modal-header">
         <h3 class="modal-title" id="askTitle">Ask your AI</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px 0;">
@@ -204,10 +204,10 @@
   </div>
 
   <div class="modal-overlay" id="sourcesModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Job sources">
       <div class="modal-header">
         <h3 class="modal-title">Job sources</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
@@ -224,7 +224,7 @@
   </div>
 
   <div class="modal-overlay" id="profileModalOverlay">
-    <div class="modal modal-wide">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Your profile">
       <div class="modal-header">
         <h3 class="modal-title">Your profile</h3>
         <button class="btn-close modal-close-btn" aria-label="Close">×</button>
@@ -245,10 +245,10 @@
   </div>
 
   <div class="modal-overlay" id="cvModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="My CV">
       <div class="modal-header">
         <h3 class="modal-title">My CV</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
@@ -268,10 +268,10 @@
   </div>
 
   <div class="modal-overlay" id="platformsModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Job-site logins">
       <div class="modal-header">
         <h3 class="modal-title">Job-site logins</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
@@ -287,10 +287,10 @@
   </div>
 
   <div class="modal-overlay" id="ratingModalOverlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="AI Rating Configuration">
       <div class="modal-header">
         <h3 class="modal-title">AI Rating Configuration</h3>
-        <button class="btn-close modal-close-btn">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
         <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: var(--spacing-md);">
