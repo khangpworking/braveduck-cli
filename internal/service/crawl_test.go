@@ -223,3 +223,26 @@ func TestCrawlSkipsJobsAlreadyOnBoard(t *testing.T) {
 		t.Fatalf("board has %d jobs, want the 2 pasted + Product Owner once", len(list))
 	}
 }
+
+// skipCrawler records the known-check the service hands a KnownSkipper.
+type skipCrawler struct {
+	fakeCrawler
+	known func(string) bool
+}
+
+func (s *skipCrawler) SkipKnown(known func(string) bool) { s.known = known }
+
+func TestCrawlTellsSkippersWhatsKnown(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	s.AddJob(ctx, NewJob{Title: "Pasted", URL: "https://www.careerlink.vn/tim-viec-lam/ai/1?utm_source=x"})
+	sc := &skipCrawler{fakeCrawler: fakeCrawler{byQuery: map[string][]crawl.Listing{}}}
+	s.SetCrawlers(sc)
+	addTerms(t, s, "search_queries", "ai")
+	if _, err := s.Crawl(ctx, "vietnamworks"); err != nil {
+		t.Fatal(err)
+	}
+	if sc.known == nil || !sc.known("https://www.careerlink.vn/tim-viec-lam/ai/1") || sc.known("https://www.careerlink.vn/tim-viec-lam/other/2") {
+		t.Fatal("the crawler wasn't given a check that knows the board's links")
+	}
+}

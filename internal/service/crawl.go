@@ -136,6 +136,9 @@ func (s *Service) crawlOnce(ctx context.Context, c crawl.Crawler) (CrawlResult, 
 	if err != nil {
 		return res, err
 	}
+	if ks, ok := c.(crawl.KnownSkipper); ok {
+		ks.SkipKnown(func(u string) bool { return len(board.find(jobs.Job{URL: u})) > 0 })
+	}
 	seen := map[string]bool{}
 	var firstErr error
 	for _, q := range queries {
