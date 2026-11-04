@@ -32,7 +32,9 @@ board. The user is a single person managing their own search.
 - Underneath, the **interview rate** = interviews landed ÷ CVs that have had time
   to answer, with `N interviews from M answered applications · K waiting`.
 - A **tiered encouragement message** whose tone escalates with the rate (below
-  3 answered applications it says the rate shows once 3 have an answer).
+  3 answered applications it says it's too early). The rate, counts and message
+  come from the server (`jobs.SuccessRateOf` / `MoraleMessage`, also MCP
+  `get_stats`), not a separate calculation in the board.
 - Rules that define it: a card is *resolved* once it reached interview/offer (a
   win) OR aged past a 14-day response window with no reply (a miss); freshly-sent
   CVs are *pending* (not counted, so they don't unfairly tank the rate). Needs
