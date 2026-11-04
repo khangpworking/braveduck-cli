@@ -44,6 +44,12 @@ type crawlState struct {
 
 // SetCrawlers replaces the built-in crawlers (tests use fakes).
 func (s *Service) SetCrawlers(cs ...crawl.Crawler) {
+	crawlInitMu.Lock()
+	defer crawlInitMu.Unlock()
+	s.setCrawlersLocked(cs...)
+}
+
+func (s *Service) setCrawlersLocked(cs ...crawl.Crawler) {
 	m := map[string]crawl.Crawler{}
 	for _, c := range cs {
 		m[c.Name()] = c
@@ -52,11 +58,16 @@ func (s *Service) SetCrawlers(cs ...crawl.Crawler) {
 }
 
 func (s *Service) crawlers() *crawlState {
+	crawlInitMu.Lock() // the scheduler and the board can get here at once
+	defer crawlInitMu.Unlock()
 	if s.crawl == nil {
-		s.SetCrawlers(crawl.Builtin()...)
+		s.setCrawlersLocked(crawl.Builtin()...)
 	}
 	return s.crawl
 }
+
+// crawlInitMu guards setting up s.crawl.
+var crawlInitMu sync.Mutex
 
 // CrawlResult is what one crawl did.
 type CrawlResult struct {
