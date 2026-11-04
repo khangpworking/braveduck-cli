@@ -1,4 +1,54 @@
-# braveduck-cli — Architecture & Build Plan
+# braveduck-cli — Architecture
+
+## As built (current)
+
+The rest of this file is the original **build plan** (October 2026), kept
+for its reasoning (login model, security, data at rest, API contract). Where
+it names tools or splits work between builders, the code went another way;
+this section is what exists.
+
+**One binary, three faces over one core.** `cmd/braveduck` is the CLI (a
+plain `switch` over subcommands, `flag` per command). `braveduck serve`
+runs the board: `internal/api` (net/http `ServeMux`, the embedded board in
+`internal/api/web`, a per-run token and a localhost-Host guard on every
+request, SSE live updates). `braveduck mcp` runs `internal/mcp` (the
+official `modelcontextprotocol/go-sdk`, stdio). All three call
+**`internal/service`**, which holds every rule once (validation, duplicates,
+the activity feed) and maps errors to `ErrNotFound` / `ErrInvalid` /
+`ErrDuplicate` for each face.
+
+**Storage.** `internal/store`: SQLite through `modernc.org/sqlite` (pure Go,
+no cgo), hand-written SQL, numbered migrations tracked in `PRAGMA
+user_version`. Files beside the database in the data dir (`~/.braveduck`,
+0700): `profile.md`, the uploaded CV (`cv/`), tailored CVs (`cvs/`), the
+session key and daily backups (`backups/`).
+
+**Core packages** (`internal/core/*`, no I/O policy of their own):
+`jobs` (expiry grammar and clocks), `keyword` (crawler filters), `rating`
+(A/B rater config, verdicts), `scrape` (schema.org JobPosting, pasted text,
+supported links, SSRF guard), `crawl` (VietnamWorks API, CareerLink),
+`cvfile` (PDF/.docx/Markdown/HTML text), `platform` (job-site registry),
+`vault` (AES-256-GCM sessions; key from the OS keychain, a key file or a
+passphrase), `browser` (go-rod over a self-provisioned Chromium: login
+windows, assisted-apply windows, PDF printing, page fetching), `topcv`
+(read-only application history), `geo` (OSM Nominatim, cached),
+`jev` (TypeSafe's Jev decision model), `apply`, `markdown`.
+
+**Background work** (`service.RunScheduler`, while the board runs): built-in
+crawlers on their schedules, TopCV status sync, Jev rating, an hourly sweep
+that moves expired jobs to Closed, and a daily database backup. External
+tools (fb-watcher) report their runs with `braveduck crawl-report`.
+
+**The board** is plain HTML/CSS/JS with no build step, embedded with
+`go:embed`; every job field is treated as hostile text (`esc`, `safeUrl`).
+
+**Tests.** `go test ./...` (unit; CI adds `-race` and staticcheck) and
+`go test -tags browser` (real Chromium: the board, logins, PDFs). Specs live
+in `docs/` and `docs/specs/`.
+
+---
+
+# Original build plan (October 2026)
 
 > Working name: **braveduck-cli**. A local-first, single-binary Go tool for the
 > AI-job-hunt-agent community. Three faces over one core: CLI commands, an MCP
