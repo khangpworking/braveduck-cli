@@ -137,3 +137,17 @@ func TestCreateDuplicateIs409(t *testing.T) {
 		t.Fatalf("409 body = %+v, want it to name job #1", body)
 	}
 }
+
+func TestCrawlMessage(t *testing.T) {
+	for _, tc := range []struct {
+		res  service.CrawlResult
+		want string
+	}{
+		{service.CrawlResult{Added: 3}, "3 new job(s) from careerlink"},
+		{service.CrawlResult{Added: 0, Duplicates: 7, Filtered: 2}, "0 new job(s) from careerlink · 7 already on the board · 2 filtered out"},
+	} {
+		if got := crawlMessage("careerlink", tc.res); got != tc.want {
+			t.Errorf("crawlMessage(%+v) = %q, want %q", tc.res, got, tc.want)
+		}
+	}
+}
