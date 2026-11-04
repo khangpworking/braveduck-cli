@@ -26,7 +26,7 @@ Branch from `main` → PR → squash-merge. CI must be green.
 gofmt -l .                                   # must print nothing
 go vet ./... && go vet -tags browser ./...
 go mod tidy && git diff --exit-code go.mod go.sum
-node --check internal/api/web/app.js          # board JS still parses
+for f in internal/api/web/*.js; do node --check "$f"; done   # board JS still parses
 go test -race ./...                           # unit tests (race needs cgo)
 ```
 
