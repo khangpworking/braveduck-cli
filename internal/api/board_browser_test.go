@@ -843,3 +843,53 @@ func TestBoardSettingsMenu(t *testing.T) {
 		t.Fatal("Esc didn't close the menu and return focus")
 	}
 }
+
+// Expiry badges match the sweep: Saved jobs count down from their deadline,
+// Applied ones from the day they were sent; Interview cards have no clock.
+func TestBoardExpiryBadges(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	now := time.Now()
+	day := func(d int) string { return now.AddDate(0, 0, d).Format("2006-01-02") }
+	for _, j := range []jobs.Job{
+		{Title: "Posting closed", Status: "saved", ExpiresAt: "expire:" + day(-3)},
+		{Title: "No reply", Status: "applied", ExpiresAt: "applied:" + day(-22)},
+		{Title: "Just applied", Status: "applied", ExpiresAt: "applied:" + day(-4)},
+		{Title: "Interviewing", Status: "interview", ExpiresAt: "applied:" + day(-60)},
+	} {
+		st.Add(ctx, j, now)
+	}
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	badge := func(title string) string {
+		return page.MustEval(`t => {
+			const card = [...document.querySelectorAll(".card")].find(c => c.querySelector(".card-title").textContent.trim() === t);
+			const b = card && card.querySelector(".expiry-badge");
+			return b ? b.textContent.trim() : "";
+		}`, title).Str()
+	}
+	for title, want := range map[string]string{
+		"Posting closed": "⛔ to Closed in 4d",
+		"No reply":       "⛔ to Closed in 5d",
+		"Just applied":   "📮 4d",
+		"Interviewing":   "",
+	} {
+		if got := badge(title); got != want {
+			t.Errorf("%s: badge %q, want %q", title, got, want)
+		}
+	}
+	if page.MustEval(`() => document.body.innerText.includes("delete in")`).Bool() {
+		t.Error(`a card still says "delete in" — nothing is ever deleted`)
+	}
+}

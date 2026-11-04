@@ -191,14 +191,19 @@ Two apply channels, auto-detected per job:
 
 ## 7. Deadlines & auto-clear
 
-- **Expiry badge** on every card, driven by two clocks:
-  - **Real deadline** (scraped application deadline): grey date → amber
-    "⚠ Nd left" (≤10 days) → red "⛔ delete in Nd" countdown once it closes.
-  - **Apply-silence** (applied cards with no known deadline): grey "📮 Nd" while
-    silent → red "⛔ delete in Nd" once 20 days pass.
-- Cards auto-delete 7 days after their clock expires. **"Keep it"** button
-  (🛟 kept) exempts a card; **pinned** cards are also exempt (show "⛔ closed" /
-  "⛔ no reply" with no countdown). Unknown-deadline cards show a subtle dash.
+- **Expiry badge**, driven by two clocks:
+  - **Real deadline** (Saved / Waiting cards with a scraped application
+    deadline): grey date → amber "⚠ Nd left" (≤10 days) → red
+    "⛔ to Closed in Nd" countdown once it closes.
+  - **Apply-silence** (Applied cards, counted from the day the application was
+    sent): grey "📮 Nd" while silent → red "⛔ to Closed in Nd" once 20 days pass.
+    Interview / Offer cards have no clock.
+- An hourly sweep (while the board runs) **moves** a card to **Closed** when its
+  clock runs out — 7 days after the deadline, or 27 days after applying with no
+  answer — with a note saying why ("Closed automatically: …"). Nothing is
+  deleted; dragging the card back undoes it. **"Keep it"** (🛟 kept) exempts a
+  card; **pinned** cards are also exempt (show "⛔ closed" / "⛔ no reply" with
+  no countdown). Unknown-deadline cards show nothing.
 - Purpose: keep the board fresh without silently losing anything (everything
   warns before it goes, and there are two escape hatches).
 

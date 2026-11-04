@@ -204,3 +204,20 @@ func TestGeoDealbreakers(t *testing.T) {
 		t.Errorf("6yr-old company should not flag: %v", got)
 	}
 }
+
+// Dates are calendar days where the user is: at 03:00 on 3 Nov in Vietnam
+// (still 2 Nov in UTC) a 2 Nov deadline is yesterday, and an application sent
+// on 1 Nov was two days ago.
+func TestDaysAreLocalCalendarDays(t *testing.T) {
+	hcm := time.FixedZone("ICT", 7*3600)
+	early := time.Date(2026, 11, 3, 3, 0, 0, 0, hcm)
+	if got := ExpiryStateOf("expire:2026-11-02", early); got.DaysLeft != -1 {
+		t.Errorf("DaysLeft = %d, want -1", got.DaysLeft)
+	}
+	if got := ExpiryStateOf("expire:2026-11-03", early); got.DaysLeft != 0 || got.State != StateExpired {
+		t.Errorf("deadline today = %+v, want 0 days left (expired, as before)", got)
+	}
+	if a := AppliedStateOf("applied:2026-11-01", early); a.DaysSince != 2 {
+		t.Errorf("DaysSince = %d, want 2", a.DaysSince)
+	}
+}
