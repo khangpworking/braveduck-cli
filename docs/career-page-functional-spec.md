@@ -63,6 +63,8 @@ board. The user is a single person managing their own search.
   present. NOT a crawler on/off switch.
 - **Search box** — filters cards by title, company, location, skills, salary
   and notes as you type (accents optional); `/` focuses it, Esc clears it.
+- **Keyboard:** `n` opens Add Job, `?` lists the shortcuts, Esc closes the open
+  window or drawer (not while writing in a text area).
 - **📄 My CV** and **👤 Profile** — upload the base CV; edit the profile jobs are
   rated against.
 - **⚙ Settings ▾** — a menu for the less-used windows: search terms & filters
