@@ -58,8 +58,10 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "get_activity", "Recent activity-feed events (adds, moves, removals), newest first.", readOnly, t.getActivity)
 
 	// Writes.
-	add(srv, "add_job", "Save a job. Pass `content` (a listing URL — fetched and parsed — or a pasted job description), "+
-		"or describe it field by field with `title` (+ optional company/url/salary/source/jd). "+
+	add(srv, "add_job", "Save a job. Pass `content`: a link from TopCV, VietnamWorks, JobOKO or CareerLink (fetched and parsed), "+
+		"a Facebook post link followed by the post's text (the link isn't opened), or a pasted job description. "+
+		"Links from other sites are refused. Or "+
+		"describe it field by field with `title` (+ optional company/url/salary/source/jd). "+
 		"Fails if the URL is already on the board.", write, t.addJob)
 	add(srv, "update_job", "Change a job's lane, pinned/keep flags, notes, title, company, salary or location. Only the fields you pass change.", idempotentWrite, t.updateJob)
 	add(srv, "set_status", "Move a job to a lane: saved, waiting, applied, interview, offer or closed.", idempotentWrite, t.setStatus)
@@ -170,7 +172,7 @@ type eventsOut struct {
 }
 
 type addIn struct {
-	Content string `json:"content,omitempty" jsonschema:"a listing URL or a pasted job description; use this OR title"`
+	Content string `json:"content,omitempty" jsonschema:"a supported job link (optionally followed by the job text — required to read a Facebook post), or a pasted job description; use this OR title"`
 	Title   string `json:"title,omitempty" jsonschema:"job title, when describing the job field by field"`
 	Company string `json:"company,omitempty"`
 	URL     string `json:"url,omitempty" jsonschema:"listing URL (field-by-field mode; not fetched)"`

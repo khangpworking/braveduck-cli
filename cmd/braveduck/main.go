@@ -26,7 +26,11 @@ const usage = `braveduck — local-first job board
 Usage: braveduck [--db PATH] <command> [args]
 
 Jobs
-  add        add a job            (--title, --company, --url, --salary, --source, --jd)
+  add <link> [text...]
+             add a job from a TopCV, VietnamWorks, JobOKO, CareerLink or
+             Facebook link; text after the link is the post or JD ("-" reads
+             it from stdin). Job text on its own works too.
+  add --title ...   add a job field by field (--company, --url, --salary, --source, --jd)
   list       list jobs            (--status, --source)
   show <id>  job detail
   edit <id>  change details  (--title, --company, --salary, --location, --notes)

@@ -87,9 +87,21 @@ func TestAddFromContent(t *testing.T) {
 		t.Fatal("duplicate URL was fetched before being rejected")
 	}
 
-	s.fetch = scrape.FetchJobPosting // real guard, no network: loopback is refused before any fetch
-	if _, err := s.AddFromContent(ctx, "http://127.0.0.1:6379/"); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("internal URL = %v, want ErrInvalid", err)
+	// Links from other sites (and internal addresses) are refused unfetched.
+	for _, link := range []string{"https://www.linkedin.com/jobs/view/1", "http://127.0.0.1:6379/"} {
+		_, err := s.AddFromContent(ctx, link)
+		if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "TopCV") {
+			t.Fatalf("%s = %v, want ErrInvalid naming the supported sites", link, err)
+		}
+	}
+	if fetched {
+		t.Fatal("an unsupported link was fetched")
+	}
+
+	// A blocked page falls back to the text pasted under the link.
+	j, err = s.AddFromContent(ctx, "https://www.topcv.vn/viec-lam/x/9.html?ta_source=list\nData Analyst\nMoMo")
+	if err != nil || j.Title != "Data Analyst" || j.Company != "MoMo" || j.URL != "https://www.topcv.vn/viec-lam/x/9.html" {
+		t.Fatalf("fallback to pasted text: %v %+v", err, j)
 	}
 
 	if _, err := s.AddFromContent(ctx, "hi"); !errors.Is(err, ErrInvalid) {
@@ -222,5 +234,42 @@ func TestEditDetails(t *testing.T) {
 	}
 	if _, err := s.UpdateJob(ctx, j.ID, Patch{Company: ptr(strings.Repeat("x", 201))}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("too-long company = %v", err)
+	}
+}
+
+func TestAddFromContentFacebook(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	s.fetch = func(context.Context, string) (scrape.JobPosting, bool, error) {
+		t.Fatal("a Facebook link was fetched")
+		return scrape.JobPosting{}, false, nil
+	}
+	fj := &leadJev{}
+	s.SetJev(fj)
+
+	post := "https://m.facebook.com/groups/1/permalink/2/?__cft__[0]=AZ\n" +
+		"Cẩm nang AI Engineer — tuyển gấp\n📍 HCM\nGửi CV về hr@duck.vn"
+	j, err := s.AddFromContent(ctx, post)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.URL != "https://www.facebook.com/groups/1/posts/2/" || j.DiscoverySource != "facebook" ||
+		j.Title != "Cẩm nang AI Engineer" || j.Company != "" || j.ContactEmail != "hr@duck.vn" {
+		t.Fatalf("pasted post: %+v", j)
+	}
+	// The user chose it, so Jev's lead check doesn't close it.
+	if j.Status != "saved" || fj.calls != 0 {
+		t.Fatalf("status %q after %d lead-check calls, want saved and none", j.Status, fj.calls)
+	}
+
+	// fb-watcher's copy of the same post is the same job.
+	if _, err := s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/2"); !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("same post again = %v, want ErrDuplicate", err)
+	}
+
+	// Just the link: a card to fill in later.
+	j, err = s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/3/")
+	if err != nil || j.Title != "Facebook post" {
+		t.Fatalf("bare link: %v %+v", err, j)
 	}
 }
