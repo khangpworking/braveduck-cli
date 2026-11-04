@@ -79,12 +79,17 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "set_crawl_schedule", "Set how often a source fetches new jobs: every_minutes 0 (off) or 15-1440 for built-in crawlers (5-1440 for external tools).", idempotentWrite, t.setCrawlSchedule)
 	add(srv, "set_keywords", "Replace one or more keyword lists. search_queries are what crawlers search for; positive_title / negative_title / negative_content / negative_company filter results. Lists you don't pass are left alone.", idempotentWrite, t.setKeywords)
 	add(srv, "sync_platform", "Read the user's application history on a job site (platform: topcv) with their saved login, read-only, and update the board: TopCV status per job, Saved/Waiting jobs moved to Applied, missing applications added.", write, t.syncPlatform)
+	add(srv, "cv_brief", "Everything needed to tailor the user's CV for one job: their profile, the job, instructions, and the current version if there is one. Write the CV in Markdown, then call submit_cv.", readOnly, t.cvBrief)
+	add(srv, "submit_cv", "Save a tailored CV (Markdown) for a job as a new version. The board offers it as a PDF.", write, t.submitCV)
+	add(srv, "draft_brief", "Everything needed to write an application email for one job: profile, job, contact email, instructions and the user's notes. Then call submit_draft.", readOnly, t.draftBrief)
+	add(srv, "submit_draft", "Save an application email draft (to, subject, body) for the user to review. braveduck never sends it; the user sends it from their own mail app.", write, t.submitDraft)
+	add(srv, "reject_draft", "Discard a job's email draft.", destructive, t.rejectDraft)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
 	// until its subsystem lands (spec: "surface now, body later").
 	for _, name := range []string{
-		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
+		"ask_model",
 		"apply_job",
 	} {
 		addStub(srv, name)
@@ -233,6 +238,23 @@ type scheduleIn struct {
 
 type keywordsIn struct {
 	Lists map[string][]string `json:"lists" jsonschema:"list key → full replacement list of terms"`
+}
+
+type cvIn struct {
+	ID       int64  `json:"id" jsonschema:"the job id"`
+	Markdown string `json:"markdown" jsonschema:"the tailored CV in Markdown (# name, ## sections, - bullets)"`
+}
+
+type draftBriefIn struct {
+	ID    int64  `json:"id" jsonschema:"the job id"`
+	Notes string `json:"notes,omitempty" jsonschema:"the user's steering notes, if any"`
+}
+
+type draftIn struct {
+	ID      int64  `json:"id" jsonschema:"the job id"`
+	To      string `json:"to,omitempty" jsonschema:"recipient; defaults to the job's contact email"`
+	Subject string `json:"subject"`
+	Body    string `json:"body" jsonschema:"plain text"`
 }
 
 type queueIn struct {
@@ -404,4 +426,24 @@ func (t tools) syncPlatform(ctx context.Context, in platformIn) (service.SyncRes
 		return service.SyncResult{}, fmt.Errorf("%w: status sync is available for topcv only", service.ErrInvalid)
 	}
 	return t.svc.SyncTopCV(ctx)
+}
+
+func (t tools) cvBrief(ctx context.Context, in idIn) (service.DocBrief, error) {
+	return t.svc.CVBrief(ctx, in.ID)
+}
+
+func (t tools) submitCV(ctx context.Context, in cvIn) (jobs.Job, error) {
+	return t.svc.SubmitCV(ctx, in.ID, in.Markdown)
+}
+
+func (t tools) draftBrief(ctx context.Context, in draftBriefIn) (service.DocBrief, error) {
+	return t.svc.DraftBrief(ctx, in.ID, in.Notes)
+}
+
+func (t tools) submitDraft(ctx context.Context, in draftIn) (jobs.Job, error) {
+	return t.svc.SubmitDraft(ctx, in.ID, service.Draft{To: in.To, Subject: in.Subject, Body: in.Body})
+}
+
+func (t tools) rejectDraft(ctx context.Context, in idIn) (jobs.Job, error) {
+	return t.svc.RejectDraft(ctx, in.ID)
 }

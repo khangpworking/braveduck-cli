@@ -82,7 +82,7 @@ func TestListsEveryTool(t *testing.T) {
 		"get_profile", "get_rating_queue", "rate_job", "submit_rating",
 		"list_platforms", "connect_platform", "disconnect_platform",
 		"get_crawl_schedule", "set_crawl_schedule",
-		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
+		"ask_model", "cv_brief", "submit_cv", "draft_brief", "submit_draft", "reject_draft",
 		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
 	} {
 		if got[name] == nil {

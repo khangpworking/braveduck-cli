@@ -454,3 +454,38 @@ func (s *Store) SetTopcvStatus(ctx context.Context, id int64, status, detail str
 	}
 	return affectedOne(res)
 }
+
+// SetCV records a job's current tailored CV file and version.
+func (s *Store) SetCV(ctx context.Context, id int64, path string, version int, now time.Time) error {
+	ts := now.UTC().Format(time.RFC3339)
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE jobs SET cv_path = ?, cv_version = ?, cv_status = 'ready', cv_generated_at = ?, updated_at = ? WHERE id = ?",
+		path, version, ts, ts, id)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res)
+}
+
+// SetDraft stores a job's email draft (JSON, or "" to clear it) and status.
+func (s *Store) SetDraft(ctx context.Context, id int64, draftJSON, status string, now time.Time) error {
+	ts := now.UTC().Format(time.RFC3339)
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE jobs SET draft_email = ?, draft_status = ?, draft_status_at = ?, updated_at = ? WHERE id = ?",
+		draftJSON, status, ts, ts, id)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res)
+}
+
+// SetDraftNotes stores the user's steering notes for the next draft.
+func (s *Store) SetDraftNotes(ctx context.Context, id int64, notes string, now time.Time) error {
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE jobs SET draft_notes = ?, updated_at = ? WHERE id = ?",
+		notes, now.UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res)
+}

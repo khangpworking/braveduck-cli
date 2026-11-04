@@ -71,6 +71,12 @@ function decodeExpiresAt(raw) {
   return raw; // legacy bare ISO
 }
 
+function parseDraft(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 function normalizeJob(j) {
   return {
     ...j,
@@ -82,6 +88,8 @@ function normalizeJob(j) {
           ? j.skills.split(",").map(s => s.trim()).filter(Boolean)
           : []),
     expires_at: decodeExpiresAt(j.expires_at),
+    // The store keeps the draft as JSON {to, subject, body}; "" = none.
+    draft_email: parseDraft(j.draft_email),
     ratings: j.ratings || {}
   };
 }
@@ -152,47 +160,37 @@ const APIClient = {
     return res.json();
   },
 
-  async rescore(id) {
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/rate`, { method: "POST" });
-    return res.json();
-  },
-
-  async askModel(id, modelName) {
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/rate/ask`, {
+  // rate / cv / draft return {prompt, brief}: the request for the user's AI.
+  async askRequest(kind, id, body) {
+    const res = await apiFetch(`${API_BASE}/jobs/${id}/${kind}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: modelName })
+      body: JSON.stringify(body || {})
     });
-    return res.json();
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
   },
 
-  async generateCV(id) {
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/cv`, { method: "POST" });
-    return res.json();
-  },
-
-  async draftEmail(id, options = {}) {
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/draft`, {
-      method: "POST",
+  async put(path, body) {
+    const res = await apiFetch(`${API_BASE}/${path}`, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(options)
+      body: JSON.stringify(body)
     });
-    return res.json();
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
   },
 
-  async approveDraft(id, draftEmail) {
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draft_email: draftEmail })
-    });
-    return res.json();
+  async post(path) {
+    const res = await apiFetch(`${API_BASE}/${path}`, { method: "POST" });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
   },
 
-  async rejectDraft(id) {
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/draft/reject`, { method: "POST" });
-    return res.json();
-  },
+
 
   async applyJob(id) {
     // Triggers platform apply engine (on-site apply)
@@ -1171,49 +1169,42 @@ function renderCardDetailContents(job, detailContainer) {
         </div>
       `;
     } else {
-      // Email apply UI (recipient field, editor body)
-      let emailEditorHtml = "";
-      
-      if (job.cv_status === "tailoring") {
-        emailEditorHtml = `<p style="font-size:12px; color:var(--muted)">Tailoring CV and drafting email... Please wait.</p>`;
+      // Email application: your AI writes the draft (Ask AI), you review and
+      // edit it here, and "Send" opens it in your own mail app — braveduck
+      // never sends email and holds no mail password.
+      const draft = job.draft_email;
+      const isSent = job.draft_status === "sent";
+      let emailEditorHtml;
+      if (!draft) {
+        emailEditorHtml = `
+          <p style="font-size:12px; color:var(--muted); margin: 4px 0;">No draft yet.</p>
+          <textarea class="textarea-input" id="draftNotes-${job.id}" style="height:40px; font-size:12px;" placeholder="Optional notes for your AI (tone, what to stress)…">${esc(job.draft_notes)}</textarea>
+          <button class="btn-secondary btn-sm" style="margin-top:6px;" onclick="askAI('draft', '${job.id}')">Ask your AI to draft it</button>`;
       } else {
-        const draft = job.draft_email || { to: job.contact_email || "", subject: "", body: "" };
-        const isSent = job.draft_status === "sent";
-        const readOnlyAttr = isSent ? "readonly" : "";
-        
-        let draftControls = `
-          <div style="display: flex; gap: var(--spacing-xs); margin-top: 8px;">
-            <button class="btn-primary btn-sm" onclick="approveEmailDraft('${job.id}')">Approve & Send</button>
-            <button class="btn-secondary btn-sm" onclick="reDraftEmailTrigger('${job.id}')">Re-draft</button>
-            <button class="btn-danger btn-sm" style="padding: 6px 12px; font-size:12px;" onclick="rejectEmailDraft('${job.id}')">Reject Draft</button>
-          </div>
-          <div style="margin-top: 10px; border-top: 1px dashed var(--hairline); padding-top: 8px;">
-            <label style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase;">Draft Guide Notes (Tone/Availability)</label>
-            <textarea class="textarea-input" id="draftNotes-${job.id}" style="height:40px; font-size:12px; margin-top:4px;" placeholder="Hints to steer re-draft (e.g. emphasize SQL, polite tone)..."></textarea>
-          </div>
-        `;
-        
-        if (isSent) {
-          draftControls = `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">✓ Email successfully approved & sent.</p>`;
-        }
-        
+        const ro = isSent ? "readonly" : "";
         emailEditorHtml = `
           <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
             <div>
               <label style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
-              <input type="text" id="draftTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
+              <input type="text" id="draftTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${ro} style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
             </div>
             <div>
               <label style="font-size:11px; font-weight:600; color:var(--muted)">Subject</label>
-              <input type="text" id="draftSubject-${job.id}" class="text-input" value="${esc(draft.subject || `Ứng tuyển vị trí ${job.title} - CV tailored`)}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
+              <input type="text" id="draftSubject-${job.id}" class="text-input" value="${esc(draft.subject)}" ${ro} style="font-size:12px; padding: 4px 8px;">
             </div>
             <div>
               <label style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
-              <textarea id="draftBody-${job.id}" class="textarea-input" style="height: 120px; font-size: 12px;" ${readOnlyAttr}>${esc(draft.body)}</textarea>
+              <textarea id="draftBody-${job.id}" class="textarea-input" style="height: 140px; font-size: 12px;" ${ro}>${esc(draft.body)}</textarea>
             </div>
-            ${draftControls}
-          </div>
-        `;
+            ${isSent
+              ? `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">✓ Sent (you confirmed sending it).</p>`
+              : `<div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
+                   <button class="btn-primary btn-sm" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>
+                   <button class="btn-secondary btn-sm" onclick="askAI('draft', '${job.id}')">Re-draft</button>
+                   <button class="btn-danger btn-sm" style="padding: 6px 12px; font-size:12px;" onclick="rejectEmailDraft('${job.id}')">Discard</button>
+                 </div>
+                 <p style="font-size:11px; color:var(--muted); margin:0;">Attach the tailored CV PDF in your mail app before sending.</p>`}
+          </div>`;
       }
 
       applyBlockHtml = `
@@ -1224,66 +1215,31 @@ function renderCardDetailContents(job, detailContainer) {
       `;
     }
   } else if (job.status === "Interview") {
-    // Shows interview-reply draft editor
-    let emailEditorHtml = "";
-    const draft = job.draft_email || { to: job.contact_email || "", subject: `Trả lời lịch phỏng vấn - ${job.company}`, body: `Kính gửi ${job.company} HR,\n\nTôi đã nhận được thư mời phỏng vấn. Tôi xin xác nhận lịch hẹn vào lúc...` };
-    const isSent = job.draft_status === "replied-sent";
-    const readOnlyAttr = isSent ? "readonly" : "";
-
-    let draftControls = `
-      <div style="display: flex; gap: var(--spacing-xs); margin-top: 8px;">
-        <button class="btn-primary btn-sm" onclick="sendInterviewReply('${job.id}')">Approve & Send Reply</button>
-      </div>
-    `;
-    if (isSent) {
-      draftControls = `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">✓ Reply sent successfully.</p>`;
-    }
-
-    emailEditorHtml = `
-      <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
-        <div>
-          <label style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
-          <input type="text" id="replyTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${readOnlyAttr} style="font-size:12px; padding: 4px 8px;">
-        </div>
-        <div>
-          <label style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
-          <textarea id="replyBody-${job.id}" class="textarea-input" style="height: 80px; font-size: 12px;" ${readOnlyAttr}>${esc(draft.body)}</textarea>
-        </div>
-        ${draftControls}
-      </div>
-    `;
-
+    // Interview reply: written by you, sent from your own mail app.
     applyBlockHtml = `
       <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-        <div class="detail-title">📨 Recruiter Reply Draft</div>
-        ${emailEditorHtml}
+        <div class="detail-title">📨 Reply to the recruiter</div>
+        <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
+          <input type="text" id="replyTo-${job.id}" class="text-input" value="${esc((job.draft_email && job.draft_email.to) || job.contact_email)}" style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
+          <textarea id="replyBody-${job.id}" class="textarea-input" style="height: 80px; font-size: 12px;" placeholder="Your reply…"></textarea>
+          <button class="btn-primary btn-sm" style="align-self:flex-start;" onclick="sendInterviewReply('${job.id}')">Open in my mail app</button>
+        </div>
       </div>
     `;
   }
 
-  // 7. CV controls & PDF download (Waiting/Applied only)
+  // 7. Tailored CV (your AI writes it; braveduck renders the PDF)
   let cvControlsHtml = "";
-  if (job.status === "Waiting to apply" || job.status === "Applied") {
-    let cvStatusText = "Tailored CV: Not generated yet";
-    let cvButtons = `<button class="btn-secondary btn-sm" onclick="triggerCvTailor('${job.id}')">Generate Tailored CV</button>`;
-
-    if (job.cv_status === "tailoring") {
-      cvStatusText = "Tailored CV: ✍️ Tailoring in progress...";
-      cvButtons = "";
-    } else if (job.cv_status === "ready") {
-      cvStatusText = `Tailored CV: Ready (${esc(job.cv_version)}) · ${new Date(job.cv_generated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
-      cvButtons = `
-        <a href="${safeUrl(job.cv_path)}" download class="btn-secondary btn-sm" onclick="event.stopPropagation(); showToast('Downloading CV.pdf...', 'info');">Download CV.pdf</a>
-        <button class="btn-secondary btn-sm" onclick="triggerCvTailor('${job.id}')">Re-draft CV</button>
-      `;
-    }
-
+  if (job.status === "Saved" || job.status === "Waiting to apply" || job.status === "Applied") {
+    const ready = job.cv_status === "ready";
+    const when = ready && job.cv_generated_at ? new Date(job.cv_generated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "";
     cvControlsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">CV Controls</div>
-        <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${cvStatusText}</p>
-        <div style="display: flex; gap: var(--spacing-xs);">
-          ${cvButtons}
+        <div class="detail-title">Tailored CV</div>
+        <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${ready ? `Version ${esc(job.cv_version)} · ${esc(when)}` : "Not written yet."}</p>
+        <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
+          ${ready ? `<button class="btn-secondary btn-sm" onclick="downloadCV('${job.id}')">Download CV.pdf</button>` : ""}
+          <button class="btn-secondary btn-sm" onclick="askAI('cv', '${job.id}')">${ready ? "Ask your AI to improve it" : "Ask your AI to tailor it"}</button>
         </div>
       </div>
     `;
@@ -1346,49 +1302,127 @@ async function toggleKeepExemption(id) {
 }
 
 async function retryScoring(id) {
-  await APIClient.rescore(id);
-  refreshAppState();
+  askAI("rate", id);
 }
 
 async function askAnotherModel(id) {
-  const select = document.getElementById(`askModelSelect-${id}`);
-  if (select) {
-    const model = select.value;
-    await APIClient.askModel(id, model);
-    refreshAppState();
+  // A challenger rating comes from the user's AI too: same flow as Rate.
+  askAI("rate", id);
+}
+
+// --- Ask your AI (rate / tailor CV / draft email) ------------------------------
+let askState = null;
+
+async function askAI(kind, id) {
+  const notesEl = document.getElementById(`draftNotes-${id}`);
+  let req;
+  try {
+    req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : {});
+  } catch (e) {
+    showToast(e.message, "error");
+    return;
+  }
+  askState = { kind, id, req };
+  const titles = { rate: "Rate this job with your AI", cv: "Tailor your CV with your AI", draft: "Draft the email with your AI" };
+  document.getElementById("askTitle").textContent = titles[kind];
+  document.getElementById("askPrompt").textContent = req.prompt;
+  const paste = document.getElementById("askPasteBlock");
+  paste.style.display = kind === "rate" ? "none" : "block";
+  document.getElementById("askPaste").value = "";
+  document.getElementById("askPaste").placeholder = kind === "cv"
+    ? "…or paste the CV your AI wrote (Markdown) here"
+    : "…or paste the email here: first line \"Subject: …\", then a blank line, then the body";
+  document.getElementById("askModalOverlay").classList.add("open");
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast("Copied.", "success");
+  } catch {
+    showToast("Couldn't copy — select the text and copy it yourself.", "error");
   }
 }
 
-async function triggerCvTailor(id) {
-  await APIClient.generateCV(id);
-  refreshAppState();
+async function saveAskPaste() {
+  const text = document.getElementById("askPaste").value.trim();
+  if (!text || !askState) return;
+  try {
+    if (askState.kind === "cv") {
+      await APIClient.put(`jobs/${askState.id}/cv`, { markdown: text });
+    } else {
+      const [first, ...rest] = text.split("\n");
+      const m = first.match(/^\s*Subject:\s*(.*)$/i);
+      await APIClient.put(`jobs/${askState.id}/draft`, m
+        ? { subject: m[1].trim(), body: rest.join("\n").trim() }
+        : { subject: "", body: text });
+    }
+    document.getElementById("askModalOverlay").classList.remove("open");
+    showToast(askState.kind === "cv" ? "CV saved." : "Draft saved for review.", "success");
+    refreshAppState();
+  } catch (e) {
+    showToast(`Couldn't save: ${e.message}`, "error");
+  }
 }
 
-async function reDraftEmailTrigger(id) {
-  const textNotes = document.getElementById(`draftNotes-${id}`).value;
-  await APIClient.draftEmail(id, { notes: textNotes });
-  refreshAppState();
+async function downloadCV(id) {
+  const res = await apiFetch(`${API_BASE}/jobs/${id}/cv.pdf`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    showToast(err.error || `HTTP ${res.status}`, "error");
+    return;
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: `cv-job-${id}.pdf` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function mailto(to, subject, body) {
+  const q = new URLSearchParams();
+  if (subject) q.set("subject", subject);
+  if (body) q.set("body", body);
+  return `mailto:${encodeURIComponent(to || "")}?${q.toString().replace(/\+/g, "%20")}`;
+}
+
+async function sendEmailDraft(id) {
+  const to = document.getElementById(`draftTo-${id}`).value.trim();
+  const subject = document.getElementById(`draftSubject-${id}`).value;
+  const body = document.getElementById(`draftBody-${id}`).value;
+  try {
+    await APIClient.put(`jobs/${id}/draft`, { to, subject, body }); // keep the user's edits
+  } catch (e) {
+    showToast(`Fix the draft first: ${e.message}`, "error");
+    return;
+  }
+  window.location.href = mailto(to, subject, body);
+  setTimeout(async () => {
+    if (!confirm("Did you send the email from your mail app? (Mark it sent and move the job to Applied)")) return;
+    try {
+      await APIClient.post(`jobs/${id}/draft/sent`);
+      showToast("Marked as sent.", "success");
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+    refreshAppState();
+  }, 1500);
 }
 
 async function rejectEmailDraft(id) {
-  await APIClient.rejectDraft(id);
-  refreshAppState();
-}
-
-async function approveEmailDraft(id) {
-  const to = document.getElementById(`draftTo-${id}`).value;
-  const subject = document.getElementById(`draftSubject-${id}`).value;
-  const body = document.getElementById(`draftBody-${id}`).value;
-  
-  await APIClient.approveDraft(id, { to, subject, body });
-  showToast("Application email approved and sent!", "success");
+  if (!confirm("Discard this draft?")) return;
+  try {
+    await APIClient.post(`jobs/${id}/draft/reject`);
+  } catch (e) {
+    showToast(e.message, "error");
+  }
   refreshAppState();
 }
 
 async function sendInterviewReply(id) {
-  // Email sending isn't wired into braveduck-cli yet; say so rather than
-  // pretending the reply went out.
-  showToast("Sending email isn't available in this build yet.", "error");
+  const to = document.getElementById(`replyTo-${id}`).value.trim();
+  const body = document.getElementById(`replyBody-${id}`).value;
+  const job = AppState.jobs.find(j => j.id === id);
+  window.location.href = mailto(to, job ? `Re: ${job.title}` : "", body);
 }
 
 async function approveOnSiteApply(id) {
@@ -1768,6 +1802,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ratingModal.classList.remove("open");
       platformsModal.classList.remove("open");
       sourcesModal.classList.remove("open");
+      document.getElementById("askModalOverlay").classList.remove("open");
     });
   });
 

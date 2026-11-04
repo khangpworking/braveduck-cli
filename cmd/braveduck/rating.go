@@ -82,33 +82,6 @@ func cmdRate(ctx context.Context, svc *service.Service, args []string) error {
 		fmt.Println("nothing to rate — every open job has a score")
 		return nil
 	}
-	fmt.Print(renderBrief(brief))
+	fmt.Print(service.RenderRatingBrief(brief))
 	return nil
-}
-
-// renderBrief turns a brief into a prompt for any AI chat.
-func renderBrief(b service.RatingBrief) string {
-	var sb strings.Builder
-	sb.WriteString("You are rating job listings for one candidate.\n\n")
-	sb.WriteString("## How to score\n\n" + b.Rubric + "\n\n")
-	sb.WriteString("## The candidate\n\n" + strings.TrimSpace(b.Profile) + "\n\n")
-	sb.WriteString("## Jobs\n")
-	for _, j := range b.Jobs {
-		fmt.Fprintf(&sb, "\n### Job %d: %s", j.ID, j.Title)
-		if j.Company != "" {
-			fmt.Fprintf(&sb, " — %s", j.Company)
-		}
-		sb.WriteString("\n")
-		for _, kv := range [][2]string{{"Location", j.Location}, {"Salary", j.Salary}, {"Skills", j.Skills}, {"URL", j.URL}} {
-			if kv[1] != "" {
-				fmt.Fprintf(&sb, "- %s: %s\n", kv[0], kv[1])
-			}
-		}
-		if j.Description != "" {
-			sb.WriteString("\n" + strings.TrimSpace(j.Description) + "\n")
-		}
-	}
-	sb.WriteString("\n## Answer\n\nFor each job, reply with one line:\n")
-	sb.WriteString("braveduck rate <id> --score <1.0-5.0> --why \"<point> • <point> • <point>\"\n")
-	return sb.String()
 }
