@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -26,8 +27,14 @@ func cmdAdd(ctx context.Context, svc *service.Service, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() > 0 {
+		if *title != "" {
+			return errors.New("add: pass a link/text or --title, not both")
+		}
+		return addFromContent(ctx, svc, fs.Args())
+	}
 	if strings.TrimSpace(*title) == "" {
-		return errors.New("add: --title is required")
+		return errors.New("add: pass a job link or text, or --title (see: braveduck help)")
 	}
 	j, err := svc.AddJob(ctx, service.NewJob{
 		Title: *title, Company: *company, URL: *url,
@@ -37,6 +44,34 @@ func cmdAdd(ctx context.Context, svc *service.Service, args []string) error {
 		return err
 	}
 	fmt.Printf("added job #%d: %s\n", j.ID, j.Title)
+	return nil
+}
+
+// addFromContent is `braveduck add <link> [text…]`: the board's paste box.
+// A "-" argument reads that part from stdin (for a long post).
+func addFromContent(ctx context.Context, svc *service.Service, args []string) error {
+	parts := make([]string, len(args))
+	for i, a := range args {
+		if a == "-" {
+			b, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return err
+			}
+			a = string(b)
+		}
+		parts[i] = a
+	}
+	j, err := svc.AddFromContent(ctx, strings.Join(parts, "\n"))
+	if err != nil {
+		return fmt.Errorf("add: not added — %w", err)
+	}
+	fmt.Printf("added job #%d: %s\n", j.ID, j.Title)
+	if j.Company != "" {
+		fmt.Printf("  company  %s\n", j.Company)
+	}
+	if j.Salary != "" {
+		fmt.Printf("  salary   %s\n", j.Salary)
+	}
 	return nil
 }
 

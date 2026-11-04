@@ -189,6 +189,24 @@ func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	j, err := s.svc.AddFromContent(r.Context(), req.Content)
+	var dup *service.DuplicateError
+	if errors.As(err, &dup) {
+		// Name the jobs it matches, so the board can point at them.
+		type match struct {
+			ID     int64  `json:"id"`
+			Title  string `json:"title"`
+			Status string `json:"status"`
+		}
+		out := struct {
+			Error      string  `json:"error"`
+			Duplicates []match `json:"duplicates"`
+		}{Error: err.Error()}
+		for _, d := range dup.Jobs {
+			out.Duplicates = append(out.Duplicates, match{d.ID, d.Title, d.Status})
+		}
+		writeJSON(w, http.StatusConflict, out)
+		return
+	}
 	reply(w, http.StatusCreated, j, err)
 }
 

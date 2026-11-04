@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/apply"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
@@ -78,53 +79,91 @@ type NewJob struct {
 	Title, Company, URL, Salary, Source, JD string
 }
 
-// AddJob stores a job described field by field.
+// AddJob stores a job described field by field, unless it's already on the
+// board (see duplicates.go).
 func (s *Service) AddJob(ctx context.Context, in NewJob) (jobs.Job, error) {
 	if strings.TrimSpace(in.Title) == "" {
 		return jobs.Job{}, fmt.Errorf("%w: title is required", ErrInvalid)
 	}
-	return s.add(ctx, jobs.Job{
+	j := jobs.Job{
 		Title:           strings.TrimSpace(in.Title),
 		Company:         in.Company,
 		URL:             strings.TrimSpace(in.URL),
 		Salary:          in.Salary,
 		FullJD:          in.JD,
 		DiscoverySource: in.Source,
-	})
+	}
+	if err := s.rejectDuplicates(ctx, j); err != nil {
+		return jobs.Job{}, err
+	}
+	return s.add(ctx, j, true)
 }
 
-// AddFromContent is "Extract & Add", done without any AI: content is either a
-// listing URL (fetched, and its schema.org JobPosting lifted verbatim) or a
-// pasted JD (line/regex heuristics). Fields that can't be read stay empty.
+// AddFromContent is "Extract & Add", done without any AI: content is a link
+// from a supported site (scrape.Sources), optionally followed by the job's
+// text, or a pasted JD on its own. Job-site links are fetched and their
+// schema.org JobPosting lifted verbatim; a Facebook link is never fetched, so
+// its post text is read from the paste. Pasted text is read with line/regex
+// heuristics, and fields that can't be read stay empty.
 func (s *Service) AddFromContent(ctx context.Context, content string) (jobs.Job, error) {
 	content = strings.TrimSpace(content)
 	if len(content) < 5 {
-		return jobs.Job{}, fmt.Errorf("%w: paste a job URL or description", ErrInvalid)
+		return jobs.Job{}, fmt.Errorf("%w: paste a job link or description", ErrInvalid)
+	}
+	link, text := splitLink(content)
+	if link == "" {
+		return s.addPasted(ctx, scrape.ParsePastedJD(content), jobs.Job{DiscoverySource: "paste"})
+	}
+
+	src, canonical, ok := scrape.SupportedLink(link)
+	if !ok {
+		return jobs.Job{}, fmt.Errorf("%w: braveduck reads links from %s — for another site, paste the job's text instead",
+			ErrInvalid, scrape.SourceNames())
+	}
+	j := jobs.Job{URL: canonical, DiscoverySource: src.ID}
+	// Check the link before the (slow) fetch; addPasted checks the rest.
+	if err := s.rejectDuplicates(ctx, j); err != nil {
+		return jobs.Job{}, err
 	}
 
 	var jp scrape.JobPosting
-	j := jobs.Job{}
-	if strings.HasPrefix(content, "http://") || strings.HasPrefix(content, "https://") {
-		j.URL = content
-		// Check for a duplicate before the (slow) fetch; add re-checks atomically.
-		dup, err := s.st.ExistsByURL(ctx, content)
-		if err != nil {
-			return jobs.Job{}, err
-		}
-		if dup {
-			return jobs.Job{}, ErrDuplicate
-		}
-		// Best-effort: a blocked/JS-only page just yields a bare-URL card. A
-		// link to localhost/LAN is refused outright — we never fetch those.
-		jp, _, err = s.fetch(ctx, content)
+	var err error
+	found := false
+	if src.Fetch {
+		// Best-effort: a blocked/JS-only page falls back to the pasted text,
+		// or a bare-URL card. A non-public address is refused outright.
+		jp, found, err = s.fetch(ctx, canonical)
 		if errors.Is(err, scrape.ErrNonPublicURL) {
 			return jobs.Job{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
-	} else {
-		jp = scrape.ParsePastedJD(content)
-		j.DiscoverySource = "paste"
 	}
+	switch {
+	case found:
+	case !src.Fetch && text == "":
+		jp.Title = src.Name + " post" // a bare-link card; the text can be added later
+	case !src.Fetch:
+		jp = scrape.ParsePost(text)
+	case text != "":
+		jp = scrape.ParsePastedJD(text)
+	}
+	return s.addPasted(ctx, jp, j)
+}
 
+// splitLink splits content into a leading http(s) link and the text after it.
+// link is "" when content doesn't start with one.
+func splitLink(content string) (link, text string) {
+	if !strings.HasPrefix(content, "http://") && !strings.HasPrefix(content, "https://") {
+		return "", content
+	}
+	if i := strings.IndexFunc(content, unicode.IsSpace); i >= 0 {
+		return content[:i], strings.TrimSpace(content[i:])
+	}
+	return content, ""
+}
+
+// addPasted fills j from jp and adds it, unless it's already on the board.
+// The user picked this job themselves, so it skips the lead check.
+func (s *Service) addPasted(ctx context.Context, jp scrape.JobPosting, j jobs.Job) (jobs.Job, error) {
 	j.Title = jp.Title
 	if j.Title == "" {
 		j.Title = "Untitled listing"
@@ -138,12 +177,15 @@ func (s *Service) AddFromContent(ctx context.Context, content string) (jobs.Job,
 	if jp.Deadline != "" {
 		j.ExpiresAt = jobs.ExpirePrefix + jp.Deadline
 	}
-	return s.add(ctx, j)
+	if err := s.rejectDuplicates(ctx, j); err != nil {
+		return jobs.Job{}, err
+	}
+	return s.add(ctx, j, false)
 }
 
 // add applies the rules every new job gets, stores it, and logs it.
-func (s *Service) add(ctx context.Context, j jobs.Job) (jobs.Job, error) {
-	saved, err := s.addQuiet(ctx, j)
+func (s *Service) add(ctx context.Context, j jobs.Job, leadCheck bool) (jobs.Job, error) {
+	saved, err := s.save(ctx, j, leadCheck)
 	if err == nil {
 		s.logEvent(ctx, "added", fmt.Sprintf("Added %q", saved.Title))
 	}
@@ -153,6 +195,12 @@ func (s *Service) add(ctx context.Context, j jobs.Job) (jobs.Job, error) {
 // addQuiet is add without the activity line, for bulk adds (a crawl logs one
 // summary line instead of one per job).
 func (s *Service) addQuiet(ctx context.Context, j jobs.Job) (jobs.Job, error) {
+	return s.save(ctx, j, true)
+}
+
+// save applies the rules every new job gets and stores it. leadCheck runs the
+// Jev lead check for the sources it's on for.
+func (s *Service) save(ctx context.Context, j jobs.Job, leadCheck bool) (jobs.Job, error) {
 	j.Status = "saved"
 	j.ScoreStatus = "pending" // queued for a rater
 	if j.DiscoverySource == "" && j.URL != "" {
@@ -169,10 +217,12 @@ func (s *Service) addQuiet(ctx context.Context, j jobs.Job) (jobs.Job, error) {
 
 	// Jev lead check (sources like facebook): a post that clearly isn't a
 	// job goes straight to Closed with the reason — kept, never dropped.
-	if note, notJob := s.leadCheck(ctx, j); notJob {
-		j.Status = "closed"
-		j.ScoreStatus = ""
-		j.Notes = strings.TrimSpace(note + "\n" + j.Notes)
+	if leadCheck {
+		if note, notJob := s.leadCheck(ctx, j); notJob {
+			j.Status = "closed"
+			j.ScoreStatus = ""
+			j.Notes = strings.TrimSpace(note + "\n" + j.Notes)
+		}
 	}
 
 	id, err := s.st.Add(ctx, j, s.now())

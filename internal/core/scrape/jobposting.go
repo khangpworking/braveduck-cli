@@ -44,6 +44,7 @@ var (
 	tagRE     = regexp.MustCompile(`(?s)<[^>]+>`)
 	wsRE      = regexp.MustCompile(`\s+`)
 	emailRE   = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+	digitRE   = regexp.MustCompile(`[0-9]`)
 )
 
 // ExtractJobPosting scans a page's ld+json blocks for a JobPosting node and lifts
@@ -116,12 +117,23 @@ func jobPostingFromNode(n map[string]any) JobPosting {
 // first non-empty line is the title, the second the company, plus a scan for a
 // contact email and a salary line. Skills/description stay empty — no AI guess.
 func ParsePastedJD(text string) JobPosting {
+	return parsePasted(text, true)
+}
+
+// ParsePost is ParsePastedJD for a social-media post: the company is taken only
+// from a phrase that names one, never guessed from the second line (a post's
+// second line is usually a location or an emoji bullet, not an employer).
+func ParsePost(text string) JobPosting {
+	return parsePasted(text, false)
+}
+
+func parsePasted(text string, lineTwoIsCompany bool) JobPosting {
 	phrases := split(text, phraseBreakRE)
 	jp := JobPosting{Description: cleanText(text)}
 	if len(phrases) > 0 {
 		jp.Title = truncate(phrases[0], 120)
 	}
-	jp.Company = pastedCompany(text, phrases)
+	jp.Company = pastedCompany(text, phrases, lineTwoIsCompany)
 	jp.Email = emailRE.FindString(text)
 	// Salary is read per sentence, not per phrase, so a spaced range
 	// ("$1,500 - $2,000") isn't cut at its dash.
@@ -156,11 +168,14 @@ var companyRE = regexp.MustCompile(`(?i)(^|\s)(công ty|cty|tập đoàn|company
 
 // pastedCompany finds the employer: the first phrase after the title that looks
 // like a company name, else (multi-line pastes) the second line, as before.
-func pastedCompany(text string, segs []string) string {
+func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 	for i, seg := range segs {
 		if i > 0 && companyRE.MatchString(seg) && len(seg) <= 120 {
 			return strings.TrimSpace(labelRE.ReplaceAllString(seg, ""))
 		}
+	}
+	if !lineTwoIsCompany {
+		return ""
 	}
 	var lines []string
 	for _, l := range strings.Split(text, "\n") {
@@ -357,6 +372,11 @@ func salary(v any) string {
 		out = "up to " + maxV
 	default:
 		return ""
+	}
+	// A word instead of a figure ("Thương lượng", "Negotiable") takes no
+	// currency or period.
+	if !digitRE.MatchString(out) {
+		return out
 	}
 	if cur != "" {
 		out += " " + cur

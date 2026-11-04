@@ -47,3 +47,23 @@ func TestParsePastedJD(t *testing.T) {
 		})
 	}
 }
+
+func TestParsePostDoesNotGuessCompany(t *testing.T) {
+	post := "🚀 HIRING SENIOR AI ENGINEER\n📍 Location: Ho Chi Minh City\n💰 Salary: Negotiable\nSend your CV to hr@hconnect.com.vn"
+	jp := ParsePost(post)
+	if jp.Title != "🚀 HIRING SENIOR AI ENGINEER" || jp.Company != "" || jp.Email != "hr@hconnect.com.vn" {
+		t.Fatalf("got title=%q company=%q email=%q", jp.Title, jp.Company, jp.Email)
+	}
+	if jp := ParsePost(post + "\nCông ty TNHH HConnect"); jp.Company != "Công ty TNHH HConnect" {
+		t.Fatalf("named company = %q, want it read", jp.Company)
+	}
+}
+
+func TestSalaryWordTakesNoUnit(t *testing.T) {
+	page := `<script type="application/ld+json">{"@type":"JobPosting","title":"T",
+		"baseSalary":{"@type":"MonetaryAmount","currency":"USD","value":{"value":"Thương lượng","unitText":"HOUR"}}}</script>`
+	jp, ok := ExtractJobPosting(page)
+	if !ok || jp.Salary != "Thương lượng" {
+		t.Fatalf("salary = %q (ok=%v), want the bare word", jp.Salary, ok)
+	}
+}

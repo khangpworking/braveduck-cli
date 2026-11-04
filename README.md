@@ -25,7 +25,8 @@ Requires Go 1.25+.
 
 ```bash
 go install github.com/khangpworking/braveduck-cli/cmd/braveduck@latest
-braveduck add --title "Data Analyst" --company "Duck Co" --url https://www.topcv.vn/...
+braveduck add https://www.topcv.vn/viec-lam/...   # TopCV, VietnamWorks, JobOKO, CareerLink
+braveduck add https://www.facebook.com/groups/.../posts/.../ - < post.txt   # Facebook: link + post text
 braveduck list
 braveduck serve        # web board on http://127.0.0.1:8080
 ```

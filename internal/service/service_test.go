@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -87,9 +89,21 @@ func TestAddFromContent(t *testing.T) {
 		t.Fatal("duplicate URL was fetched before being rejected")
 	}
 
-	s.fetch = scrape.FetchJobPosting // real guard, no network: loopback is refused before any fetch
-	if _, err := s.AddFromContent(ctx, "http://127.0.0.1:6379/"); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("internal URL = %v, want ErrInvalid", err)
+	// Links from other sites (and internal addresses) are refused unfetched.
+	for _, link := range []string{"https://www.linkedin.com/jobs/view/1", "http://127.0.0.1:6379/"} {
+		_, err := s.AddFromContent(ctx, link)
+		if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "TopCV") {
+			t.Fatalf("%s = %v, want ErrInvalid naming the supported sites", link, err)
+		}
+	}
+	if fetched {
+		t.Fatal("an unsupported link was fetched")
+	}
+
+	// A blocked page falls back to the text pasted under the link.
+	j, err = s.AddFromContent(ctx, "https://www.topcv.vn/viec-lam/x/9.html?ta_source=list\nData Analyst\nMoMo")
+	if err != nil || j.Title != "Data Analyst" || j.Company != "MoMo" || j.URL != "https://www.topcv.vn/viec-lam/x/9.html" {
+		t.Fatalf("fallback to pasted text: %v %+v", err, j)
 	}
 
 	if _, err := s.AddFromContent(ctx, "hi"); !errors.Is(err, ErrInvalid) {
@@ -222,5 +236,92 @@ func TestEditDetails(t *testing.T) {
 	}
 	if _, err := s.UpdateJob(ctx, j.ID, Patch{Company: ptr(strings.Repeat("x", 201))}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("too-long company = %v", err)
+	}
+}
+
+func TestAddFromContentFacebook(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	s.fetch = func(context.Context, string) (scrape.JobPosting, bool, error) {
+		t.Fatal("a Facebook link was fetched")
+		return scrape.JobPosting{}, false, nil
+	}
+	fj := &leadJev{}
+	s.SetJev(fj)
+
+	post := "https://m.facebook.com/groups/1/permalink/2/?__cft__[0]=AZ\n" +
+		"Cẩm nang AI Engineer — tuyển gấp\n📍 HCM\nGửi CV về hr@duck.vn"
+	j, err := s.AddFromContent(ctx, post)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.URL != "https://www.facebook.com/groups/1/posts/2/" || j.DiscoverySource != "facebook" ||
+		j.Title != "Cẩm nang AI Engineer" || j.Company != "" || j.ContactEmail != "hr@duck.vn" {
+		t.Fatalf("pasted post: %+v", j)
+	}
+	// The user chose it, so Jev's lead check doesn't close it.
+	if j.Status != "saved" || fj.calls != 0 {
+		t.Fatalf("status %q after %d lead-check calls, want saved and none", j.Status, fj.calls)
+	}
+
+	// fb-watcher's copy of the same post is the same job.
+	if _, err := s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/2"); !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("same post again = %v, want ErrDuplicate", err)
+	}
+
+	// Just the link: a card to fill in later.
+	j, err = s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/3/")
+	if err != nil || j.Title != "Facebook post" {
+		t.Fatalf("bare link: %v %+v", err, j)
+	}
+}
+
+func TestAddFromContentRejectsDuplicates(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	post := "HIRING AI ENGINEER at a fintech startup, remote friendly, send your CV to hr@duck.vn"
+	// Stored the way fb-watcher adds a post: its text, then a footer.
+	watched, _ := s.AddJob(ctx, NewJob{Title: "HIRING AI ENGINEER", Company: "AI Jobs VN", Source: "facebook",
+		URL: "https://www.facebook.com/groups/1/posts/2/", JD: post + "\n\n---\nAuthor: Vy\nGroup: AI Jobs VN (https://www.facebook.com/groups/1/)\nMatched keywords: ai"})
+	legacy, _ := s.AddJob(ctx, NewJob{Title: "Growth Marketer", URL: "https://www.topcv.vn/viec-lam/x/1.html?ta_source=list"})
+	analyst, _ := s.AddJob(ctx, NewJob{Title: "Data Analyst", Company: "MoMo"})
+
+	for _, tc := range []struct {
+		name, paste string
+		want        jobs.Job
+	}{
+		{"link stored with tracking parts", "https://www.topcv.vn/viec-lam/x/1.html", legacy},
+		{"same title at the same company", "data analyst\nMOMO\nSalary: $2,000", analyst},
+		{"same post text under another link", "https://www.facebook.com/groups/1/posts/999/\n" + post, watched},
+		{"same post text on its own", "  " + strings.ToLower(post), watched},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.AddFromContent(ctx, tc.paste)
+			var dup *DuplicateError
+			if !errors.Is(err, ErrDuplicate) || !errors.As(err, &dup) || len(dup.Jobs) != 1 || dup.Jobs[0].ID != tc.want.ID {
+				t.Fatalf("err = %v, want a duplicate of #%d", err, tc.want.ID)
+			}
+			if want := fmt.Sprintf("#%d %q (saved)", tc.want.ID, tc.want.Title); !strings.Contains(err.Error(), want) {
+				t.Fatalf("message %q doesn't name %s", err, want)
+			}
+		})
+	}
+
+	// fb-watcher seeing a post the user pasted first is refused too.
+	pasted, _ := s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/7/\nKế toán tổng hợp, làm việc tại quận 1, lương 15 triệu, gửi CV về ketoan@duck.vn")
+	_, err := s.AddJob(ctx, NewJob{Title: "Kế toán tổng hợp", Company: "AI Jobs VN", Source: "facebook", URL: "https://www.facebook.com/groups/1/posts/7/"})
+	var dup *DuplicateError
+	if !errors.As(err, &dup) || dup.Jobs[0].ID != pasted.ID {
+		t.Fatalf("fb-watcher re-add = %v, want a duplicate of #%d", err, pasted.ID)
+	}
+
+	// Same title elsewhere, or a short generic paste, is a new job.
+	for _, paste := range []string{"Data Analyst\nZaloPay", "HIRING AI ENGINEER"} {
+		if _, err := s.AddFromContent(ctx, paste); err != nil {
+			t.Fatalf("%q: %v, want added", paste, err)
+		}
+	}
+	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 6 {
+		t.Fatalf("board has %d jobs, want the 4 originals + 2 new", len(list))
 	}
 }

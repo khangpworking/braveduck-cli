@@ -445,3 +445,44 @@ func openModal(t *testing.T, page *rod.Page, btnID, overlayID string) {
 	}
 	t.Fatalf("%s didn't open %s", btnID, overlayID)
 }
+
+// Pasting a job that's already on the board is refused with a warning that
+// names the job (escaped), and "Show" takes the user to its card.
+func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	svc.AddJob(ctx, service.NewJob{Title: `<img src=x onerror="window.__pwned=1">Analyst`, URL: "https://www.topcv.vn/viec-lam/x/1.html"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	page.MustElement("#openDrawerBtn").MustClick()
+	page.MustElement("#pasteJDTextarea").MustInput("https://www.topcv.vn/viec-lam/x/1.html?ta_source=list")
+	page.MustElement("#extractAddBtn").MustClick()
+
+	banner := page.MustElement("#extractResultBanner li")
+	if txt := banner.MustText(); !strings.Contains(txt, "#1") || !strings.Contains(txt, "Analyst") || !strings.Contains(txt, "(saved)") {
+		t.Fatalf("banner = %q, want it to name #1", txt)
+	}
+	if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#extractResultBanner img")`).Bool() {
+		t.Fatal("duplicate's title injected markup into the banner")
+	}
+	if list, _ := svc.ListJobs(ctx, service.ListFilter{}); len(list) != 1 {
+		t.Fatalf("%d jobs, want the duplicate refused", len(list))
+	}
+
+	banner.MustElement("button").MustClick()
+	page.MustElement(`#detail-1`)
+	if page.MustEval(`() => document.getElementById("addJobDrawer").classList.contains("open")`).Bool() {
+		t.Fatal("Add drawer still open after Show")
+	}
+}

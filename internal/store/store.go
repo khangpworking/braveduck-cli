@@ -287,18 +287,6 @@ func (s *Store) Get(ctx context.Context, id int64) (jobs.Job, error) {
 	return scanJob(row)
 }
 
-// ExistsByURL reports whether a job with this exact URL is stored — a cheap
-// pre-check so Extract & Add can skip a slow fetch for a duplicate (Add itself
-// re-checks atomically). An empty URL never matches.
-func (s *Store) ExistsByURL(ctx context.Context, url string) (bool, error) {
-	if url == "" {
-		return false, nil
-	}
-	var n int
-	err := s.db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE url = ?)", url).Scan(&n)
-	return n == 1, err
-}
-
 // ListFilter narrows List; empty fields mean "no filter on that column".
 type ListFilter struct {
 	Status string

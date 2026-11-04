@@ -493,6 +493,15 @@ a:hover {
   border-left: 4px solid var(--success-border);
 }
 
+.card.flash {
+  animation: card-flash 2s ease-out;
+}
+
+@keyframes card-flash {
+  0%, 40% { box-shadow: 0 0 0 3px var(--signature-mustard); }
+  100% { box-shadow: none; }
+}
+
 .card-badges {
   display: flex;
   flex-wrap: wrap;

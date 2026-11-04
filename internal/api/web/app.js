@@ -151,11 +151,13 @@ const APIClient = {
       body: JSON.stringify({ content: pasteContent })
     });
     if (!res.ok) {
-      // 409 gets its own banner; anything else (a too-short paste, a link to
-      // localhost/LAN, ...) surfaces the server's message verbatim.
-      if (res.status === 409) throw new Error("duplicate");
+      // 409 gets its own banner naming the jobs it matches; anything else (a
+      // too-short paste, a link from another site, ...) surfaces the server's
+      // message verbatim.
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `HTTP ${res.status}`);
+      const err = new Error(body.error || `HTTP ${res.status}`);
+      if (res.status === 409) err.duplicates = body.duplicates || [];
+      throw err;
     }
     return res.json();
   },
@@ -1401,6 +1403,22 @@ function toggleCardDetail(id) {
   renderBoard();
 }
 
+// showJobCard closes the Add drawer and opens, scrolls to and flashes a card
+// (the job a rejected paste duplicates).
+function showJobCard(id) {
+  document.getElementById("closeDrawerBtn").click();
+  AppState.expandedCards.add(id);
+  renderBoard();
+  const card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  if (!card) {
+    showToast(`Job #${id} is hidden by the current filter`, "info");
+    return;
+  }
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 2000);
+}
+
 async function togglePin(id) {
   await APIClient.pinJob(id);
   refreshAppState();
@@ -1846,8 +1864,12 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.color = "#991b1b";
       extractResultBanner.style.border = "1px solid #fecaca";
       
-      if (err.message === "duplicate") {
-        extractResultBanner.innerText = "⚠️ Already in tracker: This job listing already exists in your Kanban pipeline.";
+      if (err.duplicates) {
+        const matches = err.duplicates.map(d =>
+          `<li>#${esc(String(d.id))} ${esc(d.title)} <em>(${esc(d.status)})</em> ` +
+          `<button class="btn-secondary btn-sm" onclick="showJobCard('${esc(String(d.id))}')">Show</button></li>`).join("");
+        extractResultBanner.innerHTML = `⚠️ <strong>Not added: this job is already on the board.</strong>` +
+          `<ul style="margin: 6px 0 0; padding-left: 18px;">${matches}</ul>`;
       } else {
         extractResultBanner.innerText = `❌ Couldn't add this job: ${err.message}`;
       }
