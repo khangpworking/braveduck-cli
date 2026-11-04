@@ -35,6 +35,13 @@ type Crawler interface {
 	Search(ctx context.Context, query string) ([]Listing, error)
 }
 
+// KnownSkipper is a crawler that can skip the costly part of a listing (its
+// detail page) when the board already has it: the service passes known
+// before each crawl, and such listings come back with just URL and Title.
+type KnownSkipper interface {
+	SkipKnown(known func(url string) bool)
+}
+
 // Builtin returns braveduck's own crawlers.
 func Builtin() []Crawler {
 	return []Crawler{NewVietnamWorks(), NewCareerLink()}

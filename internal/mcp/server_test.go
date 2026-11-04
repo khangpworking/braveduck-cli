@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,7 +80,7 @@ func TestListsEveryTool(t *testing.T) {
 		"list_jobs", "get_job", "add_job", "update_job", "delete_job", "set_status",
 		"pin_job", "keep_job", "get_keywords", "get_rating_config", "set_rating_config",
 		"get_stats", "get_today", "get_crawl_status", "get_activity",
-		"get_profile", "update_profile", "get_rating_queue", "rate_job", "submit_rating",
+		"get_profile", "update_profile", "upload_cv", "get_rating_queue", "rate_job", "submit_rating",
 		"list_platforms", "connect_platform", "disconnect_platform",
 		"get_crawl_schedule", "set_crawl_schedule",
 		"ask_model", "cv_brief", "submit_cv", "draft_brief", "submit_draft", "reject_draft",
@@ -254,5 +256,32 @@ func TestPlatformTools(t *testing.T) {
 	call(t, cs, "disconnect_platform", map[string]any{"platform": "topcv"}, &d)
 	if d.Deleted {
 		t.Fatal("disconnect reported a deletion with nothing saved")
+	}
+}
+
+// upload_cv reads a CV file the user names: kept, and its text in the
+// profile; replacing the user's own About me needs replace:true.
+func TestUploadCVTool(t *testing.T) {
+	cs := connect(t)
+	dir := t.TempDir()
+	cv := filepath.Join(dir, "cv.md")
+	os.WriteFile(cv, []byte("# Khang\n\nMarketing AI, three years of n8n automation at Duck Co."), 0o600)
+
+	var got service.BaseCV
+	call(t, cs, "upload_cv", map[string]any{"path": cv}, &got)
+	if got.Name != "cv.md" || !got.ProfileFilled {
+		t.Fatalf("upload = %+v", got)
+	}
+	res := call(t, cs, "upload_cv", map[string]any{"path": cv}, nil)
+	if !res.IsError || !strings.Contains(text(res), "About me") {
+		t.Fatalf("second upload = %q (IsError=%v), want the ask-first error", text(res), res.IsError)
+	}
+	if res := call(t, cs, "upload_cv", map[string]any{"path": cv, "replace": true}, nil); res.IsError {
+		t.Fatalf("replace = %q", text(res))
+	}
+	for _, bad := range []string{filepath.Join(dir, "missing.pdf"), dir} {
+		if res := call(t, cs, "upload_cv", map[string]any{"path": bad}, nil); !res.IsError {
+			t.Errorf("%s accepted", bad)
+		}
 	}
 }

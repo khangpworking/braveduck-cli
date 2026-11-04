@@ -49,7 +49,7 @@ func TestAskRejectsBadAnswersAndRedactsKey(t *testing.T) {
 		srv.Close()
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "bad key "+r.Header.Get("Authorization"), 401)
+		http.Error(w, "bad key "+r.Header.Get("Authorization"), http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 	c := New("sk-secret-999")
