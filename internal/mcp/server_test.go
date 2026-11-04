@@ -79,7 +79,7 @@ func TestListsEveryTool(t *testing.T) {
 	for _, name := range []string{
 		"list_jobs", "get_job", "add_job", "update_job", "delete_job", "set_status",
 		"pin_job", "keep_job", "get_keywords", "get_rating_config", "set_rating_config",
-		"get_stats", "get_today", "get_crawl_status", "get_activity",
+		"get_stats", "get_setup", "get_today", "get_crawl_status", "get_activity",
 		"get_profile", "update_profile", "upload_cv", "get_rating_queue", "rate_job", "submit_rating",
 		"list_platforms", "connect_platform", "disconnect_platform",
 		"get_crawl_schedule", "set_crawl_schedule",
@@ -283,5 +283,19 @@ func TestUploadCVTool(t *testing.T) {
 		if res := call(t, cs, "upload_cv", map[string]any{"path": bad}, nil); !res.IsError {
 			t.Errorf("%s accepted", bad)
 		}
+	}
+}
+
+func TestGetSetupTool(t *testing.T) {
+	cs := connect(t)
+	var st service.SetupStatus
+	call(t, cs, "get_setup", map[string]any{}, &st)
+	if st.Done || st.AboutMe || st.SearchQueries != 0 {
+		t.Fatalf("fresh setup = %+v", st)
+	}
+	call(t, cs, "set_keywords", map[string]any{"lists": map[string]any{"search_queries": []string{"n8n"}}}, nil)
+	call(t, cs, "get_setup", map[string]any{}, &st)
+	if st.SearchQueries != 1 {
+		t.Fatalf("after set_keywords = %+v", st)
 	}
 }
