@@ -1132,3 +1132,58 @@ a:hover {
 .search-input + .filters {
   flex: 1;
 }
+
+/* Today */
+.today-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+.today-group-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.today-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.today-item {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font: inherit;
+  color: var(--link, #1d4ed8);
+  text-align: left;
+  cursor: pointer;
+}
+.today-item:hover {
+  text-decoration: underline;
+}
+.today-item .today-why {
+  color: var(--muted);
+  margin-left: 6px;
+}
+.today-empty {
+  color: var(--muted);
+}
+.today-stats {
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.today-stats .today-rate {
+  font-weight: 700;
+  color: var(--ink, inherit);
+  margin-right: 6px;
+}
+.today-stats .morale-message {
+  margin-top: 4px;
+  font-size: 12px;
+}
