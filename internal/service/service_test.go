@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -271,5 +273,46 @@ func TestAddFromContentFacebook(t *testing.T) {
 	j, err = s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/3/")
 	if err != nil || j.Title != "Facebook post" {
 		t.Fatalf("bare link: %v %+v", err, j)
+	}
+}
+
+func TestAddFromContentRejectsDuplicates(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	post := "HIRING AI ENGINEER at a fintech startup, remote friendly, send your CV to hr@duck.vn"
+	watched, _ := s.AddJob(ctx, NewJob{Title: "HIRING AI ENGINEER", Company: "AI Jobs VN", Source: "facebook",
+		URL: "https://www.facebook.com/groups/1/posts/2/", JD: post})
+	legacy, _ := s.AddJob(ctx, NewJob{Title: "Growth Marketer", URL: "https://www.topcv.vn/viec-lam/x/1.html?ta_source=list"})
+	analyst, _ := s.AddJob(ctx, NewJob{Title: "Data Analyst", Company: "MoMo"})
+
+	for _, tc := range []struct {
+		name, paste string
+		want        jobs.Job
+	}{
+		{"link stored with tracking parts", "https://www.topcv.vn/viec-lam/x/1.html", legacy},
+		{"same title at the same company", "data analyst\nMOMO\nSalary: $2,000", analyst},
+		{"same post text under another link", "https://www.facebook.com/groups/1/posts/999/\n" + post, watched},
+		{"same post text on its own", "  " + strings.ToLower(post), watched},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.AddFromContent(ctx, tc.paste)
+			var dup *DuplicateError
+			if !errors.Is(err, ErrDuplicate) || !errors.As(err, &dup) || len(dup.Jobs) != 1 || dup.Jobs[0].ID != tc.want.ID {
+				t.Fatalf("err = %v, want a duplicate of #%d", err, tc.want.ID)
+			}
+			if want := fmt.Sprintf("#%d %q (saved)", tc.want.ID, tc.want.Title); !strings.Contains(err.Error(), want) {
+				t.Fatalf("message %q doesn't name %s", err, want)
+			}
+		})
+	}
+
+	// Same title elsewhere, or a short generic paste, is a new job.
+	for _, paste := range []string{"Data Analyst\nZaloPay", "HIRING AI ENGINEER"} {
+		if _, err := s.AddFromContent(ctx, paste); err != nil {
+			t.Fatalf("%q: %v, want added", paste, err)
+		}
+	}
+	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 5 {
+		t.Fatalf("board has %d jobs, want the 3 originals + 2 new", len(list))
 	}
 }

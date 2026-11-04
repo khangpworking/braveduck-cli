@@ -288,7 +288,7 @@ func (s *Store) Get(ctx context.Context, id int64) (jobs.Job, error) {
 }
 
 // ExistsByURL reports whether a job with this exact URL is stored — a cheap
-// pre-check so Extract & Add can skip a slow fetch for a duplicate (Add itself
+// pre-check so a crawl can skip a listing it already has (Add itself
 // re-checks atomically). An empty URL never matches.
 func (s *Store) ExistsByURL(ctx context.Context, url string) (bool, error) {
 	if url == "" {

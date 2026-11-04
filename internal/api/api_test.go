@@ -118,7 +118,22 @@ func TestCreateDuplicateIs409(t *testing.T) {
 	if _, err := st.Add(context.Background(), jobs.Job{Title: "X", URL: "https://www.topcv.vn/j/1"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if resp := do(t, http.MethodPost, ts.URL+"/api/jobs", `{"content":"https://www.topcv.vn/j/1"}`); resp.StatusCode != http.StatusConflict {
+	resp := do(t, http.MethodPost, ts.URL+"/api/jobs", `{"content":"https://www.topcv.vn/j/1?utm_source=x"}`)
+	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("duplicate = %d, want 409", resp.StatusCode)
+	}
+	var body struct {
+		Error      string `json:"error"`
+		Duplicates []struct {
+			ID     int64  `json:"id"`
+			Title  string `json:"title"`
+			Status string `json:"status"`
+		} `json:"duplicates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Duplicates) != 1 || body.Duplicates[0].ID != 1 || body.Duplicates[0].Title != "X" || !strings.Contains(body.Error, "#1") {
+		t.Fatalf("409 body = %+v, want it to name job #1", body)
 	}
 }

@@ -62,11 +62,8 @@ func addFromContent(ctx context.Context, svc *service.Service, args []string) er
 		parts[i] = a
 	}
 	j, err := svc.AddFromContent(ctx, strings.Join(parts, "\n"))
-	if errors.Is(err, service.ErrDuplicate) {
-		return errors.New("add: that job is already on the board")
-	}
 	if err != nil {
-		return err
+		return fmt.Errorf("add: not added — %w", err)
 	}
 	fmt.Printf("added job #%d: %s\n", j.ID, j.Title)
 	if j.Company != "" {
