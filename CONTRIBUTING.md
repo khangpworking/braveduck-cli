@@ -40,6 +40,22 @@ CLOAKBROWSER_BINARY_PATH=/path/to/chrome go test -tags browser ./internal/core/b
 On minimal Linux or WSL, Chromium needs `libnss3` and `libasound2`
 (`sudo apt install -y libnss3 libasound2t64`).
 
+Writing board tests:
+
+- Put a new feature's tests in its own `internal/api/*_browser_test.go` file
+  (with `//go:build browser`). Two PRs that both append to
+  `board_browser_test.go` conflict.
+- Click with `clickID(page, id)` or `el.MustEval("() => this.click()")`.
+  rod's pointer `MustClick` waits for the element to be visible, stable and
+  uncovered, and a toast or a reflow can stall it for the full timeout. Only
+  tests that check hit-testing itself (the narrow-viewport test) use real
+  pointer clicks.
+- Every button needs a spoken name: text with letters, or an `aria-label`
+  (`TestBoardButtonsHaveNames`).
+- Wait for state with `waitUntil` or rod's `MustElement*`, never `time.Sleep`.
+  On WSL the suite sometimes freezes in a random test; CI's Linux runners are
+  the judge.
+
 ## Rules that matter
 
 - **Never store or log secrets.** Session data only leaves `internal/service`
