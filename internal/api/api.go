@@ -14,6 +14,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html"
 	"io/fs"
 	"net"
@@ -21,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -60,6 +62,9 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("POST /api/platforms/{name}/login", s.connectPlatform)
 	mux.HandleFunc("DELETE /api/platforms/{name}/login", s.disconnectPlatform)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
+	mux.HandleFunc("PUT /api/keywords", s.putKeywords)
+	mux.HandleFunc("GET /api/crawl-schedule", s.getCrawlSchedule)
+	mux.HandleFunc("PUT /api/crawl-schedule/{source}", s.putCrawlSchedule)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
 	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
 	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
@@ -266,16 +271,60 @@ func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, ev, err)
 }
 
-// retryCrawl is an honest not-implemented stub: crawlers aren't ported into
-// braveduck-cli yet (they need the captured-session/browser layer), so there's
-// no run to re-trigger. Returns 501 with a clear message rather than faking
-// success, so the board can tell the user the truth.
+// retryCrawl runs a built-in crawler now (the board's "Retry" / "Crawl now").
+// External sources run in their own tool, so there's nothing to start here;
+// that's a 501 with a clear message rather than a faked success.
 func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]any{
-		"ok":      false,
-		"source":  r.PathValue("source"),
-		"message": "braveduck can't restart this source — it's run by its own tool (e.g. fb-watcher); restart it there",
-	})
+	source := r.PathValue("source")
+	builtin := false
+	for _, id := range s.svc.BuiltinCrawlers() {
+		builtin = builtin || id == source
+	}
+	if !builtin {
+		writeJSON(w, http.StatusNotImplemented, map[string]any{
+			"ok":      false,
+			"source":  source,
+			"message": "braveduck can't restart this source — it's run by its own tool (e.g. fb-watcher); restart it there",
+		})
+		return
+	}
+	// Finish the crawl even if the board tab goes away mid-request.
+	res, err := s.svc.Crawl(context.WithoutCancel(r.Context()), source)
+	if errors.Is(err, service.ErrCrawlRunning) {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	if err != nil && !errors.Is(err, service.ErrInvalid) {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "source": source, "message": err.Error()})
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true, "source": source, "result": res,
+		"message": fmt.Sprintf("%d new job(s) from %s", res.Added, source)}, err)
+}
+
+func (s *server) putKeywords(w http.ResponseWriter, r *http.Request) {
+	var sets keyword.Sets
+	if !decode(w, r, &sets) {
+		return
+	}
+	out, err := s.svc.SetKeywords(r.Context(), sets)
+	reply(w, http.StatusOK, out, err)
+}
+
+func (s *server) getCrawlSchedule(w http.ResponseWriter, r *http.Request) {
+	scheds, err := s.svc.CrawlSchedules(r.Context())
+	reply(w, http.StatusOK, scheds, err)
+}
+
+func (s *server) putCrawlSchedule(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		EveryMinutes int `json:"every_minutes"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	sc, err := s.svc.SetCrawlSchedule(r.Context(), r.PathValue("source"), in.EveryMinutes)
+	reply(w, http.StatusOK, sc, err)
 }
 
 // listPlatforms is each job site's login status (never session data).

@@ -53,9 +53,12 @@ Job-site logins (you log in yourself; braveduck keeps the session, encrypted)
   logout <site>|--all  delete a saved login
   platforms check <site>   re-check whether a saved login still works
 
-Crawlers (external scrapers report their runs; the board flags failures)
-  crawl-report <source> --ok            record a successful run
-  crawl-report <source> --fail "why"    record a failed run
+Crawlers (search queries come from: braveduck keywords add search_queries ...)
+  crawl [<source>]                      fetch new jobs now (built-in: vietnamworks)
+  crawl-schedule                        how often each source fetches new jobs
+  crawl-schedule <source> <2h|30m|off>  change it (built-ins run while the board is up)
+  crawl-report <source> --ok            external tools: record a successful run
+  crawl-report <source> --fail "why"    external tools: record a failed run
 
 Web board
   serve      run the local web board + JSON API   (--addr, --no-open)
@@ -65,7 +68,7 @@ AI agents
              (claude mcp add braveduck -- braveduck mcp)
 
 Not in this build (need a live browser/LLM)
-  cv, draft, apply, crawl, sync
+  cv, draft, apply, sync
 
 Other
   doctor     environment + database health check
@@ -129,6 +132,10 @@ func run(args []string) error {
 		return cmdLogin(ctx, svc, rest)
 	case "logout":
 		return cmdLogout(ctx, svc, rest)
+	case "crawl":
+		return cmdCrawl(ctx, svc, rest)
+	case "crawl-schedule":
+		return cmdCrawlSchedule(ctx, svc, rest)
 	case "crawl-report":
 		return cmdCrawlReport(ctx, svc, rest)
 	case "profile":
@@ -146,7 +153,7 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return mcpserver.Serve(ctx, svc)
-	case "cv", "draft", "apply", "crawl", "sync":
+	case "cv", "draft", "apply", "sync":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)

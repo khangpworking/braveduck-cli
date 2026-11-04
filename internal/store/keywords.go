@@ -39,6 +39,9 @@ func (s *Store) AllKeywords(ctx context.Context) (keyword.Sets, error) {
 		if err != nil {
 			return nil, err
 		}
+		if terms == nil {
+			terms = []string{} // JSON [] not null: the board calls .join on it
+		}
 		sets[key] = terms
 	}
 	return sets, nil

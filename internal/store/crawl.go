@@ -14,10 +14,44 @@ type CrawlSource struct {
 	LastError string `json:"lastError"` // why the last run failed ("" if it didn't)
 }
 
-// StaleAfter is how long a reported crawler may stay silent before the board
-// calls it stalled. External watchers report every few minutes; one that has
-// crashed stops reporting.
+// StaleAfter is the shortest silence after which the board calls a reported
+// crawler stalled. A source with a schedule gets twice its interval instead,
+// if that is longer (a 6-hourly source isn't stalled after 61 minutes).
 const StaleAfter = time.Hour
+
+// Schedule is how often one source fetches new jobs; 0 means off.
+type Schedule struct {
+	Source       string
+	EveryMinutes int
+}
+
+// CrawlSchedules returns every stored schedule, by source.
+func (s *Store) CrawlSchedules(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT source, every_minutes FROM crawl_schedule")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var src string
+		var n int
+		if err := rows.Scan(&src, &n); err != nil {
+			return nil, err
+		}
+		out[src] = n
+	}
+	return out, rows.Err()
+}
+
+// SetCrawlSchedule stores how often source fetches new jobs (0 = off).
+func (s *Store) SetCrawlSchedule(ctx context.Context, source string, everyMinutes int) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO crawl_schedule (source, every_minutes) VALUES (?, ?)
+		 ON CONFLICT(source) DO UPDATE SET every_minutes = excluded.every_minutes`,
+		source, everyMinutes)
+	return err
+}
 
 // RecordCrawlRun stores one run of an external crawler. A failed run keeps
 // the last success time, so the board can say how long it has been down.
@@ -85,9 +119,11 @@ func (s *Store) CrawlStatus(ctx context.Context, now time.Time) (CrawlStatusView
 
 	// One row per registered crawler; healthy == it last succeeded today.
 	crawlRows, err := s.db.QueryContext(ctx,
-		`SELECT name, COALESCE(last_success_date,''), COALESCE(last_run_at,''),
-		        COALESCE(last_success_at,''), last_ok, COALESCE(last_error,'')
-		 FROM crawl_runs ORDER BY name`)
+		`SELECT r.name, COALESCE(r.last_success_date,''), COALESCE(r.last_run_at,''),
+		        COALESCE(r.last_success_at,''), r.last_ok, COALESCE(r.last_error,''),
+		        COALESCE(c.every_minutes, 0)
+		 FROM crawl_runs r LEFT JOIN crawl_schedule c ON c.source = r.name
+		 ORDER BY r.name`)
 	if err != nil {
 		return CrawlStatusView{}, err
 	}
@@ -96,14 +132,18 @@ func (s *Store) CrawlStatus(ctx context.Context, now time.Time) (CrawlStatusView
 	sources := []CrawlSource{}
 	for crawlRows.Next() {
 		var name, lastSuccess, lastRun, successAt, lastErr string
-		var lastOK int
-		if err := crawlRows.Scan(&name, &lastSuccess, &lastRun, &successAt, &lastOK, &lastErr); err != nil {
+		var lastOK, every int
+		if err := crawlRows.Scan(&name, &lastSuccess, &lastRun, &successAt, &lastOK, &lastErr, &every); err != nil {
 			return CrawlStatusView{}, err
+		}
+		stale := StaleAfter
+		if d := 2 * time.Duration(every) * time.Minute; d > stale {
+			stale = d
 		}
 		healthy := lastSuccess == today
 		if successAt != "" {
 			t, err := time.Parse(time.RFC3339, successAt)
-			healthy = err == nil && lastOK == 1 && now.Sub(t) <= StaleAfter
+			healthy = err == nil && lastOK == 1 && now.Sub(t) <= stale
 		}
 		sources = append(sources, CrawlSource{
 			Name:      name,

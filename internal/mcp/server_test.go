@@ -81,6 +81,7 @@ func TestListsEveryTool(t *testing.T) {
 		"get_stats", "get_crawl_status", "get_activity",
 		"get_profile", "get_rating_queue", "rate_job", "submit_rating",
 		"list_platforms", "connect_platform", "disconnect_platform",
+		"get_crawl_schedule", "set_crawl_schedule",
 		"ask_model", "generate_cv", "draft_email", "approve_draft", "reject_draft",
 		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
 	} {
@@ -152,7 +153,10 @@ func TestErrorsAreToolErrors(t *testing.T) {
 		{"add_job", "title", map[string]any{}},                                      // nothing to add
 		{"add_job", "not both", map[string]any{"content": "https://x.vn/j", "title": "X"}},
 		{"ask_model", "not wired", map[string]any{"id": 1}}, // honest stub
-		{"get_job", "", map[string]any{"id": "abc"}},        // schema validation
+		{"crawl", "search queries", map[string]any{"source": "vietnamworks"}},
+		{"set_crawl_schedule", "use 0", map[string]any{"source": "vietnamworks", "every_minutes": 7}},
+		{"set_keywords", "unknown keyword list", map[string]any{"lists": map[string]any{"nope": []string{"x"}}}},
+		{"get_job", "", map[string]any{"id": "abc"}}, // schema validation
 	} {
 		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
 		if err != nil {

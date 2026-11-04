@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +74,17 @@ func TestAllKeywordsShape(t *testing.T) {
 	}
 	if _, ok := sets["search_queries"]; !ok {
 		t.Error("AllKeywords should include every managed list key")
+	}
+}
+
+func TestAllKeywordsEmptyListsAreArrays(t *testing.T) {
+	s := open(t)
+	sets, err := s.AllKeywords(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(sets)
+	if strings.Contains(string(b), "null") {
+		t.Fatalf("empty lists encode as null: %s", b)
 	}
 }
