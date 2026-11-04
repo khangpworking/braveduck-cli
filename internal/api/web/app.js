@@ -566,6 +566,7 @@ async function refreshAppState() {
 
   renderAll();
   renderSetup();
+  notifyNewMatches(AppState.jobs);
 }
 
 function renderAll() {
@@ -598,6 +599,69 @@ function renderStatPills() {
     <span class="stat-pill">Interview <strong>${counts.Interview}</strong></span>
     <span class="stat-pill">Offer <strong>${counts.Offer}</strong></span>
   `;
+}
+
+// --- Great-match notifications --------------------------------------------------
+// While the board is open, a job newly rated A or B pops a desktop
+// notification; clicking it opens the card. Opt-in (⚙ Settings), remembered
+// per browser. Jobs already rated when it's switched on don't notify.
+const NOTIFY_KEY = "notify_matches";
+const NOTIFIED_KEY = "notified_match_ids";
+
+function greatMatches(jobs) {
+  return jobs.filter(j => j.score_status === "scored" && (j.score_letter === "A" || j.score_letter === "B")
+    && (j.status === "Saved" || j.status === "Waiting to apply"));
+}
+
+function notifyOn() {
+  return localStorage.getItem(NOTIFY_KEY) === "on" && "Notification" in window && Notification.permission === "granted";
+}
+
+function renderNotifyButton() {
+  document.getElementById("notifyBtn").textContent = `🔔 Notify me of great matches: ${notifyOn() ? "on" : "off"}`;
+}
+
+function markMatchesSeen(jobs) {
+  localStorage.setItem(NOTIFIED_KEY, JSON.stringify(greatMatches(jobs).map(j => j.id)));
+}
+
+async function toggleNotify() {
+  if (notifyOn()) {
+    localStorage.setItem(NOTIFY_KEY, "off");
+    showToast("Match notifications off", "info");
+  } else if (!("Notification" in window)) {
+    showToast("This browser can't show notifications", "error");
+  } else {
+    const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm !== "granted") {
+      showToast("Notifications are blocked for this page in your browser settings", "error");
+    } else {
+      localStorage.setItem(NOTIFY_KEY, "on");
+      markMatchesSeen(AppState.jobs); // only matches rated from now on
+      showToast("You'll be notified of new A and B matches while the board is open", "success");
+    }
+  }
+  renderNotifyButton();
+}
+
+function notifyNewMatches(jobs) {
+  if (!notifyOn()) return;
+  let seen;
+  try { seen = new Set(JSON.parse(localStorage.getItem(NOTIFIED_KEY) || "[]")); } catch { seen = new Set(); }
+  const fresh = greatMatches(jobs).filter(j => !seen.has(j.id)).sort((a, b) => b.score - a.score);
+  // A few at most: rated while the board was closed shouldn't mean a flood.
+  for (const j of fresh.slice(0, 3)) {
+    const n = new Notification(`Great match: ${j.title}`, {
+      body: `${j.score_letter} · ${Number(j.score).toFixed(1)}${j.company ? ` — ${j.company}` : ""}`,
+      tag: `braveduck-job-${j.id}`
+    });
+    n.onclick = () => { window.focus(); showJobCard(j.id); n.close(); };
+  }
+  if (fresh.length > 3) {
+    const n = new Notification(`${fresh.length - 3} more great matches`, { body: "See Today on the board.", tag: "braveduck-more" });
+    n.onclick = () => { window.focus(); n.close(); };
+  }
+  markMatchesSeen(jobs);
 }
 
 // --- Today -------------------------------------------------------------------
@@ -2201,6 +2265,8 @@ document.addEventListener("DOMContentLoaded", () => {
     settingsMenu.querySelector("button").focus();
   });
   settingsMenu.addEventListener("click", () => closeSettings(false));
+  document.getElementById("notifyBtn").addEventListener("click", toggleNotify);
+  renderNotifyButton();
   settingsMenu.addEventListener("keydown", e => {
     const items = [...settingsMenu.querySelectorAll("button")];
     const i = items.indexOf(document.activeElement);
