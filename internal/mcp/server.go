@@ -11,9 +11,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/cvfile"
 	"github.com/khangpworking/braveduck-cli/internal/core/geo"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
@@ -70,6 +72,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "keep_job", "Toggle a job's keep flag (kept jobs are exempt from auto-clear).", write, t.keepJob)
 	add(srv, "delete_job", "Permanently delete a job and its ratings.", destructive, t.deleteJob)
 	add(srv, "get_profile", "The user's profile (CV + what they want) that jobs are rated against, its file path, and whether it has been filled in.", readOnly, t.getProfile)
+	add(srv, "upload_cv", "Upload the user's CV from a file on this computer (.pdf, .docx, .md or .html, up to 5 MB): it is kept for applying, and its text goes into the profile's \"About me\". If About me already has the user's own text this fails unless replace is true — ask the user first.", write, t.uploadCV)
 	add(srv, "update_profile", "Replace the user's profile (Markdown: \"# About me\", \"# What I'm looking for\", compensation, location, deal-breakers…) that jobs are rated against. Read it with get_profile first and keep the user's own words; only write what the user told you.", idempotentWrite, t.updateProfile)
 	add(srv, "get_rating_queue", "Jobs waiting for a score (oldest first), plus the user's profile, the scoring rubric and the default rater id. Judge each job, then call submit_rating for it. Fails if the profile is still empty.", readOnly, t.ratingQueue)
 	add(srv, "rate_job", "Everything needed to rate (or re-rate) one job: the user's profile, the rubric and the job. Then call submit_rating.", readOnly, t.rateJob)
@@ -375,6 +378,26 @@ func (t tools) setRatingConfig(ctx context.Context, in ratingIO) (ratingIO, erro
 
 func (t tools) getProfile(ctx context.Context, _ struct{}) (service.Profile, error) {
 	return t.svc.Profile(ctx)
+}
+
+type uploadCVIn struct {
+	Path    string `json:"path" jsonschema:"absolute path of the CV file the user named"`
+	Replace bool   `json:"replace,omitempty" jsonschema:"overwrite text already in the profile's About me (only after the user agreed)"`
+}
+
+func (t tools) uploadCV(ctx context.Context, in uploadCVIn) (service.BaseCV, error) {
+	fi, err := os.Stat(in.Path)
+	if err != nil {
+		return service.BaseCV{}, fmt.Errorf("%w: %w", service.ErrInvalid, err)
+	}
+	if !fi.Mode().IsRegular() || fi.Size() > cvfile.MaxBytes {
+		return service.BaseCV{}, fmt.Errorf("%w: %s isn't a CV file of at most %d MB", service.ErrInvalid, in.Path, cvfile.MaxBytes>>20)
+	}
+	data, err := os.ReadFile(in.Path)
+	if err != nil {
+		return service.BaseCV{}, err
+	}
+	return t.svc.UploadCV(ctx, in.Path, data, in.Replace)
 }
 
 type profileIn struct {
