@@ -227,7 +227,7 @@ func (s *Service) CrawlSchedules(ctx context.Context) ([]SourceSchedule, error) 
 	for id := range builtin {
 		known[id] = true
 	}
-	if v, err := s.st.CrawlStatus(ctx, s.now()); err == nil {
+	if v, err := s.st.CrawlStatus(ctx, s.now(), nil); err == nil {
 		for _, src := range v.Sources {
 			known[src.Name] = true
 		}
@@ -293,7 +293,7 @@ func (s *Service) runDue(ctx context.Context) {
 		return
 	}
 	last := map[string]time.Time{}
-	if v, err := s.st.CrawlStatus(ctx, s.now()); err == nil {
+	if v, err := s.st.CrawlStatus(ctx, s.now(), nil); err == nil {
 		for _, src := range v.Sources {
 			if t, err := time.Parse(time.RFC3339, src.LastRun); err == nil {
 				last[src.Name] = t

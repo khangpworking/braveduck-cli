@@ -1168,3 +1168,37 @@ func TestBoardExpiryBadges(t *testing.T) {
 		t.Error(`a card still says "delete in" — nothing is ever deleted`)
 	}
 }
+
+// Background tasks (Jev rating, TopCV sync) get no source chip and no filter
+// checkbox: they don't find jobs.
+func TestBoardHidesTaskSources(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	for _, src := range []string{"careerlink", service.TopCVSyncSource, service.JevRateSource} {
+		st.RecordCrawlRun(ctx, src, true, "", time.Now())
+	}
+	svc.AddJob(ctx, service.NewJob{Title: "A job", Source: "careerlink"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	chips := page.MustElement("#crawlChips").MustText()
+	filters := page.MustElement("#platformFilters").MustText()
+	if !strings.Contains(chips, "careerlink") || !strings.Contains(filters, "careerlink") {
+		t.Fatalf("job source missing: chips %q, filters %q", chips, filters)
+	}
+	for _, task := range []string{service.TopCVSyncSource, service.JevRateSource} {
+		if strings.Contains(chips, task) || strings.Contains(filters, task) {
+			t.Errorf("task %q shown as a source: chips %q, filters %q", task, chips, filters)
+		}
+	}
+}
