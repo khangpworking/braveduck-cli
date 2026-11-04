@@ -49,6 +49,47 @@ func launchBrowser(t *testing.T) *rod.Browser {
 	return b
 }
 
+// Header and toolbar controls stay reachable without horizontal scrolling.
+func TestBoardControlsFitNarrowViewports(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	for _, source := range []string{"facebook", "vietnamworks", "careerlink", "topcv", "paste"} {
+		if _, err := svc.AddJob(context.Background(), service.NewJob{Title: source + " engineer", Source: source}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	for _, width := range []int{320, 390, 768, 1024, 1280} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			page.MustSetViewport(width, 844, 1, false)
+			page.MustElement(".drawer").MustWaitStable()
+			// Each control and statistic must fit in the viewport, and the
+			// button's center must actually receive a pointer click.
+			if problem := page.MustEval(`() => {
+				const width = document.documentElement.clientWidth;
+				for (const el of document.querySelectorAll('.top-nav button, .stat-pill, .toolbar button, .filter-cb')) {
+					const r = el.getBoundingClientRect();
+					if (r.left < 0 || r.right > width || r.top < 0)
+						return el.textContent.trim() + ' outside viewport: ' + JSON.stringify(r);
+					if (el.tagName === 'BUTTON' && !el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)))
+						return el.textContent.trim() + ' is covered';
+				}
+				return '';
+			}`).Str(); problem != "" {
+				t.Fatal(problem)
+			}
+		})
+	}
+}
+
 // The board's core promises: hostile job text can't run script, and moves,
 // notes and pins reach the server (they once only touched localStorage), with
 // no JS errors along the way.
