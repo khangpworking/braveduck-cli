@@ -114,7 +114,7 @@ func TestSuccessRate(t *testing.T) {
 		{Status: "closed"},
 		{Status: "applied", ExpiresAt: "applied:2026-06-01"}, // 34d old → resolved
 		{Status: "applied", ExpiresAt: "applied:2026-07-01"}, // 4d → pending
-		{Status: "saved"},                                    // ignored
+		{Status: "saved"}, // ignored
 	}
 	sr := SuccessRateOf(js, now)
 	if sr.Interviews != 3 || sr.Resolved != 5 || sr.Pending != 1 {

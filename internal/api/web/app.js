@@ -240,7 +240,9 @@ const APIClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config)
     });
-    return res.json();
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
   },
 
   async getKeywords() {
@@ -275,11 +277,6 @@ const APIClient = {
 
   async retryCrawl(sourceName) {
     const res = await apiFetch(`${API_BASE}/crawl/${sourceName}/retry`, { method: "POST" });
-    return res.json();
-  },
-
-  async backfillRatings() {
-    const res = await apiFetch(`${API_BASE}/jobs/rate-backfill`, { method: "POST" });
     return res.json();
   }
 };
@@ -1581,63 +1578,37 @@ document.addEventListener("DOMContentLoaded", () => {
   ratingBtn.addEventListener("click", async () => {
     const config = await APIClient.getRatingConfig();
     document.getElementById("abModeCheckbox").checked = config.ab_mode;
-    document.getElementById("defaultModelSelect").value = config.default_model;
-
-    const challengerContainer = document.getElementById("challengerModelsList");
-    const allModels = ["GPT-4o", "Claude 3.5", "Gemini 1.5 Pro"];
-    
-    challengerContainer.innerHTML = allModels.map(m => `
-      <label class="filter-cb">
-        <input type="checkbox" name="challengerModel" value="${esc(m)}" ${config.models.includes(m) ? "checked" : ""}>
-        ${esc(m)}
-      </label>
-    `).join("");
-
+    document.getElementById("defaultModelInput").value = config.default_model;
+    document.getElementById("challengerModelsInput").value =
+      config.models.filter(m => m !== config.default_model).join(", ");
+    document.getElementById("ratingConfigError").style.display = "none";
     ratingModal.classList.add("open");
   });
 
   saveRatingBtn.addEventListener("click", async () => {
     const abMode = document.getElementById("abModeCheckbox").checked;
-    const defaultModel = document.getElementById("defaultModelSelect").value;
-    
-    const models = [];
-    document.querySelectorAll('input[name="challengerModel"]:checked').forEach(cb => {
-      models.push(cb.value);
-    });
-    // Ensure default model is always inside the list
-    if (!models.includes(defaultModel)) {
-      models.push(defaultModel);
-    }
+    const defaultModel = document.getElementById("defaultModelInput").value.trim();
+    const challengers = document.getElementById("challengerModelsInput").value
+      .split(",").map(s => s.trim()).filter(s => s && s !== defaultModel);
+    const errorBox = document.getElementById("ratingConfigError");
 
-    const config = {
-      default_model: defaultModel,
-      ab_mode: abMode,
-      models: models
-    };
-    
-    const prevConfig = AppState.ratingConfig;
-    await APIClient.updateRatingConfig(config);
+    try {
+      await APIClient.updateRatingConfig({
+        default_model: defaultModel,
+        ab_mode: abMode,
+        models: [defaultModel, ...new Set(challengers)]
+      });
+    } catch (e) {
+      // The server validates (1-3 models, no blanks or duplicates); show why.
+      errorBox.textContent = e.message;
+      errorBox.style.display = "block";
+      return;
+    }
     ratingModal.classList.remove("open");
     showToast("Rating config updated!", "success");
-    
-    // Check if backfill banner needs to be displayed (A/B toggled on)
-    if (abMode && !prevConfig.ab_mode) {
-      document.getElementById("backfillBanner").style.display = "flex";
-    }
-    
     refreshAppState();
   });
 
-  // Backfill Banner handlers
-  document.getElementById("backfillConfirmBtn").addEventListener("click", async () => {
-    document.getElementById("backfillBanner").style.display = "none";
-    showToast("Initiating A/B backfill rating process...", "info");
-    await APIClient.backfillRatings();
-  });
-  
-  document.getElementById("backfillDismissBtn").addEventListener("click", () => {
-    document.getElementById("backfillBanner").style.display = "none";
-  });
 
   const platformsModal = document.getElementById("platformsModalOverlay");
   document.getElementById("platformsBtn").addEventListener("click", async () => {

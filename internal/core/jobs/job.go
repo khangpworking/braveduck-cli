@@ -33,7 +33,7 @@ type Job struct {
 	Notes  string `json:"notes"`
 
 	Salary    string `json:"salary"`
-	Skills    string `json:"skills"`     // comma-separated
+	Skills    string `json:"skills"` // comma-separated
 	Summary   string `json:"jd_summary"`
 	AISummary string `json:"jd_ai_summary"`
 	FullJD    string `json:"jd_full"`
@@ -79,10 +79,10 @@ type Job struct {
 	VnwStatus   string `json:"vnw_status"`
 
 	// Geo/company signals used by geoDealbreakers. Resolve async on pin.
-	CompanyActiveDate   string  `json:"company_active_date"`  // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
-	CompanyDistanceKM   float64 `json:"company_distance_km"`  // meaningful only when CompanyGeoStatus == "ok"
-	HasDistance         bool    `json:"-"`                    // distinguishes 0 km from "not set"
-	CompanyGeoStatus    string  `json:"company_geo_status"`   // "" / pending / ok / no_address / geocode_failed
+	CompanyActiveDate   string  `json:"company_active_date"` // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
+	CompanyDistanceKM   float64 `json:"company_distance_km"` // meaningful only when CompanyGeoStatus == "ok"
+	HasDistance         bool    `json:"-"`                   // distinguishes 0 km from "not set"
+	CompanyGeoStatus    string  `json:"company_geo_status"`  // "" / pending / ok / no_address / geocode_failed
 	CompanyMasothueURL  string  `json:"company_masothue_url"`
 	CompanyMasothueName string  `json:"company_masothue_name"`
 }

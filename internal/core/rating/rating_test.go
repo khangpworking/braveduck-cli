@@ -51,11 +51,11 @@ func TestValidate(t *testing.T) {
 		t.Errorf("valid config rejected: %v", err)
 	}
 	bad := []Config{
-		{Models: nil, DefaultModel: "a"},                                // none
-		{Models: []string{"a", "b", "c", "d"}, DefaultModel: "a"},       // too many
-		{Models: []string{"a", ""}, DefaultModel: "a"},                  // empty id
-		{Models: []string{"a", "a"}, DefaultModel: "a"},                 // dup
-		{Models: []string{"a", "b"}, DefaultModel: "zzz"},               // default not in set
+		{Models: nil, DefaultModel: "a"},                          // none
+		{Models: []string{"a", "b", "c", "d"}, DefaultModel: "a"}, // too many
+		{Models: []string{"a", ""}, DefaultModel: "a"},            // empty id
+		{Models: []string{"a", "a"}, DefaultModel: "a"},           // dup
+		{Models: []string{"a", "b"}, DefaultModel: "zzz"},         // default not in set
 	}
 	for i, c := range bad {
 		if err := c.Validate(); err == nil {

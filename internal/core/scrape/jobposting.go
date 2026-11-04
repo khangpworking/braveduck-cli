@@ -34,9 +34,9 @@ type JobPosting struct {
 	Location    string
 	Salary      string
 	Skills      []string
-	Description string   // plain-text JD (HTML tags stripped)
-	Email       string   // contact email, when one is discoverable
-	Deadline    string   // validThrough, as the ISO date the site emitted
+	Description string // plain-text JD (HTML tags stripped)
+	Email       string // contact email, when one is discoverable
+	Deadline    string // validThrough, as the ISO date the site emitted
 }
 
 var (
