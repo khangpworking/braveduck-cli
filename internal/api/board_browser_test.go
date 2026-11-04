@@ -420,7 +420,7 @@ func TestEditDetailsOnBoard(t *testing.T) {
 // Control response delivery at the HTTP boundary: a refresh can finish after
 // editing starts, after a newer refresh, or with a server error.
 func TestBoardRefresh(t *testing.T) {
-	for _, scenario := range []string{"editing", "out_of_order", "failed_read", "move_select"} {
+	for _, scenario := range []string{"editing", "out_of_order", "failed_read", "move_select", "focused_select"} {
 		t.Run(scenario, func(t *testing.T) {
 			st, err := store.Open(":memory:")
 			if err != nil {
@@ -515,6 +515,19 @@ func TestBoardRefresh(t *testing.T) {
 				if err := page.Timeout(5 * time.Second).Wait(rod.Eval(`() => !!document.querySelector('.column[data-status="Applied"] .card[data-id="1"]')`)); err != nil {
 					t.Fatalf("moved card not shown in Applied while the stage select had focus: %v", err)
 				}
+				return
+			}
+			if scenario == "focused_select" {
+				// A focused stage select with no choice made yet is still in use:
+				// a background refresh must wait rather than destroy it.
+				page.MustEval(`() => document.querySelector('.card[data-id="1"] .move-select').focus()`)
+				setTitle("Background title")
+				refresh()
+				if !page.MustEval(`() => document.activeElement.classList.contains('move-select') && document.activeElement.closest('.card[data-id="1"]') && document.querySelector('.card-title').textContent === 'Original title'`).Bool() {
+					t.Fatal("background refresh replaced the focused stage select")
+				}
+				page.MustEval(`() => document.activeElement.blur()`)
+				page.MustWait(`() => document.querySelector('.card-title')?.textContent === 'Background title'`)
 				return
 			}
 			if scenario == "editing" {

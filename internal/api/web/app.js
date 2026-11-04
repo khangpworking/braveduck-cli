@@ -1954,15 +1954,16 @@ function setupColumnDragEvents(colEl) {
 // Quick stage jump dropdown logic
 async function moveStageDropdown(id, selectEl) {
   const status = selectEl.value;
-  await transitionCardStatus(id, status);
+  await transitionCardStatus(id, status, selectEl);
 }
 
-async function transitionCardStatus(id, newStatus) {
+async function transitionCardStatus(id, newStatus, committedEl) {
   const j = AppState.jobs.find(item => item.id === id);
   if (!j || j.status === newStatus) return;
   try {
     await APIClient.updateJob(id, { status: newStatus });
     showToast(`Job moved to ${newStatus}`, "success");
+    if (committedEl && document.activeElement === committedEl) committedEl.blur();
   } catch (e) {
     showToast(`Couldn't move job: ${e.message}`, "error");
   }
@@ -1978,7 +1979,7 @@ let refreshPending = false;
 
 function isEditingCard() {
   const el = document.activeElement;
-  return !!(el && el.closest && el.closest("#kanbanBoard") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.classList.contains("move-select"));
+  return !!(el && el.closest && el.closest("#kanbanBoard") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 }
 
 function scheduleRefresh() {
