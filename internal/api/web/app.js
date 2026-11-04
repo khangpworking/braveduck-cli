@@ -969,7 +969,7 @@ function toggleColumnCollapse(colName) {
   if (window.innerWidth > 768) return; // Only accordion on mobile
   const key = `col_collapsed_${colName}`;
   const isCollapsed = localStorage.getItem(key) === "true";
-  localStorage.setItem(key, !isCollapsed ? "false" : "true");
+  localStorage.setItem(key, String(!isCollapsed));
   renderBoard();
 }
 
@@ -1524,13 +1524,27 @@ function toggleCardDetail(id) {
 // (the job a rejected paste duplicates).
 function showJobCard(id) {
   document.getElementById("closeDrawerBtn").click();
-  AppState.expandedCards.add(id);
-  renderBoard();
-  const card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
-  if (!card) {
-    showToast(`Job #${id} is hidden by the current filter`, "info");
+  const job = AppState.jobs.find(j => j.id === id);
+  if (!job) {
+    showToast(`Job #${id} is no longer on the board`, "info");
     return;
   }
+  // A direct link to a job must reveal it even when the current filters or
+  // mobile accordion hide it. Keep matching filters as they are.
+  const selector = `.card[data-id="${CSS.escape(id)}"]`;
+  if (!document.querySelector(selector)) {
+    AppState.filters.platform = "All";
+    AppState.filters.query = "";
+    document.getElementById("jobSearch").value = "";
+    renderPlatformFilters();
+  }
+  if (window.innerWidth <= 768) {
+    localStorage.setItem(`col_collapsed_${job.status}`, "false");
+  }
+  AppState.expandedCards.add(id);
+  renderBoard();
+  const card = document.querySelector(selector);
+  if (!card) return;
   card.scrollIntoView({ behavior: "smooth", block: "center" });
   card.classList.add("flash");
   setTimeout(() => card.classList.remove("flash"), 2000);
