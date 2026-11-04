@@ -167,6 +167,14 @@ func (s *Service) addQuiet(ctx context.Context, j jobs.Job) (jobs.Job, error) {
 		}
 	}
 
+	// Jev lead check (sources like facebook): a post that clearly isn't a
+	// job goes straight to Closed with the reason — kept, never dropped.
+	if note, notJob := s.leadCheck(ctx, j); notJob {
+		j.Status = "closed"
+		j.ScoreStatus = ""
+		j.Notes = strings.TrimSpace(note + "\n" + j.Notes)
+	}
+
 	id, err := s.st.Add(ctx, j, s.now())
 	if err != nil {
 		return jobs.Job{}, err
