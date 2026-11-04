@@ -54,6 +54,9 @@ var migrations = []string{
 	   source        TEXT PRIMARY KEY,
 	   every_minutes INTEGER NOT NULL
 	 );`,
+	// 6: assisted-apply attempts, for the daily cap and the cooldown.
+	`CREATE TABLE IF NOT EXISTS apply_attempts (at TEXT NOT NULL);
+	 CREATE INDEX IF NOT EXISTS idx_apply_attempts_at ON apply_attempts(at);`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the
@@ -488,4 +491,30 @@ func (s *Store) SetDraftNotes(ctx context.Context, id int64, notes string, now t
 		return err
 	}
 	return affectedOne(res)
+}
+
+// RecordApplyAttempt logs one assisted-apply window.
+func (s *Store) RecordApplyAttempt(ctx context.Context, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, "INSERT INTO apply_attempts (at) VALUES (?)", now.UTC().Format(time.RFC3339))
+	return err
+}
+
+// ApplyAttempts returns attempt times since since, oldest first.
+func (s *Store) ApplyAttempts(ctx context.Context, since time.Time) ([]time.Time, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT at FROM apply_attempts WHERE at >= ? ORDER BY at", since.UTC().Format(time.RFC3339))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []time.Time
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			out = append(out, t)
+		}
+	}
+	return out, rows.Err()
 }

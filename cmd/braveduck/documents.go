@@ -148,3 +148,35 @@ func parseEmail(s string) service.Draft {
 	}
 	return service.Draft{Body: s}
 }
+
+// cmdApply runs an assisted apply in the foreground.
+func cmdApply(ctx context.Context, svc *service.Service, args []string) error {
+	id, err := oneID(args, "apply")
+	if err != nil {
+		return err
+	}
+	prep, err := svc.PrepareApply(ctx, id)
+	if err != nil {
+		return friendly(err, id)
+	}
+	fmt.Println("Opening the job on TopCV with your login. In that window:")
+	fmt.Println("  1. click Ứng tuyển (Apply)")
+	fmt.Println("  2. upload this CV:", prep.CVPDF)
+	if prep.CoverLetter != "" {
+		fmt.Println("  3. paste this cover letter:")
+		fmt.Println()
+		for _, l := range strings.Split(prep.CoverLetter, "\n") {
+			fmt.Println("     " + l)
+		}
+		fmt.Println()
+		fmt.Println("  4. submit, then close the window")
+	} else {
+		fmt.Println("  3. submit, then close the window")
+	}
+	res, err := svc.AssistApply(ctx, id)
+	if err != nil {
+		return friendly(err, id)
+	}
+	fmt.Println(res.Message)
+	return nil
+}

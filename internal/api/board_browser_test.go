@@ -30,8 +30,10 @@ func launchBrowser(t *testing.T) *rod.Browser {
 	if bin := os.Getenv("CLOAKBROWSER_BINARY_PATH"); bin != "" {
 		l = l.Bin(bin)
 	}
-	b := rod.New().ControlURL(l.MustLaunch()).MustConnect()
-	t.Cleanup(func() { b.MustClose() })
+	// Every page op gets a deadline, so a stuck step fails this test with a
+	// timeout error instead of hanging the whole suite.
+	b := rod.New().ControlURL(l.MustLaunch()).MustConnect().Timeout(60 * time.Second)
+	t.Cleanup(func() { b.CancelTimeout().MustClose() })
 	return b
 }
 
@@ -112,7 +114,7 @@ func TestLoginsPanel(t *testing.T) {
 	defer ts.Close()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	page.MustElement("#platformsBtn").MustClick()
+	clickID(page, "platformsBtn")
 	page.MustElement("#platformsList strong")
 
 	text := page.MustElement("#platformsList").MustText()
@@ -153,7 +155,7 @@ func TestRatingSettings(t *testing.T) {
 	ctx := context.Background()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	page.MustElement("#ratingBtn").MustClick()
+	clickID(page, "ratingBtn")
 	page.MustElement("#ratingModalOverlay.open") // opens once the stored config has loaded
 	if v := page.MustElement("#defaultModelInput").MustProperty("value").Str(); v == "" {
 		t.Fatal("default rater not pre-filled from the stored config")
@@ -165,7 +167,7 @@ func TestRatingSettings(t *testing.T) {
 	page.MustElement("#defaultModelInput").MustSelectAllText().MustInput("my-rater")
 	page.MustElement("#challengerModelsInput").MustInput("rival-a, rival-b")
 	page.MustElement("#abModeCheckbox").MustClick()
-	page.MustElement("#saveRatingConfigBtn").MustClick()
+	clickID(page, "saveRatingConfigBtn")
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		c, _ := svc.RatingConfig(ctx)
@@ -179,10 +181,10 @@ func TestRatingSettings(t *testing.T) {
 	}
 
 	// Too many raters: the server refuses and the window says why.
-	page.MustElement("#ratingBtn").MustClick()
+	clickID(page, "ratingBtn")
 	page.MustElement("#ratingModalOverlay.open")
 	page.MustElement("#challengerModelsInput").MustSelectAllText().MustInput("a, b, c")
-	page.MustElement("#saveRatingConfigBtn").MustClick()
+	clickID(page, "saveRatingConfigBtn")
 	msg := page.MustElement("#ratingConfigError").MustWaitVisible().MustText()
 	if !strings.Contains(msg, "at most 3") {
 		t.Fatalf("error shown = %q", msg)
@@ -206,15 +208,15 @@ func TestKeywordsAndSources(t *testing.T) {
 	ctx := context.Background()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	page.MustElement("#keywordsBtn").MustClick()
+	clickID(page, "keywordsBtn")
 	page.MustElement("#kw-search_queries").MustInput("n8n, ai automation")
-	page.MustElement("#saveKeywordsBtn").MustClick()
+	clickID(page, "saveKeywordsBtn")
 	waitUntil(t, func() bool {
 		k, _ := svc.Keywords(ctx)
 		return len(k["search_queries"]) == 2
 	}, "search queries not saved")
 
-	page.MustElement("#sourcesBtn").MustClick()
+	clickID(page, "sourcesBtn")
 	page.MustElement("#sourcesList select")
 	page.MustEval(`() => { const s = [...document.querySelectorAll("#sourcesList select")].pop(); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
 	waitUntil(t, func() bool {
@@ -335,4 +337,13 @@ func TestAskAICVAndDraft(t *testing.T) {
 	if v := page.MustElement("#draftSubject-1").MustProperty("value").Str(); v != "Go Engineer application" {
 		t.Fatalf("draft subject on the card = %q", v)
 	}
+}
+
+// clickID clicks a static control by id with a DOM click. rod's MustClick
+// waits for the element to be stable and uncovered, which can hang while the
+// board re-renders right after load; a DOM click is what a user's click
+// delivers anyway.
+func clickID(page *rod.Page, id string) {
+	page.MustElement("#" + id)
+	page.MustEval(`id => document.getElementById(id).click()`, id)
 }

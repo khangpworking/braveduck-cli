@@ -80,8 +80,9 @@ CVs and emails (your AI writes them; braveduck stores them and never sends)
   draft <id> --file email.txt save the email ("Subject: ..." line, blank, body)
   draft <id> --sent|--reject  after sending it yourself, or to discard it
 
-Not in this build
-  apply
+Apply (you approve and submit each one; braveduck never clicks submit)
+  apply <id>                  open the TopCV job in a window with your login;
+                              you submit there, braveduck confirms afterwards
 
 Other
   doctor     environment + database health check
@@ -175,7 +176,7 @@ func run(args []string) error {
 	case "draft":
 		return cmdDraft(ctx, svc, rest)
 	case "apply":
-		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
+		return cmdApply(ctx, svc, rest)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)
 	}

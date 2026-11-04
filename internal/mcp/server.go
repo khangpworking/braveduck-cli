@@ -84,13 +84,13 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "draft_brief", "Everything needed to write an application email for one job: profile, job, contact email, instructions and the user's notes. Then call submit_draft.", readOnly, t.draftBrief)
 	add(srv, "submit_draft", "Save an application email draft (to, subject, body) for the user to review. braveduck never sends it; the user sends it from their own mail app.", write, t.submitDraft)
 	add(srv, "reject_draft", "Discard a job's email draft.", destructive, t.rejectDraft)
+	add(srv, "apply_job", "Assisted apply to a TopCV job: opens a visible window on the user's screen with their login; THEY submit it (braveduck never clicks submit). Needs a tailored CV. Returns at once with the CV file to upload and the cover letter; the outcome appears in get_activity. Only call this when the user asks to apply to that job. Limits: 10 per day, 5 minutes apart.", write, t.applyJob)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
 	// until its subsystem lands (spec: "surface now, body later").
 	for _, name := range []string{
 		"ask_model",
-		"apply_job",
 	} {
 		addStub(srv, name)
 	}
@@ -446,4 +446,8 @@ func (t tools) submitDraft(ctx context.Context, in draftIn) (jobs.Job, error) {
 
 func (t tools) rejectDraft(ctx context.Context, in idIn) (jobs.Job, error) {
 	return t.svc.RejectDraft(ctx, in.ID)
+}
+
+func (t tools) applyJob(_ context.Context, in idIn) (service.ApplyPrep, error) {
+	return t.svc.StartAssistApply(in.ID)
 }
