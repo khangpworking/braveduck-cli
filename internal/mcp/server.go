@@ -88,6 +88,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "apply_job", "Assisted apply to a TopCV job: opens a visible window on the user's screen with their login; THEY submit it (braveduck never clicks submit). Needs a tailored CV. Returns at once with the CV file to upload and the cover letter; the outcome appears in get_activity. Only call this when the user asks to apply to that job. Limits: 10 per day, 5 minutes apart.", write, t.applyJob)
 	add(srv, "get_location", "The user's location and maximum commute (jobs farther than max_km are flagged on the board).", readOnly, t.getLocation)
 	add(srv, "set_location", "Set the user's location: either `address` (looked up with OpenStreetMap; the first match is used — confirm it with the user) or lat/lng, plus optional max_km. Only do this when the user asks.", idempotentWrite, t.setLocation)
+	add(srv, "rate_with_jev", "Rate one job now with Jev (TypeSafe AI's decision model): A-F with probabilities and criterion-based reasons. Sends the user's profile and the job text to api.typesafe.ai.", write, t.rateWithJev)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
@@ -483,4 +484,8 @@ func (t tools) setLocation(ctx context.Context, in locationIn) (service.Location
 		go t.svc.UpdateDistances(context.Background(), service.MaxLookupsPerPass)
 	}
 	return l, err
+}
+
+func (t tools) rateWithJev(ctx context.Context, in idIn) (jobs.Job, error) {
+	return t.svc.JevRate(ctx, in.ID)
 }

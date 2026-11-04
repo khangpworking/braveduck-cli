@@ -1,0 +1,199 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"strings"
+
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
+)
+
+// Jev rating: Jev (TypeSafe AI's decision model) answers multiple-choice
+// questions about "this candidate × this job". The score is the
+// probability-weighted average of the letter bands, the letter follows from
+// the score, and the reasons are built from the sub-answers. The user chose
+// to send their full profile; see docs/specs/jev-rating.md.
+
+// JevRateSource is the schedule/crawl-panel id of automatic Jev rating.
+const JevRateSource = "jev-rate"
+
+const defaultJevEveryMinutes = 30
+
+// jevAsker is the Jev API; swapped in tests.
+type jevAsker interface {
+	Ask(ctx context.Context, state string, questions map[string]jev.Question) (map[string]jev.Answer, error)
+}
+
+// SetJev replaces the Jev client (tests).
+func (s *Service) SetJev(a jevAsker) { s.jev = a }
+
+func (s *Service) jevClient() (jevAsker, error) {
+	if s.jev != nil {
+		return s.jev, nil
+	}
+	key, _, err := jev.LoadKey()
+	if err != nil {
+		return nil, err
+	}
+	return jev.New(key), nil
+}
+
+// IsJevModel reports whether a rater id is a Jev model.
+func IsJevModel(id string) bool { return strings.HasPrefix(id, "jev-") }
+
+// letterValue is each band's midpoint on the 1.0-5.0 scale (rating rubric).
+var letterValue = map[string]float64{"A": 4.75, "B": 4.2, "C": 3.7, "D": 3.2, "F": 2.0}
+
+var jevQuestions = map[string]jev.Question{
+	"fit": {Type: "choice",
+		Instructions: "Overall, how good is this job for THIS candidate (their profile is in the text)? Weigh skills match, target-role alignment, compensation vs their expectations, culture signals, and red flags. Score low when core required skills are missing, even if the title sounds appealing.",
+		Criteria: map[string]string{
+			"A": "Strong fit — apply now: core skills match, on target, no deal-breakers.",
+			"B": "Good fit: most requirements match, minor gaps.",
+			"C": "Decent: some match, notable gaps or uncertainty.",
+			"D": "Weak: significant gaps or misaligned with what they want.",
+			"F": "Skip: wrong role, missing core skills, or a deal-breaker.",
+		}},
+	"skills": {Type: "choice", Instructions: "How well do the candidate's skills and experience match the job's requirements?",
+		Criteria: map[string]string{"strong": "Most core requirements are clearly met.", "partial": "Some core requirements are met; others are missing.", "weak": "Few or none of the core requirements are met.", "unclear": "The posting doesn't say enough to tell."}},
+	"role": {Type: "choice", Instructions: "Is this the kind of role the candidate says they want?",
+		Criteria: map[string]string{"on_target": "Matches their target roles.", "adjacent": "Related but not what they asked for.", "off_target": "Not what they want.", "unclear": "Can't tell from the text."}},
+	"seniority": {Type: "choice", Instructions: "Does the job's seniority match the candidate's level?",
+		Criteria: map[string]string{"match": "About right.", "above": "Asks for more experience than they have.", "below": "Below their level.", "unclear": "Not stated."}},
+	"pay": {Type: "choice", Instructions: "Does the stated pay meet the candidate's minimum?",
+		Criteria: map[string]string{"meets": "At or above their minimum.", "below": "Below their minimum.", "unclear": "Pay or their minimum isn't stated (e.g. 'negotiable')."}},
+	"dealbreaker": {Type: "choice", Instructions: "Does the job hit any of the candidate's stated deal-breakers?",
+		Criteria: map[string]string{"none": "No deal-breaker applies.", "some": "At least one deal-breaker applies."}},
+}
+
+var jevLabels = map[string]map[string]string{
+	"skills":      {"strong": "skills: strong match", "partial": "skills: partial match", "weak": "skills: weak match"},
+	"role":        {"on_target": "role: on target", "adjacent": "role: adjacent", "off_target": "role: off target"},
+	"seniority":   {"match": "seniority: matches", "above": "seniority: above your level", "below": "seniority: below your level"},
+	"pay":         {"meets": "pay: meets your minimum", "below": "pay: below your minimum"},
+	"dealbreaker": {"some": "⚠ hits a deal-breaker"},
+}
+
+// jevState is what Jev reads: the rubric, the full profile and the job.
+func jevState(b RatingBrief) string {
+	j := b.Jobs[0]
+	var sb strings.Builder
+	sb.WriteString("CANDIDATE PROFILE\n" + strings.TrimSpace(b.Profile) + "\n\nJOB\n")
+	fmt.Fprintf(&sb, "Title: %s\nCompany: %s\n", j.Title, j.Company)
+	for _, kv := range [][2]string{{"Location", j.Location}, {"Salary", j.Salary}, {"Skills", j.Skills}} {
+		if kv[1] != "" {
+			fmt.Fprintf(&sb, "%s: %s\n", kv[0], kv[1])
+		}
+	}
+	if j.Description != "" {
+		sb.WriteString("\n" + strings.TrimSpace(j.Description) + "\n")
+	}
+	return sb.String()
+}
+
+// JevVerdict turns Jev's answers into a verdict: expected score, letter from
+// the score, and reasons from the sub-answers.
+func JevVerdict(id int64, ans map[string]jev.Answer) Verdict {
+	score := 0.0
+	for letter, p := range ans["fit"].Probabilities {
+		score += p * letterValue[letter]
+	}
+	score = math.Round(score*10) / 10
+	reasons := []string{fmt.Sprintf("Jev: %s (%.0f%% sure)", ans["fit"].Choice, 100*ans["fit"].Confidence())}
+	for _, q := range []string{"skills", "role", "seniority", "pay", "dealbreaker"} {
+		if l, ok := jevLabels[q][ans[q].Choice]; ok {
+			reasons = append(reasons, l)
+		}
+	}
+	return Verdict{JobID: id, Model: jev.DefaultModel, Score: score, Letter: rating.LetterForScore(score), Reasoning: strings.Join(reasons, " • ")}
+}
+
+// JevRate rates job id with Jev now and stores the verdict (the badge, when
+// Jev is the default rater).
+func (s *Service) JevRate(ctx context.Context, id int64) (jobs.Job, error) {
+	b, err := s.RateBrief(ctx, id)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	c, err := s.jevClient()
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	ans, err := c.Ask(ctx, jevState(b), jevQuestions)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	return s.SubmitRating(ctx, JevVerdict(id, ans))
+}
+
+// JevRateQueue rates up to limit unrated jobs with Jev (oldest first). It
+// stops at the first API error so a bad key or outage isn't hammered.
+func (s *Service) JevRateQueue(ctx context.Context, limit int) (rated int, err error) {
+	b, err := s.RatingQueue(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	for _, j := range b.Jobs {
+		if _, err := s.JevRate(ctx, j.ID); err != nil {
+			return rated, err
+		}
+		rated++
+	}
+	return rated, nil
+}
+
+// jevIsDefault reports whether the board badge belongs to a Jev model.
+func (s *Service) jevIsDefault(ctx context.Context) bool {
+	c, err := s.RatingConfig(ctx)
+	return err == nil && IsJevModel(c.DefaultModel)
+}
+
+// runJevRate is the scheduled task: rate new jobs when Jev owns the badge, a
+// key exists and the profile is filled in; otherwise it quietly does nothing.
+func (s *Service) runJevRate(ctx context.Context) (CrawlResult, error) {
+	res := CrawlResult{Source: JevRateSource}
+	if !s.jevIsDefault(ctx) {
+		return res, nil
+	}
+	if _, err := s.jevClient(); err != nil {
+		return res, err
+	}
+	n, err := s.JevRateQueue(ctx, 20)
+	res.Found, res.Added = n, n
+	if errors.Is(err, ErrProfileEmpty) {
+		return res, nil // nothing to judge against yet; not a failure of Jev
+	}
+	return res, err
+}
+
+// EnableJev makes Jev the default rater (the badge) and keeps the current
+// raters as A/B challengers, up to the 3-model cap.
+func (s *Service) EnableJev(ctx context.Context) (rating.Config, error) {
+	if _, err := s.jevClient(); err != nil {
+		return rating.Config{}, err
+	}
+	cur, err := s.RatingConfig(ctx)
+	if err != nil {
+		return rating.Config{}, err
+	}
+	models := []string{jev.DefaultModel}
+	for _, m := range cur.Models {
+		if m != jev.DefaultModel && len(models) < rating.MaxModels {
+			models = append(models, m)
+		}
+	}
+	return s.SetRatingConfig(ctx, rating.Config{ABEnabled: len(models) > 1, Models: models, DefaultModel: jev.DefaultModel})
+}
+
+// JevKeySource says where the Jev key would come from ("" when none), for doctor.
+func JevKeySource() string {
+	_, src, err := jev.LoadKey()
+	if err != nil {
+		return ""
+	}
+	return src
+}

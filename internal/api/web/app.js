@@ -1435,9 +1435,16 @@ async function askAI(kind, id) {
   const notesEl = document.getElementById(`draftNotes-${id}`);
   let req;
   try {
+    if (kind === "rate") showToast("Rating…", "info");
     req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : {});
   } catch (e) {
     showToast(e.message, "error");
+    return;
+  }
+  if (req.rated) {
+    // Jev is the default rater: the score is already on the card.
+    showToast(`Rated ${req.job.score_letter} ${req.job.score.toFixed(1)}`, "success");
+    refreshAppState();
     return;
   }
   askState = { kind, id, req };

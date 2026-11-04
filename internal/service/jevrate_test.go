@@ -1,0 +1,131 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
+)
+
+type fakeJev struct {
+	err    error
+	calls  int
+	states []string
+}
+
+func (f *fakeJev) Ask(_ context.Context, state string, qs map[string]jev.Question) (map[string]jev.Answer, error) {
+	f.calls++
+	f.states = append(f.states, state)
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := map[string]jev.Answer{
+		"fit":         {Choice: "A", Probabilities: map[string]float64{"A": 0.6, "B": 0.4, "C": 0, "D": 0, "F": 0}},
+		"skills":      {Choice: "strong"},
+		"role":        {Choice: "on_target"},
+		"seniority":   {Choice: "unclear"},
+		"pay":         {Choice: "below"},
+		"dealbreaker": {Choice: "none"},
+	}
+	for name := range qs {
+		if _, ok := out[name]; !ok {
+			panic("unexpected question " + name)
+		}
+	}
+	return out, nil
+}
+
+func jevSvc(t *testing.T) (*Service, *fakeJev, int64) {
+	t.Helper()
+	s, id := docSvc(t) // profile filled, one job
+	fj := &fakeJev{}
+	s.SetJev(fj)
+	s.SetRatingConfig(context.Background(), rating.Config{ABEnabled: true, Models: []string{jev.DefaultModel, "claude-opus-5-5"}, DefaultModel: jev.DefaultModel})
+	return s, fj, id
+}
+
+func TestJevVerdict(t *testing.T) {
+	v := JevVerdict(7, map[string]jev.Answer{
+		"fit":         {Choice: "A", Probabilities: map[string]float64{"A": 0.6, "B": 0.4}},
+		"skills":      {Choice: "strong"},
+		"pay":         {Choice: "below"},
+		"dealbreaker": {Choice: "some"},
+		"seniority":   {Choice: "unclear"},
+	})
+	// 0.6*4.75 + 0.4*4.2 = 4.53 → 4.5 → A
+	if v.Score != 4.5 || v.Letter != "A" || v.Model != jev.DefaultModel {
+		t.Fatalf("verdict = %+v", v)
+	}
+	for _, want := range []string{"Jev: A (60% sure)", "skills: strong match", "pay: below your minimum", "⚠ hits a deal-breaker"} {
+		if !strings.Contains(v.Reasoning, want) {
+			t.Errorf("reasoning %q lacks %q", v.Reasoning, want)
+		}
+	}
+	if strings.Contains(v.Reasoning, "seniority") {
+		t.Error("an 'unclear' answer shouldn't become a reason")
+	}
+	if _, err := rating.ValidateVerdict(rating.RawVerdict{JobID: 7, Score: v.Score, Letter: v.Letter, Reasoning: v.Reasoning}); err != nil {
+		t.Fatalf("verdict fails the standard validation: %v", err)
+	}
+}
+
+func TestJevRateSetsBadgeAndSendsProfile(t *testing.T) {
+	s, fj, id := jevSvc(t)
+	ctx := context.Background()
+	j, err := s.JevRate(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.ScoreStatus != "scored" || j.ScoreLetter != "A" || j.Score != 4.5 {
+		t.Fatalf("badge = %q %q %v", j.ScoreStatus, j.ScoreLetter, j.Score)
+	}
+	if st := fj.states[0]; !strings.Contains(st, "Backend engineer") || !strings.Contains(st, "Title: Go Engineer") {
+		t.Fatalf("state sent to Jev lacks the profile or job:\n%s", st)
+	}
+}
+
+func TestJevAutoRateSchedule(t *testing.T) {
+	s, fj, _ := jevSvc(t)
+	ctx := context.Background()
+	s.AddJob(ctx, NewJob{Title: "Second", JD: "Python"})
+
+	res, err := s.Crawl(ctx, JevRateSource)
+	if err != nil || res.Added != 2 || fj.calls != 2 {
+		t.Fatalf("auto rate = %+v, %v, %d calls", res, err, fj.calls)
+	}
+	if res, _ := s.Crawl(ctx, JevRateSource); res.Added != 0 || fj.calls != 2 {
+		t.Fatal("re-rated already-scored jobs")
+	}
+
+	// Not the default rater → does nothing, isn't flagged.
+	s.SetRatingConfig(ctx, rating.Config{Models: []string{"claude-opus-5-5"}, DefaultModel: "claude-opus-5-5"})
+	s.AddJob(ctx, NewJob{Title: "Third"})
+	if res, err := s.Crawl(ctx, JevRateSource); err != nil || res.Added != 0 || fj.calls != 2 {
+		t.Fatalf("ran while Jev isn't the rater: %+v %v", res, err)
+	}
+}
+
+func TestJevErrorsStopAndReport(t *testing.T) {
+	s, fj, id := jevSvc(t)
+	ctx := context.Background()
+	s.AddJob(ctx, NewJob{Title: "Second"})
+	fj.err = errors.New("jev: HTTP 401: invalid key")
+	if _, err := s.Crawl(ctx, JevRateSource); err == nil {
+		t.Fatal("API error not returned")
+	}
+	if fj.calls != 1 {
+		t.Fatalf("kept calling after an API error: %d calls", fj.calls)
+	}
+	v, _ := s.CrawlStatus(ctx)
+	for _, src := range v.Sources {
+		if src.Name == JevRateSource && (src.Healthy || !strings.Contains(src.LastError, "401")) {
+			t.Fatalf("panel = %+v", src)
+		}
+	}
+	if j, _ := s.GetJob(ctx, id); j.ScoreStatus == "scored" {
+		t.Fatal("scored despite the error")
+	}
+}

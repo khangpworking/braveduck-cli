@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/khangpworking/braveduck-cli/internal/core/jev"
+	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 	"io"
@@ -244,5 +246,42 @@ func TestApplyRefusals(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&out)
 	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(out["error"], "TopCV jobs") {
 		t.Fatalf("non-TopCV apply = %d %v", resp.StatusCode, out)
+	}
+}
+
+type apiFakeJev struct{}
+
+func (apiFakeJev) Ask(context.Context, string, map[string]jev.Question) (map[string]jev.Answer, error) {
+	return map[string]jev.Answer{
+		"fit":    {Choice: "B", Probabilities: map[string]float64{"A": 0, "B": 1, "C": 0, "D": 0, "F": 0}},
+		"skills": {Choice: "strong"}, "role": {Choice: "on_target"}, "seniority": {Choice: "match"},
+		"pay": {Choice: "unclear"}, "dealbreaker": {Choice: "none"},
+	}, nil
+}
+
+// With Jev as the default rater, the board's Rate button rates at once
+// instead of handing back a request to copy.
+func TestRateButtonWithJev(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	svc := service.New(st)
+	dir := t.TempDir()
+	svc.SetDataDir(dir)
+	os.WriteFile(filepath.Join(dir, "profile.md"), []byte("Backend engineer, Go."), 0o600)
+	svc.SetJev(apiFakeJev{})
+	svc.SetRatingConfig(context.Background(), rating.Config{Models: []string{jev.DefaultModel}, DefaultModel: jev.DefaultModel})
+	j, _ := svc.AddJob(context.Background(), service.NewJob{Title: "Go Engineer"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	resp := do(t, http.MethodPost, fmt.Sprintf("%s/api/jobs/%d/rate", ts.URL, j.ID), "")
+	var out struct {
+		Rated bool     `json:"rated"`
+		Job   jobs.Job `json:"job"`
+	}
+	json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != 200 || !out.Rated || out.Job.ScoreLetter != "B" {
+		t.Fatalf("rate with Jev = %d %+v", resp.StatusCode, out)
 	}
 }
