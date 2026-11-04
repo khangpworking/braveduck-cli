@@ -36,6 +36,7 @@ Reuse the same JSON structs the REST handlers marshal.
 |------|---------|-------|
 | `list_jobs` | `GET /api/jobs` | optional `status`, `platform` filters |
 | `get_job` | `GET /api/jobs/{id}` | |
+| `get_today` | `GET /api/today` | what to act on now: best matches, deadlines this week, follow-ups (same as `braveduck today`) |
 | `add_job` | `POST /api/jobs` | supported link (TopCV, VietnamWorks, JobOKO, CareerLink fetched; Facebook link + pasted post text, never fetched) or pasted JD; runs the no-AI extractor + built-in browser we shipped |
 | `update_job` | `PATCH /api/jobs/{id}` | |
 | `delete_job` | `DELETE /api/jobs/{id}` | |

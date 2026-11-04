@@ -31,6 +31,7 @@ Jobs
              Facebook link; text after the link is the post or JD ("-" reads
              it from stdin). Job text on its own works too.
   add --title ...   add a job field by field (--company, --url, --salary, --source, --jd)
+  today      what to act on now: best matches, deadlines this week, follow-ups
   list       list jobs            (--status, --source)
   show <id>  job detail
   edit <id>  change details  (--title, --company, --salary, --location, --notes)
@@ -144,6 +145,8 @@ func run(args []string) error {
 	switch cmd {
 	case "add":
 		return cmdAdd(ctx, svc, rest)
+	case "today":
+		return cmdToday(ctx, svc)
 	case "list", "ls":
 		return cmdList(ctx, svc, rest)
 	case "show", "get":

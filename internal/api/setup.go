@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// The profile editor and the "Get started" checklist.
+// The profile editor, the "Get started" checklist and Today.
 
 func (s *server) getProfile(w http.ResponseWriter, r *http.Request) {
 	p, err := s.svc.Profile(r.Context())
@@ -23,4 +23,9 @@ func (s *server) putProfile(w http.ResponseWriter, r *http.Request) {
 func (s *server) getSetup(w http.ResponseWriter, r *http.Request) {
 	st, err := s.svc.Setup(r.Context())
 	reply(w, http.StatusOK, st, err)
+}
+
+func (s *server) getToday(w http.ResponseWriter, r *http.Request) {
+	g, err := s.svc.Today(r.Context())
+	reply(w, http.StatusOK, g, err)
 }
