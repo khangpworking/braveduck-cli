@@ -58,6 +58,13 @@ func launch(ctx context.Context, o launchOpts) (*rod.Browser, func(), error) {
 	if o.UserDataDir != "" {
 		l = l.UserDataDir(o.UserDataDir)
 	}
+	if !o.Headless {
+		// Without these Chromium picks its own geometry; on WSLg that was
+		// half off-screen (-22,-22) and taller than a 1080p display. This
+		// fits a 1366x768 laptop screen.
+		l = l.Set(flags.Flag("window-position"), "60,40").
+			Set(flags.Flag("window-size"), "1024,720")
+	}
 
 	controlURL, err := l.Launch()
 	if err != nil {

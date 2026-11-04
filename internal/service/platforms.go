@@ -30,7 +30,7 @@ var ErrLoginInProgress = errors.New("a login window for this site is already ope
 // platformDeps are the moving parts, swapped in tests.
 type platformDeps struct {
 	login func(ctx context.Context, p platform.Platform, seed string, o browser.LoginOptions) (browser.Session, error)
-	probe func(ctx context.Context, p platform.Platform, s browser.Session, seed string) (string, error)
+	probe func(ctx context.Context, p platform.Platform, s browser.Session, seed string) (browser.ProbeResult, error)
 }
 
 // platformState is the service's platform machinery, set up by SetDataDir.
@@ -164,12 +164,16 @@ func (s *Service) connect(ctx context.Context, p platform.Platform, v *vault.Vau
 	if err != nil {
 		return err
 	}
-	state, err := s.plat.deps.probe(ctx, p, sess, seed)
+	res, err := s.plat.deps.probe(ctx, p, sess, seed)
+	state := res.State
 	if err != nil {
 		state = store.SessionUnknown
 	}
 	if state == store.SessionExpired {
 		return ErrStillLoggedOut
+	}
+	if sess.Account == "" {
+		sess.Account = res.Account // the login page didn't carry it; the account page did
 	}
 
 	plain, err := json.Marshal(sess)
@@ -246,18 +250,18 @@ func (s *Service) CheckPlatform(ctx context.Context, id string) (PlatformStatus,
 		return PlatformStatus{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	sess, seed, err := s.PlatformSession(ctx, p.ID)
-	state := store.SessionUnknown
+	state, account := store.SessionUnknown, ""
 	switch {
 	case errors.Is(err, vault.ErrDecrypt):
 		state = store.SessionExpired
 	case err != nil:
 		return PlatformStatus{}, err
 	default:
-		if st, perr := s.plat.deps.probe(ctx, p, sess, seed); perr == nil {
-			state = st
+		if res, perr := s.plat.deps.probe(ctx, p, sess, seed); perr == nil {
+			state, account = res.State, res.Account
 		}
 	}
-	if err := s.st.SetSessionStatus(ctx, p.ID, state, s.now()); err != nil {
+	if err := s.st.SetSessionStatus(ctx, p.ID, state, account, s.now()); err != nil {
 		return PlatformStatus{}, notConnected(err, p)
 	}
 	return s.platformStatus(ctx, p.ID)

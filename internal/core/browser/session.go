@@ -141,6 +141,9 @@ func Login(ctx context.Context, p platform.Platform, seed string, o LoginOptions
 	if o.OnOpen != nil {
 		go o.OnOpen(page)
 	}
+	if !o.Headless {
+		go raiseOnWSL(ctx) // WSLg windows otherwise open behind the user's apps
+	}
 
 	loginRE, err := regexp.Compile(p.LoginPattern)
 	if err != nil {
@@ -333,41 +336,62 @@ func NewPage(b *rod.Browser, s Session) (*rod.Page, error) {
 	return pg, nil
 }
 
+// ProbeResult is a probe's verdict and, when logged in and the platform has an
+// AccountJS, the masked account label read from the probe page.
+type ProbeResult struct {
+	State   string
+	Account string
+}
+
 // Probe checks whether s is still logged in on p: it opens p.ProbeURL with the
-// session and judges the page it lands on.
-func Probe(ctx context.Context, p platform.Platform, s Session, seed string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-	b, cleanup, err := Open(ctx, p, s, seed)
-	if err != nil {
-		return Unknown, err
+// session and judges the page it lands on. The probe page is an account page,
+// so it is also where the account label is reliably present — the page a
+// login finishes on often doesn't carry it.
+func Probe(ctx context.Context, p platform.Platform, s Session, seed string) (ProbeResult, error) {
+	state, pg, cleanup, err := probe(ctx, p, s, seed)
+	if cleanup != nil {
+		defer cleanup()
 	}
-	defer cleanup()
+	r := ProbeResult{State: state}
+	if err == nil && state == LoggedIn && p.AccountJS != "" {
+		r.Account = MaskAccount(evalString(pg, p.AccountJS))
+	}
+	return r, err
+}
+
+func probe(ctx context.Context, p platform.Platform, s Session, seed string) (string, *rod.Page, func(), error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	b, closeBrowser, err := Open(ctx, p, s, seed)
+	if err != nil {
+		cancel()
+		return Unknown, nil, nil, err
+	}
+	cleanup := func() { closeBrowser(); cancel() }
 	pg, err := NewPage(b, s)
 	if err != nil {
-		return Unknown, err
+		return Unknown, nil, cleanup, err
 	}
 	pg = pg.Context(ctx)
 	if err := pg.Navigate(p.ProbeURL); err != nil {
-		return Unknown, err
+		return Unknown, pg, cleanup, err
 	}
 	_ = pg.Timeout(20 * time.Second).WaitLoad()
 	if !waitOutChallenge(pg) {
-		return Unknown, nil
+		return Unknown, pg, cleanup, nil
 	}
 	info, err := pg.Info()
 	if err != nil {
-		return Unknown, err
+		return Unknown, pg, cleanup, err
 	}
 	loginRE, err := regexp.Compile(p.LoginPattern)
 	if err != nil {
-		return Unknown, err
+		return Unknown, pg, cleanup, err
 	}
 	if loginRE.MatchString(info.URL) {
-		return LoggedOut, nil
+		return LoggedOut, pg, cleanup, nil
 	}
 	if p.ProbeJS != "" {
-		return evalProbe(pg, p.ProbeJS), nil
+		return evalProbe(pg, p.ProbeJS), pg, cleanup, nil
 	}
-	return LoggedIn, nil
+	return LoggedIn, pg, cleanup, nil
 }

@@ -75,12 +75,14 @@ func (s *Store) ListSessions(ctx context.Context) ([]PlatformSession, error) {
 	return out, rows.Err()
 }
 
-// SetSessionStatus records a probe result. Returns sql.ErrNoRows if the
-// platform has no session.
-func (s *Store) SetSessionStatus(ctx context.Context, platform, status string, now time.Time) error {
+// SetSessionStatus records a probe result; a non-empty account also updates
+// the account label (an empty one keeps the label already stored). Returns
+// sql.ErrNoRows if the platform has no session.
+func (s *Store) SetSessionStatus(ctx context.Context, platform, status, account string, now time.Time) error {
 	res, err := s.db.ExecContext(ctx,
-		"UPDATE platform_sessions SET status = ?, checked_at = ? WHERE platform = ?",
-		status, now.UTC().Format(time.RFC3339), platform)
+		`UPDATE platform_sessions SET status = ?, checked_at = ?,
+		   account_hint = COALESCE(NULLIF(?, ''), account_hint) WHERE platform = ?`,
+		status, now.UTC().Format(time.RFC3339), account, platform)
 	if err != nil {
 		return err
 	}

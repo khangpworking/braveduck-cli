@@ -154,14 +154,17 @@ func TestLoginCaptureProbeExpire(t *testing.T) {
 				t.Errorf("account = %q, want masked de…@example.com", s.Account)
 			}
 
-			state, err := Probe(ctx, p, s, seed)
-			if err != nil || state != LoggedIn {
-				t.Fatalf("probe with fresh session = %q, %v", state, err)
+			res, err := Probe(ctx, p, s, seed)
+			if err != nil || res.State != LoggedIn {
+				t.Fatalf("probe with fresh session = %+v, %v", res, err)
+			}
+			if res.Account != "de…@example.com" {
+				t.Errorf("probe account = %q, want it read from the account page", res.Account)
 			}
 
 			fs.revoked.Store(true)
-			if state, _ := Probe(ctx, p, s, seed); state != LoggedOut {
-				t.Fatalf("probe after server-side revoke = %q, want %q", state, LoggedOut)
+			if res, _ := Probe(ctx, p, s, seed); res.State != LoggedOut || res.Account != "" {
+				t.Fatalf("probe after server-side revoke = %+v, want %q and no account", res, LoggedOut)
 			}
 		})
 	}

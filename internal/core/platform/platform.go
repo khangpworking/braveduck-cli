@@ -61,7 +61,8 @@ var builtins = []Platform{
 		// Laravel login; sso_token (~12 h) is a short-lived helper.
 		AuthCookies: []string{"topcv_session"},
 		// window.topcvUser carries the account's email (same doc, §Data exposure).
-		AccountJS: `(() => { const u = window.topcvUser; return u && u.email || null })()`,
+		// Email first; the name fields are a fallback if the email is absent.
+		AccountJS: `(() => { const u = window.topcvUser; return u && (u.email || u.fullname || u.name) || null })()`,
 		Verified:  true,
 	},
 	{

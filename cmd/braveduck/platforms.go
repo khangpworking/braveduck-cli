@@ -30,7 +30,7 @@ func cmdPlatforms(ctx context.Context, svc *service.Service, args []string) erro
 		return err
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "SITE\tSTATUS\tSINCE\tLOGIN CHECK")
+	fmt.Fprintln(w, "SITE\tSTATUS\tACCOUNT\tSINCE\tLOGIN CHECK")
 	for _, p := range all {
 		since := ""
 		if len(p.Since) >= 10 {
@@ -43,7 +43,7 @@ func cmdPlatforms(ctx context.Context, svc *service.Service, args []string) erro
 		if !p.Builtin {
 			check = "custom (platforms.json)"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.ID, strings.ReplaceAll(p.Status, "_", " "), since, check)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.ID, strings.ReplaceAll(p.Status, "_", " "), p.Account, since, check)
 	}
 	return w.Flush()
 }
@@ -72,7 +72,8 @@ func cmdLogin(ctx context.Context, svc *service.Service, args []string) error {
 			}
 			fmt.Printf("Opening a browser window — log in to %s there yourself (password, OTP,\n", p.Name)
 			fmt.Println("captcha: whatever the site asks). braveduck never sees your password.")
-			fmt.Println("The window closes on its own once you're logged in; or close it when done.")
+			fmt.Println("Don't see it? Look for a \"Chromium\" window on your taskbar.")
+			fmt.Println("It closes on its own once you're logged in (10 minutes max); or close it when done.")
 		},
 		OnDetected: func() { fmt.Println("✓ login detected — saving the session…") },
 	})

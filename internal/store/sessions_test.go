@@ -30,13 +30,18 @@ func TestSessionsCRUD(t *testing.T) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 
-	if err := s.SetSessionStatus(ctx, "topcv", SessionExpired, now); err != nil {
+	// An empty account keeps the stored label; a new one replaces it.
+	if err := s.SetSessionStatus(ctx, "topcv", SessionExpired, "", now); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetSession(ctx, "topcv"); got.Status != SessionExpired || got.CheckedAt == "" {
-		t.Fatalf("status not recorded: %+v", got)
+	if got, _ := s.GetSession(ctx, "topcv"); got.Status != SessionExpired || got.CheckedAt == "" || got.AccountHint != "ng…@gmail.com" {
+		t.Fatalf("status not recorded or label lost: %+v", got)
 	}
-	if err := s.SetSessionStatus(ctx, "nope", SessionExpired, now); !IsNotFound(err) {
+	s.SetSessionStatus(ctx, "topcv", SessionConnected, "kh…@gmail.com", now)
+	if got, _ := s.GetSession(ctx, "topcv"); got.AccountHint != "kh…@gmail.com" {
+		t.Fatalf("label not updated: %+v", got)
+	}
+	if err := s.SetSessionStatus(ctx, "nope", SessionExpired, "", now); !IsNotFound(err) {
 		t.Fatalf("status on missing = %v", err)
 	}
 

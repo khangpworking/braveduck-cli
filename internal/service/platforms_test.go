@@ -20,11 +20,13 @@ import (
 const secretCookie = "SUPER-SECRET-SESSION-VALUE"
 
 type fakeBrowser struct {
-	probeState string
-	loginErr   error
-	loginWait  chan struct{} // if set, login blocks until closed
-	seeds      []string
-	logins     atomic.Int32
+	probeState   string
+	probeAccount string // label the account page shows
+	loginAccount string // label the login page shows ("" = none, like real TopCV)
+	loginErr     error
+	loginWait    chan struct{} // if set, login blocks until closed
+	seeds        []string
+	logins       atomic.Int32
 }
 
 func (f *fakeBrowser) login(_ context.Context, _ platform.Platform, seed string, o browser.LoginOptions) (browser.Session, error) {
@@ -46,13 +48,17 @@ func (f *fakeBrowser) login(_ context.Context, _ platform.Platform, seed string,
 			{Name: "sso_token", Value: "x", Domain: ".topcv.vn", // short-lived helper: not the hint
 				Expires: proto.TimeSinceEpoch(time.Now().Add(12 * time.Hour).Unix())},
 		},
-		Account: "ng…@gmail.com",
+		Account: f.loginAccount,
 		Storage: map[string]map[string]string{"https://www.topcv.vn": {"token": secretCookie}},
 	}, nil
 }
 
-func (f *fakeBrowser) probe(context.Context, platform.Platform, browser.Session, string) (string, error) {
-	return f.probeState, nil
+func (f *fakeBrowser) probe(context.Context, platform.Platform, browser.Session, string) (browser.ProbeResult, error) {
+	r := browser.ProbeResult{State: f.probeState}
+	if r.State == store.SessionConnected {
+		r.Account = f.probeAccount
+	}
+	return r, nil
 }
 
 func newPlatformSvc(t *testing.T) (*Service, *fakeBrowser) {
@@ -60,7 +66,7 @@ func newPlatformSvc(t *testing.T) (*Service, *fakeBrowser) {
 	t.Setenv(vault.PassphraseEnv, "")
 	s := newSvc(t)
 	s.SetDataDir(t.TempDir())
-	fb := &fakeBrowser{probeState: store.SessionConnected}
+	fb := &fakeBrowser{probeState: store.SessionConnected, probeAccount: "ng…@gmail.com"}
 	s.plat.deps = platformDeps{login: fb.login, probe: fb.probe}
 	return s, fb
 }
@@ -237,5 +243,32 @@ func TestDisconnectAndCheck(t *testing.T) {
 	}
 	if del, _ := s.Disconnect(ctx, "topcv"); del {
 		t.Fatal("second disconnect reported a deletion")
+	}
+}
+
+// Real TopCV: the page a login finishes on doesn't carry the account, the
+// account page the check opens does. The label must come from there, and a
+// later check must refresh it without losing it when the page lacks it.
+func TestAccountLabelFromAccountPage(t *testing.T) {
+	s, fb := newPlatformSvc(t)
+	ctx := context.Background()
+
+	st, err := s.Connect(ctx, "topcv", LoginHooks{})
+	if err != nil || st.Account != "ng…@gmail.com" {
+		t.Fatalf("connect = %+v, %v; want the label from the account page", st, err)
+	}
+
+	fb.loginAccount = "lo…@gmail.com" // when the login page has it, it wins
+	if st, _ := s.Connect(ctx, "topcv", LoginHooks{}); st.Account != "lo…@gmail.com" {
+		t.Fatalf("re-login label = %q", st.Account)
+	}
+
+	fb.probeAccount = ""
+	if st, _ := s.CheckPlatform(ctx, "topcv"); st.Account != "lo…@gmail.com" {
+		t.Fatalf("check without a label wiped it: %q", st.Account)
+	}
+	fb.probeAccount = "kh…@gmail.com"
+	if st, _ := s.CheckPlatform(ctx, "topcv"); st.Account != "kh…@gmail.com" {
+		t.Fatalf("check didn't refresh the label: %q", st.Account)
 	}
 }

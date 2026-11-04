@@ -1,6 +1,6 @@
 # Spec: platform sessions (log in once, reuse safely)
 
-Status: **built** (approved 2026-11-01) · Item 15 of the upgrade plan · real-site check pending: first `braveduck login` on each site
+Status: **built** (approved 2026-11-01) · Item 15 of the upgrade plan · **TopCV verified on the live site 2026-11-04**; VietnamWorks, JobOKO, CareerLink pending a first real login
 Depends on: built-in browser (`internal/core/browser`), service layer, MCP.
 Unblocks: auto-apply, status sync, crawling behind a login (each a later task).
 
