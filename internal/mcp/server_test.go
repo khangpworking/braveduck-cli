@@ -77,7 +77,7 @@ func TestListsEveryTool(t *testing.T) {
 	for _, name := range []string{
 		"list_jobs", "get_job", "add_job", "update_job", "delete_job", "set_status",
 		"pin_job", "keep_job", "get_keywords", "get_rating_config", "set_rating_config",
-		"get_stats", "get_crawl_status", "get_activity",
+		"get_stats", "get_today", "get_crawl_status", "get_activity",
 		"get_profile", "update_profile", "get_rating_queue", "rate_job", "submit_rating",
 		"list_platforms", "connect_platform", "disconnect_platform",
 		"get_crawl_schedule", "set_crawl_schedule",
