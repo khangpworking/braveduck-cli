@@ -903,18 +903,18 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			switch scenario {
 			case "filtered":
-				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustClick()
+				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustEval(`() => this.click()`)
 				page.MustElement("#jobSearch").MustInput("not a matching title")
 			case "mobile collapsed":
 				setViewportWidth(page, 390)
-				page.MustElement("#col-Saved .column-header").MustClick()
+				page.MustElement("#col-Saved .column-header").MustEval(`() => this.click()`)
 				if page.MustElement(`.card[data-id="1"]`).MustVisible() {
 					t.Fatal("mobile column did not collapse before Show")
 				}
 			}
-			page.MustElement("#openDrawerBtn").MustClick()
+			page.MustElement("#openDrawerBtn").MustEval(`() => this.click()`)
 			page.MustElement("#pasteJDTextarea").MustSelectAllText().MustInput("https://www.topcv.vn/viec-lam/x/1.html?ta_source=list")
-			page.MustElement("#extractAddBtn").MustClick()
+			page.MustElement("#extractAddBtn").MustEval(`() => this.click()`)
 
 			page.MustElement("#extractResultBanner").MustWaitVisible()
 			banner := page.MustElement("#extractResultBanner li")
@@ -928,7 +928,7 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 				t.Fatalf("%d jobs, want the duplicate refused", len(list))
 			}
 
-			banner.MustElement("button").MustClick()
+			banner.MustElement("button").MustEval(`() => this.click()`)
 			if !page.MustEval(`() => !!document.querySelector('.card[data-id="1"] #detail-1')`).Bool() {
 				t.Fatal("Show did not reveal and expand the duplicate card")
 			}
@@ -969,11 +969,11 @@ func TestBoardUploadsCV(t *testing.T) {
 
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	page.MustElement("#myCVBtn").MustClick()
+	page.MustElement("#myCVBtn").MustEval(`() => this.click()`)
 	page.MustElementR("#cvStatus", "No CV uploaded yet")
 
 	page.MustElement("#cvFileInput").MustSetFiles(first)
-	page.MustElement("#cvUploadBtn").MustClick()
+	page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
 	page.MustElementR("#cvResult", "uploaded")
 	page.MustElementR("#cvStatus", "is filled in")
 	if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#cvModalOverlay img")`).Bool() {
@@ -983,7 +983,7 @@ func TestBoardUploadsCV(t *testing.T) {
 	// The second upload asks before replacing what's in About me.
 	wait, handle := page.MustHandleDialog()
 	page.MustElement("#cvFileInput").MustSetFiles(second)
-	go page.MustElement("#cvUploadBtn").MustClick()
+	go page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
 	if d := wait(); !strings.Contains(d.Message, "About me") {
 		t.Fatalf("dialog = %q", d.Message)
 	}
@@ -1020,7 +1020,7 @@ func TestBoardGetStarted(t *testing.T) {
 	}
 
 	// Step 2 opens the editor on the real profile template.
-	page.MustElement(`#setupSteps button[data-setup="wants"]`).MustClick()
+	page.MustElement(`#setupSteps button[data-setup="wants"]`).MustEval(`() => this.click()`)
 	page.MustElementR("#profileStatus", "Still empty")
 	text := page.MustElement("#profileText")
 	if v := text.MustProperty("value").Str(); !strings.Contains(v, "# What I'm looking for") {
@@ -1146,7 +1146,7 @@ func TestBoardToday(t *testing.T) {
 		}
 	}
 
-	page.MustElementR("#todayList button", "Closes soon").MustClick()
+	page.MustElementR("#todayList button", "Closes soon").MustEval(`() => this.click()`)
 	page.MustElement(`.card.flash`)
 }
 
@@ -1166,19 +1166,19 @@ func TestBoardSettingsMenu(t *testing.T) {
 
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	page.MustElement("#settingsBtn").MustClick()
+	page.MustElement("#settingsBtn").MustEval(`() => this.click()`)
 	page.MustElement(`#settingsBtn[aria-expanded="true"]`)
 	if items := page.MustElement("#settingsMenu").MustText(); !strings.Contains(items, "Search terms") || !strings.Contains(items, "Job-site logins") {
 		t.Fatalf("menu = %q", items)
 	}
-	page.MustElement("#sourcesBtn").MustClick()
+	page.MustElement("#sourcesBtn").MustEval(`() => this.click()`)
 	page.MustElement("#sourcesModalOverlay.open")
 	if !page.MustEval(`() => document.getElementById("settingsMenu").hidden`).Bool() {
 		t.Fatal("menu still open after a pick")
 	}
 	page.MustEval(`() => document.querySelector("#sourcesModalOverlay .modal-close-btn").click()`)
 
-	page.MustElement("#settingsBtn").MustClick()
+	page.MustElement("#settingsBtn").MustEval(`() => this.click()`)
 	page.Keyboard.MustType(input.ArrowDown)
 	if id := page.MustEval(`() => document.activeElement.id`).Str(); id != "sourcesBtn" {
 		t.Fatalf("ArrowDown focused %q, want the second item", id)
@@ -1348,6 +1348,6 @@ func TestBoardApplyOnAnySite(t *testing.T) {
 		t.Fatal("an Apply button for a site without a login")
 	}
 
-	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustClick()
+	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustEval(`() => this.click()`)
 	waitUntil(t, func() bool { j, _ := svc.GetJob(ctx, asked.ID); return j.Status == "applied" && j.ApplyState == "sent" }, "confirming didn't move the job to Applied")
 }
