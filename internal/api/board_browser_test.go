@@ -132,3 +132,54 @@ func TestLoginsPanel(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// The rating window edits free-text rater ids (no hard-coded model list),
+// saves them, and shows the server's reason when a config is invalid.
+func TestRatingSettings(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	ctx := context.Background()
+
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement("#ratingBtn").MustClick()
+	page.MustElement("#ratingModalOverlay.open") // opens once the stored config has loaded
+	if v := page.MustElement("#defaultModelInput").MustProperty("value").Str(); v == "" {
+		t.Fatal("default rater not pre-filled from the stored config")
+	}
+	if strings.Contains(page.MustElement("#ratingModalOverlay").MustText(), "GPT-4o") {
+		t.Fatal("hard-coded model list still shown")
+	}
+
+	page.MustElement("#defaultModelInput").MustSelectAllText().MustInput("my-rater")
+	page.MustElement("#challengerModelsInput").MustInput("rival-a, rival-b")
+	page.MustElement("#abModeCheckbox").MustClick()
+	page.MustElement("#saveRatingConfigBtn").MustClick()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		c, _ := svc.RatingConfig(ctx)
+		if c.DefaultModel == "my-rater" && c.ABEnabled && len(c.Models) == 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("config not saved: %+v", c)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Too many raters: the server refuses and the window says why.
+	page.MustElement("#ratingBtn").MustClick()
+	page.MustElement("#ratingModalOverlay.open")
+	page.MustElement("#challengerModelsInput").MustSelectAllText().MustInput("a, b, c")
+	page.MustElement("#saveRatingConfigBtn").MustClick()
+	msg := page.MustElement("#ratingConfigError").MustWaitVisible().MustText()
+	if !strings.Contains(msg, "at most 3") {
+		t.Fatalf("error shown = %q", msg)
+	}
+}

@@ -130,6 +130,7 @@ type Sets map[string][]string
 //  2. negative_title — reject if the title contains any term;
 //  3. negative_content — reject if title OR description contains any term;
 //  4. negative_company — reject if the company contains any term.
+//
 // An empty positive_title list means "no positive gate" (everything passes 1).
 func Filter(j Job, sets Sets) Decision {
 	// 1. Positive title gate.
