@@ -804,3 +804,42 @@ func TestBoardToday(t *testing.T) {
 	page.MustElementR("#todayList button", "Closes soon").MustClick()
 	page.MustElement(`.card.flash`)
 }
+
+// ⚙ Settings opens a menu of the less-used windows; picking one closes the
+// menu and opens the window, and Esc closes the menu.
+func TestBoardSettingsMenu(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement("#settingsBtn").MustClick()
+	page.MustElement(`#settingsBtn[aria-expanded="true"]`)
+	if items := page.MustElement("#settingsMenu").MustText(); !strings.Contains(items, "Search terms") || !strings.Contains(items, "Job-site logins") {
+		t.Fatalf("menu = %q", items)
+	}
+	page.MustElement("#sourcesBtn").MustClick()
+	page.MustElement("#sourcesModalOverlay.open")
+	if !page.MustEval(`() => document.getElementById("settingsMenu").hidden`).Bool() {
+		t.Fatal("menu still open after a pick")
+	}
+	page.MustEval(`() => document.querySelector("#sourcesModalOverlay .modal-close-btn").click()`)
+
+	page.MustElement("#settingsBtn").MustClick()
+	page.Keyboard.MustType(input.ArrowDown)
+	if id := page.MustEval(`() => document.activeElement.id`).Str(); id != "sourcesBtn" {
+		t.Fatalf("ArrowDown focused %q, want the second item", id)
+	}
+	page.Keyboard.MustType(input.Escape)
+	if !page.MustEval(`() => document.getElementById("settingsMenu").hidden && document.activeElement.id === "settingsBtn"`).Bool() {
+		t.Fatal("Esc didn't close the menu and return focus")
+	}
+}

@@ -1217,3 +1217,35 @@ a:hover {
   margin-top: 4px;
   font-size: 12px;
 }
+
+/* Settings menu */
+.settings-menu {
+  position: absolute;
+  z-index: 50;
+  min-width: 230px;
+  padding: 6px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+}
+.settings-menu[hidden] {
+  display: none;
+}
+.settings-item {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-item:hover,
+.settings-item:focus-visible {
+  background: var(--surface-soft);
+  outline: none;
+}
