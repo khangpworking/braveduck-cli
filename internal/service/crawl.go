@@ -60,11 +60,12 @@ func (s *Service) crawlers() *crawlState {
 
 // CrawlResult is what one crawl did.
 type CrawlResult struct {
-	Source   string `json:"source"`
-	Queries  int    `json:"queries"`
-	Found    int    `json:"found"`    // listings the source returned
-	Filtered int    `json:"filtered"` // dropped by the keyword filters
-	Added    int    `json:"added"`    // new on the board
+	Source     string `json:"source"`
+	Queries    int    `json:"queries"`
+	Found      int    `json:"found"`      // listings the source returned
+	Filtered   int    `json:"filtered"`   // dropped by the keyword filters
+	Duplicates int    `json:"duplicates"` // already on the board (pasted, synced or crawled before)
+	Added      int    `json:"added"`      // new on the board
 }
 
 // TopCVSyncSource is the schedule/crawl-panel id of the TopCV status sync, a
@@ -131,6 +132,10 @@ func (s *Service) crawlOnce(ctx context.Context, c crawl.Crawler) (CrawlResult, 
 		return res, ErrNoQueries
 	}
 	res.Queries = len(queries)
+	board, err := s.loadDupIndex(ctx)
+	if err != nil {
+		return res, err
+	}
 	seen := map[string]bool{}
 	var firstErr error
 	for _, q := range queries {
@@ -154,9 +159,6 @@ func (s *Service) crawlOnce(ctx context.Context, c crawl.Crawler) (CrawlResult, 
 				res.Filtered++
 				continue
 			}
-			if dup, err := s.st.ExistsByURL(ctx, l.URL); err != nil || dup {
-				continue
-			}
 			j := jobs.Job{
 				Title: l.Title, Company: l.Company, URL: l.URL, Location: l.Location,
 				Salary: l.Salary, Skills: strings.Join(l.Skills, ", "), FullJD: l.Description,
@@ -165,7 +167,12 @@ func (s *Service) crawlOnce(ctx context.Context, c crawl.Crawler) (CrawlResult, 
 			if l.Deadline != "" {
 				j.ExpiresAt = jobs.ExpirePrefix + l.Deadline
 			}
-			if _, err := s.addQuiet(ctx, j); err == nil {
+			if len(board.find(j)) > 0 {
+				res.Duplicates++
+				continue
+			}
+			if saved, err := s.addQuiet(ctx, j); err == nil {
+				board.add(saved)
 				res.Added++
 			}
 		}

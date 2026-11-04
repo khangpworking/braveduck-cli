@@ -76,8 +76,8 @@ func TestCrawlFiltersDedupsAndReports(t *testing.T) {
 	}
 
 	// Second run: nothing new, no duplicate.
-	if res, _ := s.Crawl(ctx, "vietnamworks"); res.Added != 0 {
-		t.Fatalf("second run added %d", res.Added)
+	if res, _ := s.Crawl(ctx, "vietnamworks"); res.Added != 0 || res.Duplicates != 1 {
+		t.Fatalf("second run added %d, skipped %d as already on the board, want 0 and 1", res.Added, res.Duplicates)
 	}
 
 	v, _ := s.CrawlStatus(ctx)
@@ -195,4 +195,31 @@ func schedByName(t *testing.T, s *Service) map[string]SourceSchedule {
 		m[sc.Source] = sc
 	}
 	return m
+}
+
+// A job the user pasted (by link or as text) isn't added again when a crawl
+// finds it, and neither is one listing found under two links in one run.
+func TestCrawlSkipsJobsAlreadyOnBoard(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	s.AddFromContent(ctx, "https://www.vietnamworks.com/growth-marketer-1-jv?utm_source=fb")
+	s.AddFromContent(ctx, "Data Analyst\nMoMo\nSalary: $2,000")
+	s.SetCrawlers(&fakeCrawler{byQuery: map[string][]crawl.Listing{"data": {
+		{Title: "Growth Marketer (Hybrid)", Company: "Duck Co", URL: "https://www.vietnamworks.com/growth-marketer-1-jv"}, // same link
+		{Title: "Data Analyst", Company: "MoMo", URL: "https://www.vietnamworks.com/data-analyst-2-jv"},                   // pasted as text
+		{Title: "Product Owner", Company: "Duck Co", URL: "https://www.vietnamworks.com/product-owner-3-jv"},
+		{Title: "Product Owner", Company: "Duck Co", URL: "https://www.vietnamworks.com/product-owner-3-jv-hcm"},
+	}}})
+	addTerms(t, s, "search_queries", "data")
+
+	res, err := s.Crawl(ctx, "vietnamworks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Found != 4 || res.Duplicates != 3 || res.Added != 1 {
+		t.Fatalf("result = %+v, want 4 found, 3 already on the board, 1 added", res)
+	}
+	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 3 {
+		t.Fatalf("board has %d jobs, want the 2 pasted + Product Owner once", len(list))
+	}
 }

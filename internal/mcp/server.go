@@ -76,7 +76,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "list_platforms", "Job sites braveduck can hold a login for, and whether the user is logged in to each (status only — never session data).", readOnly, t.listPlatforms)
 	add(srv, "connect_platform", "Open a browser window on the user's screen so THEY can log in to a job site (braveduck never sees the password). Returns at once with status 'connecting'; poll list_platforms to see when it becomes 'connected'. Only call this when the user asks to connect a site.", write, t.connectPlatform)
 	add(srv, "disconnect_platform", "Delete the saved login for a job site.", destructive, t.disconnectPlatform)
-	add(srv, "crawl", "Fetch new jobs now from braveduck's built-in crawlers (or one `source`, e.g. vietnamworks), using the user's search_queries keyword list and filters. Returns found / filtered / added counts.", write, t.crawl)
+	add(srv, "crawl", "Fetch new jobs now from braveduck's built-in crawlers (or one `source`, e.g. vietnamworks), using the user's search_queries keyword list and filters. Returns found / filtered / duplicates (already on the board) / added counts.", write, t.crawl)
 	add(srv, "retry_crawl", "Same as crawl, for one source (the board's Retry).", write, t.retryCrawl)
 	add(srv, "get_crawl_schedule", "How often each job source fetches new jobs (every_minutes; 0 = off).", readOnly, t.getCrawlSchedule)
 	add(srv, "set_crawl_schedule", "Set how often a source fetches new jobs: every_minutes 0 (off) or 15-1440 for built-in crawlers (5-1440 for external tools).", idempotentWrite, t.setCrawlSchedule)

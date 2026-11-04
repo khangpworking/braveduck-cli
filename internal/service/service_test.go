@@ -280,8 +280,9 @@ func TestAddFromContentRejectsDuplicates(t *testing.T) {
 	s := newSvc(t)
 	ctx := context.Background()
 	post := "HIRING AI ENGINEER at a fintech startup, remote friendly, send your CV to hr@duck.vn"
+	// Stored the way fb-watcher adds a post: its text, then a footer.
 	watched, _ := s.AddJob(ctx, NewJob{Title: "HIRING AI ENGINEER", Company: "AI Jobs VN", Source: "facebook",
-		URL: "https://www.facebook.com/groups/1/posts/2/", JD: post})
+		URL: "https://www.facebook.com/groups/1/posts/2/", JD: post + "\n\n---\nAuthor: Vy\nGroup: AI Jobs VN (https://www.facebook.com/groups/1/)\nMatched keywords: ai"})
 	legacy, _ := s.AddJob(ctx, NewJob{Title: "Growth Marketer", URL: "https://www.topcv.vn/viec-lam/x/1.html?ta_source=list"})
 	analyst, _ := s.AddJob(ctx, NewJob{Title: "Data Analyst", Company: "MoMo"})
 
@@ -306,13 +307,21 @@ func TestAddFromContentRejectsDuplicates(t *testing.T) {
 		})
 	}
 
+	// fb-watcher seeing a post the user pasted first is refused too.
+	pasted, _ := s.AddFromContent(ctx, "https://www.facebook.com/groups/1/posts/7/\nKế toán tổng hợp, làm việc tại quận 1, lương 15 triệu, gửi CV về ketoan@duck.vn")
+	_, err := s.AddJob(ctx, NewJob{Title: "Kế toán tổng hợp", Company: "AI Jobs VN", Source: "facebook", URL: "https://www.facebook.com/groups/1/posts/7/"})
+	var dup *DuplicateError
+	if !errors.As(err, &dup) || dup.Jobs[0].ID != pasted.ID {
+		t.Fatalf("fb-watcher re-add = %v, want a duplicate of #%d", err, pasted.ID)
+	}
+
 	// Same title elsewhere, or a short generic paste, is a new job.
 	for _, paste := range []string{"Data Analyst\nZaloPay", "HIRING AI ENGINEER"} {
 		if _, err := s.AddFromContent(ctx, paste); err != nil {
 			t.Fatalf("%q: %v, want added", paste, err)
 		}
 	}
-	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 5 {
-		t.Fatalf("board has %d jobs, want the 3 originals + 2 new", len(list))
+	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 6 {
+		t.Fatalf("board has %d jobs, want the 4 originals + 2 new", len(list))
 	}
 }

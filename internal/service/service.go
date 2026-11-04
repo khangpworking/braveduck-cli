@@ -79,19 +79,24 @@ type NewJob struct {
 	Title, Company, URL, Salary, Source, JD string
 }
 
-// AddJob stores a job described field by field.
+// AddJob stores a job described field by field, unless it's already on the
+// board (see duplicates.go).
 func (s *Service) AddJob(ctx context.Context, in NewJob) (jobs.Job, error) {
 	if strings.TrimSpace(in.Title) == "" {
 		return jobs.Job{}, fmt.Errorf("%w: title is required", ErrInvalid)
 	}
-	return s.add(ctx, jobs.Job{
+	j := jobs.Job{
 		Title:           strings.TrimSpace(in.Title),
 		Company:         in.Company,
 		URL:             strings.TrimSpace(in.URL),
 		Salary:          in.Salary,
 		FullJD:          in.JD,
 		DiscoverySource: in.Source,
-	}, true)
+	}
+	if err := s.rejectDuplicates(ctx, j); err != nil {
+		return jobs.Job{}, err
+	}
+	return s.add(ctx, j, true)
 }
 
 // AddFromContent is "Extract & Add", done without any AI: content is a link
@@ -176,65 +181,6 @@ func (s *Service) addPasted(ctx context.Context, jp scrape.JobPosting, j jobs.Jo
 		return jobs.Job{}, err
 	}
 	return s.add(ctx, j, false)
-}
-
-// DuplicateError is a pasted job that's already on the board; Jobs are the
-// matches. It matches ErrDuplicate.
-type DuplicateError struct{ Jobs []jobs.Job }
-
-func (e *DuplicateError) Error() string {
-	var names []string
-	for i, j := range e.Jobs {
-		if i == 3 {
-			names = append(names, fmt.Sprintf("and %d more", len(e.Jobs)-i))
-			break
-		}
-		names = append(names, fmt.Sprintf("#%d %q (%s)", j.ID, j.Title, j.Status))
-	}
-	return ErrDuplicate.Error() + ": " + strings.Join(names, ", ")
-}
-
-func (e *DuplicateError) Is(target error) bool { return target == ErrDuplicate }
-
-// rejectDuplicates returns a *DuplicateError when a job on the board is the
-// same listing as j: the same link (compared in canonical form, so links
-// stored with tracking parts still match), the same title at the same
-// company, or the same job text. Blank fields never match.
-func (s *Service) rejectDuplicates(ctx context.Context, j jobs.Job) error {
-	all, err := s.st.List(ctx, ListFilter{})
-	if err != nil {
-		return err
-	}
-	url, title, company, jd := canonicalURL(j.URL), fold(j.Title), fold(j.Company), fold(j.FullJD)
-	var dups []jobs.Job
-	for _, o := range all {
-		if url != "" && canonicalURL(o.URL) == url ||
-			title != "" && company != "" && fold(o.Title) == title && fold(o.Company) == company ||
-			len(jd) >= minDupJD && fold(o.FullJD) == jd {
-			dups = append(dups, o)
-		}
-	}
-	if len(dups) > 0 {
-		return &DuplicateError{Jobs: dups}
-	}
-	return nil
-}
-
-// minDupJD is the shortest job text that counts as a match on its own; a
-// one-line paste is too generic to call two jobs the same.
-const minDupJD = 50
-
-// canonicalURL is the form two links to one listing share.
-func canonicalURL(u string) string {
-	if _, c, ok := scrape.SupportedLink(u); ok {
-		return c
-	}
-	return strings.TrimSpace(u)
-}
-
-// fold lowercases and collapses whitespace, for comparing pasted text.
-func fold(s string) string {
-	return strings.ToLower(strings.Join(strings.Fields(s), " "))
 }
 
 // add applies the rules every new job gets, stores it, and logs it.

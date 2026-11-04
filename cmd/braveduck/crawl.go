@@ -48,8 +48,8 @@ func cmdCrawl(ctx context.Context, svc *service.Service, args []string) error {
 			failed = err
 			continue
 		}
-		fmt.Printf("%s: %d query(s), %d found, %d filtered out, %d new on the board\n",
-			res.Source, res.Queries, res.Found, res.Filtered, res.Added)
+		fmt.Printf("%s: %d query(s), %d found, %d filtered out, %d already on the board, %d new on the board\n",
+			res.Source, res.Queries, res.Found, res.Filtered, res.Duplicates, res.Added)
 	}
 	return failed
 }

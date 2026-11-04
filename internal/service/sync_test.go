@@ -70,3 +70,28 @@ func TestSyncTopCV(t *testing.T) {
 		}
 	}
 }
+
+// An application to a job the user pasted without its TopCV link updates
+// that card instead of adding a second one.
+func TestSyncTopCVMatchesPastedJob(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	pasted, _ := s.AddFromContent(ctx, "AI Content Operator\nVinh Cara\nLương: 12 triệu")
+
+	orig := fetchApplications
+	t.Cleanup(func() { fetchApplications = orig })
+	fetchApplications = func(context.Context, *Service) ([]topcv.Application, error) {
+		return []topcv.Application{{JobID: "2176176", Title: "AI Content Operator", Company: "Vinh Cara",
+			URL: "https://www.topcv.vn/viec-lam/ai-content-operator/2176176.html", Viewed: true}}, nil
+	}
+	res, err := s.SyncTopCV(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Added != 0 || res.Moved != 1 {
+		t.Fatalf("result = %+v, want the pasted card moved, nothing added", res)
+	}
+	if j, _ := s.GetJob(ctx, pasted.ID); j.Status != "applied" || j.TopcvStatus != topcv.StatusSeen {
+		t.Fatalf("pasted card = %q / %q", j.Status, j.TopcvStatus)
+	}
+}

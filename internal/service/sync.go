@@ -91,21 +91,30 @@ func (s *Service) SyncTopCV(ctx context.Context) (SyncResult, error) {
 		return res, err
 	}
 	byTopcvID := map[string]jobs.Job{}
+	board := &dupIndex{keys: map[string][]jobs.Job{}}
 	for _, j := range all {
 		if id := topcv.JobIDFromURL(j.URL); id != "" {
 			byTopcvID[id] = j
 		}
+		board.add(j)
 	}
 
 	for _, a := range apps {
 		status := a.Status()
 		detail := strings.TrimSpace(strings.TrimSpace(a.StatusText + " " + bracket(a.StatusTime)))
+		nj := jobs.Job{
+			Title: a.Title, Company: a.Company, URL: a.URL, DiscoverySource: "topcv",
+			TopcvStatus: status, ApplyMethod: "platform", ApplyState: "sent", ApplyDetail: detail,
+		}
 		j, onBoard := byTopcvID[a.JobID]
 		if !onBoard {
-			nj := jobs.Job{
-				Title: a.Title, Company: a.Company, URL: a.URL, DiscoverySource: "topcv",
-				TopcvStatus: status, ApplyMethod: "platform", ApplyState: "sent", ApplyDetail: detail,
+			// The same job pasted without its TopCV link (e.g. as text) is
+			// the one applied to: update it rather than add a second card.
+			if dups := board.find(nj); len(dups) > 0 {
+				j, onBoard = dups[0], true
 			}
+		}
+		if !onBoard {
 			if d := a.AppliedDate(); d != "" {
 				nj.ExpiresAt = jobs.AppliedPrefix + d // the apply-silence clock
 			}
@@ -113,6 +122,7 @@ func (s *Service) SyncTopCV(ctx context.Context) (SyncResult, error) {
 			if err != nil {
 				continue // e.g. the same URL was added meanwhile
 			}
+			board.add(saved)
 			if err := s.st.Patch(ctx, saved.ID, store.JobPatch{Status: strPtr("applied")}, s.now()); err == nil {
 				res.Added++
 			}
