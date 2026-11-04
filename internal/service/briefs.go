@@ -28,7 +28,13 @@ func RenderRatingBrief(b RatingBrief) string {
 		}
 	}
 	sb.WriteString("\n## Answer\n\nFor each job, reply with one line:\n")
-	sb.WriteString("braveduck rate <id> --score <1.0-5.0> --why \"<point> • <point> • <point>\"\n")
+	sb.WriteString("braveduck rate <id>")
+	if b.Model != "" {
+		// Model ids are free text. Keep a copied command literal even when
+		// the id contains quotes or shell substitutions.
+		fmt.Fprintf(&sb, " --model '%s'", strings.ReplaceAll(b.Model, "'", "'\"'\"'"))
+	}
+	sb.WriteString(" --score <1.0-5.0> --why \"<point> • <point> • <point>\"\n")
 	return sb.String()
 }
 

@@ -115,16 +115,22 @@ func TestValidateVerdict(t *testing.T) {
 }
 
 func TestOwnsBoardBadge(t *testing.T) {
-	if !OwnsBoardBadge("", "claude-opus-4-8") {
+	if !OwnsBoardBadge("", "claude-opus-4-8", true) {
 		t.Error("empty model should own badge")
 	}
-	if !OwnsBoardBadge("claude-code", "gemini-flash") {
-		t.Error("legacy claude-code should own badge")
+	if !OwnsBoardBadge("claude-code", DefaultModel, false) {
+		t.Error("legacy claude-code should own badge with A/B off")
 	}
-	if !OwnsBoardBadge("gemini-flash", "gemini-flash") {
+	if !OwnsBoardBadge("claude-code", "claude-code", true) {
+		t.Error("claude-code as the default should own badge")
+	}
+	if OwnsBoardBadge("claude-code", "jev-1.13.0", true) {
+		t.Error("claude-code as an A/B challenger should NOT own badge")
+	}
+	if !OwnsBoardBadge("gemini-flash", "gemini-flash", true) {
 		t.Error("default model should own badge")
 	}
-	if OwnsBoardBadge("kimi-k2", "gemini-flash") {
+	if OwnsBoardBadge("kimi-k2", "gemini-flash", true) {
 		t.Error("challenger should NOT own badge")
 	}
 }

@@ -1299,7 +1299,11 @@ function renderJobCard(job, container) {
 // Render expanded card detail panel contents
 function renderCardDetailContents(job, detailContainer) {
   // 1. AI Assessment
-  let assessmentHtml = "";
+  const rateAction = `<button class="btn-secondary btn-sm" onclick="askAI('rate', '${job.id}')">${job.score_status === "scored" ? "Rate again" : "Rate"}</button>`;
+  let assessmentHtml = `<div class="detail-section">
+    <div class="detail-title">AI Assessment (${esc(AppState.ratingConfig.default_model)})</div>
+    ${rateAction}
+  </div>`;
   if (job.score_reasoning) {
     // Raters answer "point • point • point" (see the rubric); older entries
     // used one point per line. Accept both.
@@ -1314,6 +1318,7 @@ function renderCardDetailContents(job, detailContainer) {
       <div class="detail-section">
         <div class="detail-title">AI Assessment (${esc(AppState.ratingConfig.default_model)})</div>
         <ul class="assessment-list">${listItems}</ul>
+        ${rateAction}
       </div>
     `;
   }
@@ -1614,25 +1619,28 @@ async function retryScoring(id) {
 
 async function askAnotherModel(id) {
   // A challenger rating comes from the user's AI too: same flow as Rate.
-  askAI("rate", id);
+  const model = document.getElementById(`askModelSelect-${id}`)?.value;
+  await askAI("rate", id, model);
 }
 
 // --- Ask your AI (rate / tailor CV / draft email) ------------------------------
 let askState = null;
 
-async function askAI(kind, id) {
+async function askAI(kind, id, model) {
   const notesEl = document.getElementById(`draftNotes-${id}`);
   let req;
   try {
     if (kind === "rate") showToast("Rating…", "info");
-    req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : {});
+    req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : kind === "rate" ? { model } : {});
   } catch (e) {
     showToast(e.message, "error");
     return;
   }
   if (req.rated) {
-    // Jev is the default rater: the score is already on the card.
-    showToast(`Rated ${req.job.score_letter} ${req.job.score.toFixed(1)}`, "success");
+    // A Jev challenger leaves the canonical badge unchanged; report the
+    // actual model verdict returned by this request.
+    const verdict = req.job.ratings?.[req.model];
+    showToast(`Rated ${verdict?.letter ?? req.job.score_letter} ${Number(verdict?.score ?? req.job.score).toFixed(1)} (${req.model})`, "success");
     refreshAppState();
     return;
   }

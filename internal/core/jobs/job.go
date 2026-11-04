@@ -41,11 +41,12 @@ type Job struct {
 	DiscoverySource string `json:"discovery_source"` // topcv/vietnamworks/joboko/careerlink/serpapi/linkedin/paste
 
 	// Scoring (top-level, mirrors the winning A/B model's row).
-	Score          float64 `json:"score"`
-	HasScore       bool    `json:"-"` // distinguishes score 0 from "not scored"
-	ScoreLetter    string  `json:"score_letter"`
-	ScoreStatus    string  `json:"score_status"` // pending/scored/failed
-	ScoreReasoning string  `json:"score_reasoning"`
+	Score          float64                `json:"score"`
+	HasScore       bool                   `json:"-"` // distinguishes score 0 from "not scored"
+	ScoreLetter    string                 `json:"score_letter"`
+	ScoreStatus    string                 `json:"score_status"` // pending/scored/failed
+	ScoreReasoning string                 `json:"score_reasoning"`
+	Ratings        map[string]ModelRating `json:"ratings,omitempty"`
 
 	// Apply pipeline.
 	ApplyMethod    string `json:"apply_method"` // email/platform
@@ -85,6 +86,15 @@ type Job struct {
 	CompanyGeoStatus    string  `json:"company_geo_status"`  // "" / pending / ok / no_address / geocode_failed
 	CompanyMasothueURL  string  `json:"company_masothue_url"`
 	CompanyMasothueName string  `json:"company_masothue_name"`
+}
+
+// ModelRating is a saved per-model verdict; only the configured default
+// model's verdict also owns the job's top-level board badge.
+type ModelRating struct {
+	Status    string  `json:"status"`
+	Score     float64 `json:"score"`
+	Letter    string  `json:"letter"`
+	Reasoning string  `json:"reasoning"`
 }
 
 // parseTime decodes the timestamp formats that appear across the DB: full
