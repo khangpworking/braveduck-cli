@@ -72,14 +72,20 @@ func TestBoardControlsFitNarrowViewports(t *testing.T) {
 			page.MustSetViewport(width, 844, 1, false)
 			page.MustElement(".drawer").MustWaitStable()
 			// Each control and statistic must fit in the viewport, and the
-			// button's center must actually receive a pointer click.
+			// button's center must actually receive a pointer click once it is
+			// scrolled into view (only vertical scrolling is fine).
 			if problem := page.MustEval(`() => {
 				const width = document.documentElement.clientWidth;
 				for (const el of document.querySelectorAll('.top-nav button, .stat-pill, .toolbar button, .filter-cb')) {
 					const r = el.getBoundingClientRect();
 					if (r.left < 0 || r.right > width || r.top < 0)
 						return el.textContent.trim() + ' outside viewport: ' + JSON.stringify(r);
-					if (el.tagName === 'BUTTON' && !el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)))
+					if (el.tagName !== 'BUTTON') continue;
+					el.scrollIntoView({block: 'center'});
+					const c = el.getBoundingClientRect();
+					const hit = document.elementFromPoint(c.x + c.width / 2, c.y + c.height / 2);
+					window.scrollTo(0, 0);
+					if (!el.contains(hit))
 						return el.textContent.trim() + ' is covered';
 				}
 				return '';
