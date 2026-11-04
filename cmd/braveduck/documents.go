@@ -215,8 +215,8 @@ func cmdApply(ctx context.Context, svc *service.Service, args []string) error {
 	if err != nil {
 		return friendly(err, id)
 	}
-	fmt.Println("Opening the job on TopCV with your login. In that window:")
-	fmt.Println("  1. click Ứng tuyển (Apply)")
+	fmt.Printf("Opening the job on %s with your login. In that window:\n", prep.Site)
+	fmt.Println("  1. click Apply (Ứng tuyển)")
 	fmt.Println("  2. upload this CV:", prep.CVPDF)
 	if prep.CoverLetter != "" {
 		fmt.Println("  3. paste this cover letter:")
@@ -234,5 +234,17 @@ func cmdApply(ctx context.Context, svc *service.Service, args []string) error {
 		return friendly(err, id)
 	}
 	fmt.Println(res.Message)
+	if res.Confirm {
+		fmt.Print("Did you submit it? [y/N] ")
+		var answer string
+		fmt.Scanln(&answer)
+		yes := strings.HasPrefix(strings.ToLower(strings.TrimSpace(answer)), "y")
+		if _, err := svc.ConfirmApplied(ctx, id, yes); err != nil {
+			return friendly(err, id)
+		}
+		if yes {
+			fmt.Println("Moved to Applied.")
+		}
+	}
 	return nil
 }

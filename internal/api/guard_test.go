@@ -244,8 +244,17 @@ func TestApplyRefusals(t *testing.T) {
 	resp := do(t, http.MethodPost, fmt.Sprintf("%s/api/jobs/%d/apply", ts.URL, id), "")
 	var out map[string]string
 	json.NewDecoder(resp.Body).Decode(&out)
-	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(out["error"], "TopCV jobs") {
-		t.Fatalf("non-TopCV apply = %d %v", resp.StatusCode, out)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(out["error"], "log in to VietnamWorks first") {
+		t.Fatalf("apply without that site's login = %d %v", resp.StatusCode, out)
+	}
+
+	// A site braveduck can't hold a login for at all.
+	id, _ = st.Add(context.Background(), jobs.Job{Title: "Elsewhere", URL: "https://jobs.example.com/1"}, time.Now())
+	resp = do(t, http.MethodPost, fmt.Sprintf("%s/api/jobs/%d/apply", ts.URL, id), "")
+	out = nil
+	json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(out["error"], "a site you can log in to") {
+		t.Fatalf("apply on an unsupported site = %d %v", resp.StatusCode, out)
 	}
 }
 

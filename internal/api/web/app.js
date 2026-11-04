@@ -196,8 +196,12 @@ const APIClient = {
     return out;
   },
 
-  async post(path) {
-    const res = await apiFetch(`${API_BASE}/${path}`, { method: "POST" });
+  async post(path, body) {
+    const res = await apiFetch(`${API_BASE}/${path}`, body === undefined ? { method: "POST" } : {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
     const out = await res.json();
     if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
     return out;
@@ -569,6 +573,8 @@ async function refreshAppState() {
     const ratingConfig = await APIClient.getRatingConfig();
     const crawlStatus = await APIClient.getCrawlStatus();
     const activity = await APIClient.getActivity();
+    let platforms = AppState.platforms || [];
+    try { platforms = await APIClient.getPlatforms(); } catch {}
     // Requests can finish out of order, or the user can begin editing after
     // one starts. Commit a complete snapshot only while it is still current
     // and safe to replace the card DOM. Focusout retries a deferred refresh.
@@ -578,7 +584,7 @@ async function refreshAppState() {
       return;
     }
     refreshPending = false;
-    Object.assign(AppState, { location, jobs, ratingConfig, crawlStatus, activity });
+    Object.assign(AppState, { location, jobs, ratingConfig, crawlStatus, activity, platforms });
     renderAll();
     renderSetup();
     notifyNewMatches(AppState.jobs);
@@ -1193,6 +1199,13 @@ function renderJobCard(job, container) {
     }
   }
 
+  if (job.apply_state === "confirm") {
+    const site = siteFor(job);
+    automationHtml = `<span class="apply-confirm">Did you submit it${site ? ` on ${esc(site.name)}` : ""}?
+      <button class="btn-primary btn-sm" onclick="confirmApplied('${job.id}', true)">Yes, I applied</button>
+      <button class="btn-secondary btn-sm" onclick="confirmApplied('${job.id}', false)">Not yet</button></span>`;
+  }
+
   if (job.apply_state === "failed") {
     automationHtml = `<span class="apply-badge failed" onclick="retryApply('${job.id}')" title="Platform apply failed. Click to retry.">✕ failed·retry</span>`;
   }
@@ -1502,8 +1515,7 @@ function renderCardDetailContents(job, detailContainer) {
         <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${ready ? `Version ${esc(job.cv_version)} · ${esc(when)}` : "Not written yet."}</p>
         <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
           ${ready ? `<button class="btn-secondary btn-sm" onclick="downloadCV('${job.id}')">Download CV.pdf</button>` : ""}
-          ${ready && /topcv\.vn/.test(job.url) && !job.topcv_status && job.status !== "Applied"
-            ? `<button class="btn-primary btn-sm" onclick="applyOnTopCV('${job.id}')" title="Opens the job in a window with your TopCV login. You submit it there.">Apply on TopCV</button>` : ""}
+          ${applyButton(job, ready)}
           <button class="btn-secondary btn-sm" onclick="askAI('cv', '${job.id}')">${ready ? "Ask your AI to improve it" : "Ask your AI to tailor it"}</button>
         </div>
       </div>
@@ -1680,6 +1692,9 @@ async function renderSetup() {
   const res = await apiFetch(`${API_BASE}/setup`);
   if (!res.ok) return;
   const st = await res.json();
+  const hadCV = AppState.setup && AppState.setup.cv;
+  AppState.setup = st;
+  if (st.cv !== hadCV) renderBoard(); // the Apply buttons depend on having a CV
   // "About me" written by hand counts as the CV step too.
   const done = { cv: st.cv || st.about_me, wants: st.wants, search_queries: st.search_queries > 0 };
   card.hidden = st.done;
@@ -1883,11 +1898,29 @@ async function sendInterviewReply(id) {
 }
 
 async function approveOnSiteApply(id) {
-  applyOnTopCV(id);
+  applyOnSite(id);
 }
 
-// Assisted apply: you approve by clicking, and you submit on TopCV yourself.
-async function applyOnTopCV(id) {
+// siteFor is the job site a job's link is on, if you're logged in there.
+function siteFor(job) {
+  let host = "";
+  try { host = new URL(job.url).hostname.toLowerCase(); } catch { return null; }
+  return (AppState.platforms || []).find(p => p.status === "connected" &&
+    (p.domains || []).some(d => host === d || host.endsWith("." + d))) || null;
+}
+
+// applyButton: "Apply on <site>" when you're logged in to the job's site,
+// have a CV to send (tailored, or the one you uploaded) and haven't applied.
+function applyButton(job, tailored) {
+  const site = siteFor(job);
+  const open = job.status === "Saved" || job.status === "Waiting to apply";
+  if (!site || !open || job.topcv_status || job.apply_state === "filling" || job.apply_state === "confirm") return "";
+  if (!tailored && !(AppState.setup && AppState.setup.cv)) return "";
+  return `<button class="btn-primary btn-sm" onclick="applyOnSite('${job.id}')" title="Opens the job in a window with your ${esc(site.name)} login. You submit it there.">Apply on ${esc(site.name)}</button>`;
+}
+
+// Assisted apply: you approve by clicking, and you submit on the site yourself.
+async function applyOnSite(id) {
   let prep;
   try {
     prep = await APIClient.post(`jobs/${id}/apply`);
@@ -1898,13 +1931,27 @@ async function applyOnTopCV(id) {
   if (prep.cover_letter) {
     try { await navigator.clipboard.writeText(prep.cover_letter); } catch {}
   }
+  const topcv = prep.site_id === "topcv";
   alert(
-    "A TopCV window is opening with your login. In it:\n\n" +
-    "1. Click Ứng tuyển (Apply)\n" +
+    `A ${prep.site} window is opening with your login. In it:\n\n` +
+    "1. Click Apply" + (topcv ? " (Ứng tuyển)" : "") + "\n" +
     "2. Upload this CV:\n   " + prep.cv_pdf + "\n" +
     (prep.cover_letter ? "3. Paste the cover letter (already copied to your clipboard)\n4. Submit, then close the window\n" : "3. Submit, then close the window\n") +
-    "\nbraveduck checks TopCV afterwards and moves the job to Applied if it's there."
+    (topcv ? "\nbraveduck checks TopCV afterwards and moves the job to Applied if it's there."
+           : "\nWhen you close the window, the card asks whether you submitted it.")
   );
+  refreshAppState();
+}
+
+// confirmApplied answers the card's "did you submit it?".
+async function confirmApplied(id, submitted) {
+  try {
+    await APIClient.post(`jobs/${id}/apply/confirm`, { submitted });
+  } catch (e) {
+    showToast(e.message, "error");
+    return;
+  }
+  if (submitted) showToast("Moved to Applied", "success");
   refreshAppState();
 }
 
@@ -1913,7 +1960,7 @@ async function undoOnSiteApply(id) {
 }
 
 async function retryApply(id) {
-  applyOnTopCV(id);
+  applyOnSite(id);
 }
 
 async function saveJobDetails(id) {

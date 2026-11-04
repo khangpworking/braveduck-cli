@@ -1249,3 +1249,17 @@ a:hover {
   background: var(--surface-soft);
   outline: none;
 }
+
+/* "Did you submit it?" after applying on a site braveduck can't check */
+.apply-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: #fef9c3;
+  border: 1px solid #fde68a;
+}

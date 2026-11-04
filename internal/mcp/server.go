@@ -92,7 +92,8 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "draft_brief", "Everything needed to write an application email for one job: profile, job, contact email, instructions and the user's notes. Then call submit_draft.", readOnly, t.draftBrief)
 	add(srv, "submit_draft", "Save an application email draft (to, subject, body) for the user to review. braveduck never sends it; the user sends it from their own mail app.", write, t.submitDraft)
 	add(srv, "reject_draft", "Discard a job's email draft.", destructive, t.rejectDraft)
-	add(srv, "apply_job", "Assisted apply to a TopCV job: opens a visible window on the user's screen with their login; THEY submit it (braveduck never clicks submit). Needs a tailored CV. Returns at once with the CV file to upload and the cover letter; the outcome appears in get_activity. Only call this when the user asks to apply to that job. Limits: 10 per day, 5 minutes apart.", write, t.applyJob)
+	add(srv, "apply_job", "Assisted apply on the job's site (TopCV, VietnamWorks, JobOKO, CareerLink… — any site the user is logged in to): opens a visible window on the user's screen with their login; THEY submit it (braveduck never clicks submit). Needs a tailored CV or an uploaded one. Returns at once with the site, the CV file to upload and the cover letter; the outcome appears in get_activity. On TopCV braveduck confirms from the user's application history; on other sites the job waits for confirm_applied once the user says whether they submitted. Only call this when the user asks to apply to that job. Limits: 10 per day, 5 minutes apart.", write, t.applyJob)
+	add(srv, "confirm_applied", "After apply_job on a site other than TopCV: record whether the user says they submitted the application (submitted=true moves the job to Applied). Only pass what the user told you.", write, t.confirmApplied)
 	add(srv, "get_location", "The user's location and maximum commute (jobs farther than max_km are flagged on the board).", readOnly, t.getLocation)
 	add(srv, "set_location", "Set the user's location: either `address` (looked up with OpenStreetMap; the first match is used — confirm it with the user) or lat/lng, plus optional max_km. Only do this when the user asks.", idempotentWrite, t.setLocation)
 	add(srv, "rate_with_jev", "Rate one job now with Jev (TypeSafe AI's decision model): A-F with probabilities and criterion-based reasons. Sends the user's profile and the job text to api.typesafe.ai.", write, t.rateWithJev)
@@ -398,6 +399,15 @@ func (t tools) uploadCV(ctx context.Context, in uploadCVIn) (service.BaseCV, err
 		return service.BaseCV{}, err
 	}
 	return t.svc.UploadCV(ctx, in.Path, data, in.Replace)
+}
+
+type confirmIn struct {
+	ID        int64 `json:"id" jsonschema:"the job id"`
+	Submitted bool  `json:"submitted" jsonschema:"true if the user says they submitted the application"`
+}
+
+func (t tools) confirmApplied(ctx context.Context, in confirmIn) (jobs.Job, error) {
+	return t.svc.ConfirmApplied(ctx, in.ID, in.Submitted)
 }
 
 type profileIn struct {
