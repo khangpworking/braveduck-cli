@@ -60,7 +60,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "add_job", "Save a job. Pass `content` (a listing URL — fetched and parsed — or a pasted job description), "+
 		"or describe it field by field with `title` (+ optional company/url/salary/source/jd). "+
 		"Fails if the URL is already on the board.", write, t.addJob)
-	add(srv, "update_job", "Change a job's lane, pinned/keep flags or notes. Only the fields you pass change.", idempotentWrite, t.updateJob)
+	add(srv, "update_job", "Change a job's lane, pinned/keep flags, notes, title, company, salary or location. Only the fields you pass change.", idempotentWrite, t.updateJob)
 	add(srv, "set_status", "Move a job to a lane: saved, waiting, applied, interview, offer or closed.", idempotentWrite, t.setStatus)
 	add(srv, "pin_job", "Toggle a job's pin (pinned jobs sort first in their lane).", write, t.pinJob)
 	add(srv, "keep_job", "Toggle a job's keep flag (kept jobs are exempt from auto-clear).", write, t.keepJob)
@@ -171,11 +171,15 @@ type addIn struct {
 }
 
 type updateIn struct {
-	ID     int64   `json:"id" jsonschema:"the job id"`
-	Status *string `json:"status,omitempty" jsonschema:"new lane: saved, waiting, applied, interview, offer or closed"`
-	Pinned *bool   `json:"pinned,omitempty"`
-	Keep   *bool   `json:"keep,omitempty" jsonschema:"exempt from auto-clear"`
-	Notes  *string `json:"notes,omitempty" jsonschema:"replaces the job's notes"`
+	ID       int64   `json:"id" jsonschema:"the job id"`
+	Status   *string `json:"status,omitempty" jsonschema:"new lane: saved, waiting, applied, interview, offer or closed"`
+	Pinned   *bool   `json:"pinned,omitempty"`
+	Keep     *bool   `json:"keep,omitempty" jsonschema:"exempt from auto-clear"`
+	Notes    *string `json:"notes,omitempty" jsonschema:"replaces the job's notes"`
+	Title    *string `json:"title,omitempty"`
+	Company  *string `json:"company,omitempty"`
+	Salary   *string `json:"salary,omitempty"`
+	Location *string `json:"location,omitempty"`
 }
 
 type statusIn struct {
@@ -295,6 +299,7 @@ func (t tools) addJob(ctx context.Context, in addIn) (jobs.Job, error) {
 func (t tools) updateJob(ctx context.Context, in updateIn) (jobs.Job, error) {
 	return t.svc.UpdateJob(ctx, in.ID, service.Patch{
 		Status: in.Status, Pinned: in.Pinned, Keep: in.Keep, Notes: in.Notes,
+		Title: in.Title, Company: in.Company, Salary: in.Salary, Location: in.Location,
 	})
 }
 

@@ -1125,6 +1125,23 @@ function renderCardDetailContents(job, detailContainer) {
     </div>
   `;
 
+  // 5b. Edit details (fix a scraped title, a group-id "company", …)
+  const field = (key, label, value) => `
+      <label style="font-size:11px; font-weight:600; color:var(--muted)">${label}</label>
+      <input type="text" class="text-input" id="edit-${key}-${job.id}" value="${esc(value)}" style="font-size:12px; padding: 4px 8px; margin-bottom: 4px;">`;
+  const editHtml = `
+    <details class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
+      <summary class="detail-title" style="cursor:pointer;">Edit details</summary>
+      <div style="display:flex; flex-direction:column; margin-top:6px;">
+        ${field("title", "Title", job.title)}
+        ${field("company", "Company", job.company)}
+        ${field("salary", "Salary", job.salary)}
+        ${field("location", "Location", job.location)}
+        <button class="btn-secondary btn-sm" style="align-self:flex-start; margin-top:4px;" onclick="saveJobDetails('${job.id}')">Save details</button>
+      </div>
+    </details>
+  `;
+
   // 6. Application Method Block
   let applyBlockHtml = "";
   
@@ -1293,6 +1310,7 @@ function renderCardDetailContents(job, detailContainer) {
     ${skillsHtml}
     ${summaryHtml}
     ${notesHtml}
+    ${editHtml}
     ${cvControlsHtml}
     ${applyBlockHtml}
     ${keepButtonHtml}
@@ -1384,6 +1402,17 @@ async function undoOnSiteApply(id) {
 
 async function retryApply(id) {
   await APIClient.applyJob(id);
+  refreshAppState();
+}
+
+async function saveJobDetails(id) {
+  const val = key => document.getElementById(`edit-${key}-${id}`).value;
+  try {
+    await APIClient.updateJob(id, { title: val("title"), company: val("company"), salary: val("salary"), location: val("location") });
+    showToast("Details saved.", "success");
+  } catch (e) {
+    showToast(`Couldn't save: ${e.message}`, "error");
+  }
   refreshAppState();
 }
 

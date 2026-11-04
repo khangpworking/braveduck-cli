@@ -29,6 +29,7 @@ Jobs
   add        add a job            (--title, --company, --url, --salary, --source, --jd)
   list       list jobs            (--status, --source)
   show <id>  job detail
+  edit <id>  change details  (--title, --company, --salary, --location, --notes)
   status <id> <stage>   move a job to a lane (saved/waiting/applied/interview/offer/closed)
   pin <id>   toggle pin
   keep <id>  toggle keep (exempt from auto-clear)
@@ -122,6 +123,8 @@ func run(args []string) error {
 		return cmdList(ctx, svc, rest)
 	case "show", "get":
 		return cmdShow(ctx, svc, rest)
+	case "edit":
+		return cmdEdit(ctx, svc, rest)
 	case "status":
 		return cmdStatus(ctx, svc, rest)
 	case "pin":
