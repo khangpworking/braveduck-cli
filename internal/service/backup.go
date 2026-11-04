@@ -20,26 +20,46 @@ const (
 	backupEvery = 24 * time.Hour
 )
 
-// Backup copies the database into the backups folder and prunes old copies;
-// it returns the new file's path.
+// Backup makes an on-demand copy in the backups folder (braveduck-manual-…,
+// never pruned, so it can't push the daily copies out); it returns the path.
 func (s *Service) Backup(ctx context.Context) (string, error) {
 	dir, err := s.backupDir()
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
+	path := filepath.Join(dir, "braveduck-manual-"+s.now().Format("20060102-150405")+".db")
+	return path, s.backupTo(ctx, dir, path)
+}
+
+// dailyBackup makes the scheduler's copy and keeps the newest backupKeep.
+func (s *Service) dailyBackup(ctx context.Context) error {
+	dir, err := s.backupDir()
+	if err != nil {
+		return err
 	}
-	path := filepath.Join(dir, "braveduck-"+s.now().Format("20060102-150405")+".db")
-	if err := s.st.Backup(ctx, path); err != nil {
-		return "", err
+	if err := s.backupTo(ctx, dir, filepath.Join(dir, "braveduck-"+s.now().Format("20060102-150405")+".db")); err != nil {
+		return err
 	}
 	old, _ := s.backups()
 	for len(old) > backupKeep {
 		_ = os.Remove(old[0])
 		old = old[1:]
 	}
-	return path, nil
+	return nil
+}
+
+// backupTo writes the copy under a temporary name and renames it into place,
+// so a failed copy (a full disk) never looks like a backup.
+func (s *Service) backupTo(ctx context.Context, dir, path string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".partial"
+	if err := s.st.Backup(ctx, tmp); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // BackupTo copies the database to path (which must not exist yet).
@@ -47,13 +67,14 @@ func (s *Service) BackupTo(ctx context.Context, path string) error {
 	return s.st.Backup(ctx, path)
 }
 
-// backups lists the backup files, oldest first (their names sort by time).
+// backups lists the daily backup files, oldest first (their names sort by
+// time; manual and partial copies aren't included).
 func (s *Service) backups() ([]string, error) {
 	dir, err := s.backupDir()
 	if err != nil {
 		return nil, err
 	}
-	names, err := filepath.Glob(filepath.Join(dir, "braveduck-*.db"))
+	names, err := filepath.Glob(filepath.Join(dir, "braveduck-[0-9]*.db"))
 	sort.Strings(names)
 	return names, err
 }
@@ -78,5 +99,5 @@ func (s *Service) backupIfDue(ctx context.Context) {
 			return
 		}
 	}
-	_, _ = s.Backup(ctx)
+	_ = s.dailyBackup(ctx)
 }

@@ -80,6 +80,8 @@ func (s *Service) UploadCV(ctx context.Context, name string, data []byte, replac
 		return BaseCV{}, fmt.Errorf("%w: the CV has over %d characters of text", ErrInvalid, maxCVTextChars)
 	}
 
+	profileMu.Lock() // the profile's read-modify-write; SaveProfile takes it too
+	defer profileMu.Unlock()
 	p, err := s.Profile(ctx)
 	if err != nil {
 		return BaseCV{}, err
@@ -95,16 +97,9 @@ func (s *Service) UploadCV(ctx context.Context, name string, data []byte, replac
 	}
 	name = baseName(name)
 	path := filepath.Join(dir, safeFileName(name, kind))
+	prev, hadPrev, _ := s.BaseCV(ctx)
 	if err := writePrivate(path, data); err != nil {
 		return BaseCV{}, err
-	}
-	if prev, ok, _ := s.BaseCV(ctx); ok {
-		// The old file, and the PDF printed from an old .md/.html CV.
-		for _, old := range []string{prev.Path, strings.TrimSuffix(prev.Path, filepath.Ext(prev.Path)) + ".pdf"} {
-			if old != path {
-				_ = os.Remove(old)
-			}
-		}
 	}
 	if err := writePrivate(s.profilePath, []byte(updated)); err != nil {
 		return BaseCV{}, err
@@ -114,6 +109,15 @@ func (s *Service) UploadCV(ctx context.Context, name string, data []byte, replac
 	b, _ := json.Marshal(cv)
 	if err := s.st.SetSetting(ctx, baseCVKey, string(b)); err != nil {
 		return BaseCV{}, err
+	}
+	// Only now that the new CV is recorded: the old file, and the PDF
+	// printed from an old .md/.html CV.
+	if hadPrev {
+		for _, old := range []string{prev.Path, strings.TrimSuffix(prev.Path, filepath.Ext(prev.Path)) + ".pdf"} {
+			if old != path {
+				_ = os.Remove(old)
+			}
+		}
 	}
 	cv.ProfileFilled = profileFilled(updated)
 	s.logEvent(ctx, "added", fmt.Sprintf("Uploaded your CV %q — its text is in your profile", cv.Name))

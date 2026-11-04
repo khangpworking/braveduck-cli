@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // Getting started: rating only means something once the user has said who
@@ -14,8 +15,14 @@ import (
 // maxProfileChars caps the profile (it goes into every rating request).
 const maxProfileChars = 100_000
 
+// profileMu serializes changes to the profile file (SaveProfile, UploadCV),
+// so a CV upload's read-modify-write can't drop a save made meanwhile.
+var profileMu sync.Mutex
+
 // SaveProfile replaces the profile's text, private to the user.
 func (s *Service) SaveProfile(ctx context.Context, text string) (Profile, error) {
+	profileMu.Lock()
+	defer profileMu.Unlock()
 	if s.profilePath == "" {
 		return Profile{}, fmt.Errorf("no profile path configured")
 	}
