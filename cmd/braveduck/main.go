@@ -42,6 +42,8 @@ Rating (bring your own AI: braveduck stores no API keys)
   rate <id> --score 4.2 --why "..." [--letter B] [--model m]   save a verdict
   rate-config [--ab] [--models a,b,c] [--default a]   show or set the A/B rater config
   jev [status|enable|rate <id>|rate --all]   rate with Jev (TypeSafe's decision model)
+  jev lead-check [on|off <source>]   Jev closes posts that aren't jobs (default: facebook)
+  jev check-leads [--dry-run]        re-check Saved posts from those sources
 
 Keywords (crawler filter lists — start empty)
   keywords                       show every list and its terms

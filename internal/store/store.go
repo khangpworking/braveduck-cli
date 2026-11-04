@@ -74,6 +74,8 @@ var migrations = []string{
 	   label TEXT,
 	   at    TEXT NOT NULL
 	 );`,
+	// 8: small key/value settings (e.g. which sources get the Jev lead check).
+	`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the
@@ -534,4 +536,21 @@ func (s *Store) ApplyAttempts(ctx context.Context, since time.Time) ([]time.Time
 		}
 	}
 	return out, rows.Err()
+}
+
+// Setting returns a stored setting; ok is false if unset.
+func (s *Store) Setting(ctx context.Context, key string) (string, bool, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return v, err == nil, err
+}
+
+// SetSetting stores a setting.
+func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx,
+		"INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
+	return err
 }

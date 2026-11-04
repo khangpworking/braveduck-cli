@@ -31,11 +31,15 @@ type jevAsker interface {
 // SetJev replaces the Jev client (tests).
 func (s *Service) SetJev(a jevAsker) { s.jev = a }
 
+// loadJevKey finds the API key; tests replace it so they can never reach the
+// real API with the user's key.
+var loadJevKey = jev.LoadKey
+
 func (s *Service) jevClient() (jevAsker, error) {
 	if s.jev != nil {
 		return s.jev, nil
 	}
-	key, _, err := jev.LoadKey()
+	key, _, err := loadJevKey()
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +195,7 @@ func (s *Service) EnableJev(ctx context.Context) (rating.Config, error) {
 
 // JevKeySource says where the Jev key would come from ("" when none), for doctor.
 func JevKeySource() string {
-	_, src, err := jev.LoadKey()
+	_, src, err := loadJevKey()
 	if err != nil {
 		return ""
 	}
