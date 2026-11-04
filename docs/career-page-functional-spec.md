@@ -87,6 +87,10 @@ board. The user is a single person managing their own search.
 - Each column shows a **live count**. Cards are **drag-and-drop** between columns
   to change status; moving also triggers stage-driven automation (see 5).
 - On mobile, columns collapse to accordions (tap header to expand).
+- On a desktop, a column **folds** to a narrow strip (name and count) so all
+  six fit: Closed and empty columns start folded, a column unfolds once it has
+  cards, and clicking a header folds/unfolds it for good. A folded strip still
+  accepts dropped cards, and "Show" on a job unfolds its column.
 
 ### 3.2 Saved column extras
 - **Sort control** — "Most recent" or "Highest score".

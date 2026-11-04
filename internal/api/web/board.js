@@ -64,9 +64,10 @@ function renderBoard() {
     }
 
     const isCollapsed = localStorage.getItem(`col_collapsed_${colName}`) === "true";
+    const folded = isLaneFolded(colName, colJobs.length);
 
     const colEl = document.createElement("div");
-    colEl.className = `column ${isCollapsed ? "" : "expanded"}`;
+    colEl.className = `column ${isCollapsed ? "" : "expanded"}${folded ? " folded" : ""}`;
     colEl.id = `col-${colName.replace(/\s+/g, "-")}`;
     colEl.setAttribute("data-status", colName);
 
@@ -81,7 +82,8 @@ function renderBoard() {
     }
 
     colEl.innerHTML = `
-      <div class="column-header" onclick="toggleColumnCollapse('${colName}')">
+      <div class="column-header" onclick="toggleColumnCollapse('${colName}')"
+           title="${window.innerWidth > 768 ? (folded ? `Show ${colName}` : `Fold ${colName} away`) : ""}">
         <h2 class="column-title">${colName}</h2>
         <span class="column-count">${colJobs.length}</span>
       </div>
@@ -126,8 +128,24 @@ function toggleSavedSort(e) {
   renderBoard();
 }
 
+// Desktop lanes fold into a narrow strip (name and count) so six lanes fit:
+// by default Closed and any empty lane are folded (a folded strip still takes
+// dropped cards, and a lane unfolds once it has some). Clicking a header
+// folds or unfolds it for good. Phones use the accordion below instead.
+function isLaneFolded(colName, count) {
+  if (window.innerWidth <= 768) return false;
+  const v = localStorage.getItem(`lane_folded_${colName}`);
+  if (v !== null) return v === "true";
+  return colName === "Closed" || count === 0;
+}
+
 function toggleColumnCollapse(colName) {
-  if (window.innerWidth > 768) return; // Only accordion on mobile
+  if (window.innerWidth > 768) {
+    const count = AppState.jobs.filter(j => j.status === colName).length;
+    localStorage.setItem(`lane_folded_${colName}`, String(!isLaneFolded(colName, count)));
+    renderBoard();
+    return;
+  }
   const key = `col_collapsed_${colName}`;
   const isCollapsed = localStorage.getItem(key) === "true";
   localStorage.setItem(key, String(!isCollapsed));
@@ -714,6 +732,8 @@ function showJobCard(id) {
   }
   if (window.innerWidth <= 768) {
     localStorage.setItem(`col_collapsed_${job.status}`, "false");
+  } else if (isLaneFolded(job.status, 1)) {
+    localStorage.setItem(`lane_folded_${job.status}`, "false");
   }
   AppState.expandedCards.add(id);
   renderBoard();
