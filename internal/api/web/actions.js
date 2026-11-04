@@ -77,7 +77,9 @@ async function renderSetup() {
   const st = await res.json();
   const hadCV = AppState.setup && AppState.setup.cv;
   AppState.setup = st;
-  if (st.cv !== hadCV) renderBoard(); // the Apply buttons depend on having a CV
+  // The Apply buttons depend on having a CV: re-render only when that changes
+  // (not on every first load, which raced tests holding card elements).
+  if (Boolean(st.cv) !== Boolean(hadCV)) renderBoard();
   // "About me" written by hand counts as the CV step too.
   const done = { cv: st.cv || st.about_me, wants: st.wants, search_queries: st.search_queries > 0 };
   card.hidden = st.done;
