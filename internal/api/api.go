@@ -72,6 +72,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("PUT /api/profile", s.putProfile)
 	mux.HandleFunc("GET /api/setup", s.getSetup)
 	mux.HandleFunc("GET /api/today", s.getToday)
+	mux.HandleFunc("GET /api/export.csv", s.exportCSV)
 	mux.HandleFunc("GET /api/cv", s.getBaseCV)
 	mux.HandleFunc("POST /api/cv", s.uploadBaseCV)
 	mux.HandleFunc("GET /api/cv/file", s.baseCVFile)

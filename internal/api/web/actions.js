@@ -422,3 +422,17 @@ async function transitionCardStatus(id, newStatus, committedEl) {
   }
   refreshAppState();
 }
+
+// downloadJobsCSV saves every job as a spreadsheet (⚙ Settings).
+async function downloadJobsCSV() {
+  const res = await apiFetch(`${API_BASE}/export.csv`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    showToast(err.error || `HTTP ${res.status}`, "error");
+    return;
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: "braveduck-jobs.csv" });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}

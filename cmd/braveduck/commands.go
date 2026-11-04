@@ -75,6 +75,29 @@ func addFromContent(ctx context.Context, svc *service.Service, args []string) er
 	return nil
 }
 
+// cmdExport writes every job as CSV (or JSON) to stdout or --out.
+func cmdExport(ctx context.Context, svc *service.Service, args []string) error {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "full records as JSON instead of CSV")
+	out := fs.String("out", "", "write to this file instead of stdout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	w := os.Stdout
+	if *out != "" {
+		f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		w = f
+	}
+	if *asJSON {
+		return svc.ExportJSON(ctx, w)
+	}
+	return svc.ExportCSV(ctx, w)
+}
+
 // cmdBackup copies the database: to file if given, else into the backups
 // folder (which keeps the last week's copies).
 func cmdBackup(ctx context.Context, svc *service.Service, args []string) error {

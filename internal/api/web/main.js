@@ -181,6 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   settingsMenu.addEventListener("click", () => closeSettings(false));
   document.getElementById("notifyBtn").addEventListener("click", toggleNotify);
+  document.getElementById("exportBtn").addEventListener("click", downloadJobsCSV);
   renderNotifyButton();
   settingsMenu.addEventListener("keydown", e => {
     const items = [...settingsMenu.querySelectorAll("button")];
