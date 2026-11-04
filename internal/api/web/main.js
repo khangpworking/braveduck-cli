@@ -207,11 +207,33 @@ document.addEventListener("DOMContentLoaded", () => {
       search.blur();
     }
   });
+  // Keyboard: "/" search, "n" add a job, "?" list the shortcuts, Esc closes
+  // the open window or drawer (the settings menu and search handle their own).
   document.addEventListener("keydown", e => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
-    if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key === "Escape") {
+      // Not while writing in a text area (the profile editor, a paste):
+      // an unsaved edit mustn't vanish on a stray Esc.
+      if (document.activeElement.tagName === "TEXTAREA") return;
+      const open = document.querySelector(".modal-overlay.open .modal-close-btn") ||
+        (document.getElementById("addJobDrawer").classList.contains("open") && document.getElementById("closeDrawerBtn"));
+      if (open) {
+        e.preventDefault();
+        open.click();
+      }
+      return;
+    }
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "/") {
       e.preventDefault();
       search.focus();
+    } else if (e.key === "n") {
+      e.preventDefault();
+      document.getElementById("openDrawerBtn").click();
+      setTimeout(() => document.getElementById("pasteJDTextarea").focus(), 50);
+    } else if (e.key === "?") {
+      e.preventDefault();
+      showToast("Shortcuts: / search · n add a job · Esc close a window · ? this list", "info");
     }
   });
 
