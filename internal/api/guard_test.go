@@ -3,8 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/khangpworking/braveduck-cli/internal/service"
+	"github.com/khangpworking/braveduck-cli/internal/store"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -169,5 +175,61 @@ func TestPlatformsAPI(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("tokenless connect = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestCVAndDraftAPI(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	svc := service.New(st)
+	dir := t.TempDir()
+	svc.SetDataDir(dir)
+	os.WriteFile(filepath.Join(dir, "profile.md"), []byte("Backend engineer, Go."), 0o600)
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	ctx := context.Background()
+	j, _ := svc.AddJob(ctx, service.NewJob{Title: "Go Engineer"})
+	base := fmt.Sprintf("%s/api/jobs/%d", ts.URL, j.ID)
+
+	var ask askOut
+	resp := do(t, http.MethodPost, base+"/cv", "")
+	json.NewDecoder(resp.Body).Decode(&ask)
+	if resp.StatusCode != 200 || !strings.Contains(ask.Prompt, "Using braveduck") || !strings.Contains(ask.Brief, "braveduck cv") {
+		t.Fatalf("cv request = %d %+v", resp.StatusCode, ask)
+	}
+	if resp := do(t, http.MethodGet, base+"/cv.pdf", ""); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("pdf before any CV = %d", resp.StatusCode)
+	}
+	if resp := do(t, http.MethodPut, base+"/cv", `{"markdown":"# A\n\n## Experience\n- Go at Duck Co for five years, backend services"}`); resp.StatusCode != 200 {
+		t.Fatalf("put cv = %d", resp.StatusCode)
+	}
+	orig := renderPDF
+	t.Cleanup(func() { renderPDF = orig })
+	var gotHTML string
+	renderPDF = func(_ context.Context, html string) ([]byte, error) {
+		gotHTML = html
+		return []byte("%PDF-1.4 fake"), nil
+	}
+	resp = do(t, http.MethodGet, base+"/cv.pdf", "")
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/pdf" || !strings.HasPrefix(string(body), "%PDF") || !strings.Contains(gotHTML, "<h2>Experience</h2>") {
+		t.Fatalf("pdf = %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+
+	if resp := do(t, http.MethodPut, base+"/draft", `{"to":"hr@duck.vn","subject":"Application","body":"Hello there, applying for this role."}`); resp.StatusCode != 200 {
+		t.Fatalf("put draft = %d", resp.StatusCode)
+	}
+	if resp := do(t, http.MethodPost, base+"/draft/sent", ""); resp.StatusCode != 200 {
+		t.Fatalf("sent = %d", resp.StatusCode)
+	}
+	if j, _ := svc.GetJob(ctx, j.ID); j.Status != "applied" {
+		t.Fatalf("after sent: %q", j.Status)
+	}
+
+	// No profile → 409 with the reason, not a 500.
+	os.WriteFile(filepath.Join(dir, "profile.md"), []byte(""), 0o600)
+	if resp := do(t, http.MethodPost, base+"/rate", ""); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("rate with empty profile = %d, want 409", resp.StatusCode)
 	}
 }

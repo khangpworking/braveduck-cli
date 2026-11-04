@@ -4,8 +4,12 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -282,4 +286,54 @@ func TestEditDetailsOnBoard(t *testing.T) {
 		j, _ := svc.GetJob(ctx, 1)
 		return j.Company == "Việc làm AI Engineer -Việt Nam"
 	}, "company not saved")
+}
+
+// The CV/email flow on the board: Ask your AI shows the request, the user
+// pastes what their AI wrote, the CV downloads as a real PDF, and the draft
+// appears for review.
+func TestAskAICVAndDraft(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	svc := service.New(st)
+	dir := t.TempDir()
+	svc.SetDataDir(dir)
+	os.WriteFile(filepath.Join(dir, "profile.md"), []byte("Backend engineer, Go and Postgres."), 0o600)
+	ctx := context.Background()
+	j, _ := svc.AddJob(ctx, service.NewJob{Title: "Go Engineer", Company: "Duck Co"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	page.MustEval(`() => toggleCardDetail("1")`)
+	page.MustElementR("button", "Ask your AI to tailor it").MustClick()
+	page.MustElement("#askModalOverlay.open") // the request is fetched before the window opens
+	if p := page.MustElement("#askPrompt").MustText(); !strings.Contains(p, "tailor my CV for job #1") {
+		t.Fatalf("prompt = %q", p)
+	}
+	page.MustElement("#askPaste").MustInput("# Nguyen Van A\n\n## Experience\n- Go and Postgres at Duck Co, five years")
+	page.MustElementR("button", "Save what my AI wrote").MustClick()
+	waitUntil(t, func() bool { jj, _ := svc.GetJob(ctx, j.ID); return jj.CVVersion == 1 }, "CV not saved")
+
+	// The PDF is made by the real browser.
+	resp := do(t, http.MethodGet, fmt.Sprintf("%s/api/jobs/%d/cv.pdf", ts.URL, j.ID), "")
+	pdf, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || !strings.HasPrefix(string(pdf), "%PDF") || len(pdf) < 1000 {
+		t.Fatalf("pdf = %d, %d bytes", resp.StatusCode, len(pdf))
+	}
+
+	// Draft pasted in the "Subject: …" format lands for review.
+	page.MustEval(`() => askAI("draft", "1")`)
+	page.MustElement("#askModalOverlay.open")
+	page.MustElement("#askPaste").MustInput("Subject: Go Engineer application\n\nHello, I'd like to apply; my CV is attached.")
+	page.MustElementR("button", "Save what my AI wrote").MustClick()
+	waitUntil(t, func() bool {
+		jj, _ := svc.GetJob(ctx, j.ID)
+		return strings.Contains(jj.DraftEmail, "Go Engineer application")
+	}, "draft not saved")
+	page.MustEval(`() => { AppState.expandedCards.add("1"); refreshAppState(); }`)
+	if v := page.MustElement("#draftSubject-1").MustProperty("value").Str(); v != "Go Engineer application" {
+		t.Fatalf("draft subject on the card = %q", v)
+	}
 }

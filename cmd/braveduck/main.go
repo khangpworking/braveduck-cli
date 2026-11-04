@@ -72,8 +72,16 @@ Job-site status
   sync topcv           read your TopCV application history; update the board
                        (also runs as the "topcv-sync" source in crawl-schedule)
 
-Not in this build (need a live browser/LLM)
-  cv, draft, apply
+CVs and emails (your AI writes them; braveduck stores them and never sends)
+  cv <id>                     print a brief to paste into any AI
+  cv <id> --file cv.md        save the tailored CV it wrote (new version)
+  cv <id> --pdf out.pdf       render the current CV as a PDF
+  draft <id> [--notes N]      print an email brief
+  draft <id> --file email.txt save the email ("Subject: ..." line, blank, body)
+  draft <id> --sent|--reject  after sending it yourself, or to discard it
+
+Not in this build
+  apply
 
 Other
   doctor     environment + database health check
@@ -162,7 +170,11 @@ func run(args []string) error {
 		return mcpserver.Serve(ctx, svc)
 	case "sync":
 		return cmdSync(ctx, svc, rest)
-	case "cv", "draft", "apply":
+	case "cv":
+		return cmdCV(ctx, svc, rest)
+	case "draft":
+		return cmdDraft(ctx, svc, rest)
+	case "apply":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)

@@ -55,6 +55,15 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("GET /api/jobs/{id}", s.getJob)
 	mux.HandleFunc("PATCH /api/jobs/{id}", s.patchJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
+	mux.HandleFunc("POST /api/jobs/{id}/rate", s.rateRequest)
+	mux.HandleFunc("POST /api/jobs/{id}/cv", s.cvRequest)
+	mux.HandleFunc("PUT /api/jobs/{id}/cv", s.putCV)
+	mux.HandleFunc("GET /api/jobs/{id}/cv", s.getCV)
+	mux.HandleFunc("GET /api/jobs/{id}/cv.pdf", s.cvPDF)
+	mux.HandleFunc("POST /api/jobs/{id}/draft", s.draftRequest)
+	mux.HandleFunc("PUT /api/jobs/{id}/draft", s.putDraft)
+	mux.HandleFunc("POST /api/jobs/{id}/draft/sent", s.draftSent)
+	mux.HandleFunc("POST /api/jobs/{id}/draft/reject", s.draftReject)
 	mux.HandleFunc("POST /api/jobs/{id}/pin", s.togglePin)
 	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
 	mux.HandleFunc("GET /api/stats", s.getStats)
@@ -407,6 +416,8 @@ func reply(w http.ResponseWriter, code int, v any, err error) {
 		writeErr(w, http.StatusConflict, err)
 	case errors.Is(err, service.ErrInvalid):
 		writeErr(w, http.StatusBadRequest, err)
+	case errors.Is(err, service.ErrProfileEmpty):
+		writeErr(w, http.StatusConflict, err) // a precondition: fill in the profile first
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
 	}
