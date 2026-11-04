@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -448,6 +449,174 @@ func TestEditDetailsOnBoard(t *testing.T) {
 		j, _ := svc.GetJob(ctx, 1)
 		return j.Company == "Việc làm AI Engineer -Việt Nam"
 	}, "company not saved")
+}
+
+// Control response delivery at the HTTP boundary: a refresh can finish after
+// editing starts, after a newer refresh, or with a server error.
+func TestBoardRefresh(t *testing.T) {
+	for _, scenario := range []string{"editing", "out_of_order", "failed_read", "move_select", "move_failed", "focused_select"} {
+		t.Run(scenario, func(t *testing.T) {
+			st, err := store.Open(":memory:")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			svc := service.New(st)
+			svc.SetDataDir(t.TempDir())
+			ctx := context.Background()
+			if _, err := svc.AddJob(ctx, service.NewJob{Title: "Original title"}); err != nil {
+				t.Fatal(err)
+			}
+			var holdNext atomic.Bool
+			var failingPath atomic.Value
+			failingPath.Store("")
+			captured, release := make(chan struct{}), make(chan struct{}, 1)
+			handler := Handler(st, svc, testToken)
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Keep the event stream connected but quiet so only the refreshes
+				// deliberately started below affect response ordering.
+				if r.URL.Path == "/api/events" {
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.(http.Flusher).Flush()
+					<-r.Context().Done()
+					return
+				}
+				if r.URL.Path == failingPath.Load().(string) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusServiceUnavailable)
+					fmt.Fprint(w, `{"error":"Refresh unavailable <img src=x onerror=window.__pwned=1>"}`)
+					return
+				}
+				if r.URL.Path == "/api/jobs" && holdNext.Swap(false) {
+					rec := httptest.NewRecorder()
+					handler.ServeHTTP(rec, r)
+					close(captured)
+					select {
+					case <-release:
+					case <-r.Context().Done():
+						return
+					}
+					for k, v := range rec.Header() {
+						w.Header()[k] = v
+					}
+					w.WriteHeader(rec.Code)
+					w.Write(rec.Body.Bytes())
+					return
+				}
+				handler.ServeHTTP(w, r)
+			}))
+			defer ts.Close()
+			defer close(release)
+			page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+			// Close the page before the server, including its live event stream.
+			defer page.Close()
+			page.MustElement(".card")
+			refresh := func() { page.MustEval(`async () => { await refreshAppState(); }`) }
+			setTitle := func(title string) {
+				if _, err := svc.UpdateJob(ctx, 1, service.Patch{Title: &title}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if scenario == "failed_read" {
+				for _, endpoint := range []string{"jobs", "rating-config", "crawl-status", "activity"} {
+					oldTitle := page.MustElement(".card-title").MustText()
+					newTitle := "Recovered after " + endpoint
+					setTitle(newTitle)
+					failingPath.Store("/api/" + endpoint)
+					page.MustEval(`() => { document.getElementById('toastContainer').textContent = ''; }`)
+					refresh()
+					if got := page.MustEval(`() => document.querySelector('.card-title')?.textContent`).Str(); got != oldTitle {
+						t.Fatalf("%s failure replaced visible title: got %q, want %q", endpoint, got, oldTitle)
+					}
+					if toast := page.MustElement("#toastContainer").MustText(); !strings.Contains(toast, "Refresh unavailable <img") {
+						t.Fatalf("%s failure not shown: %q", endpoint, toast)
+					}
+					if page.MustEval(`() => !!window.__pwned || !!document.querySelector('#toastContainer img')`).Bool() {
+						t.Fatal("error message interpreted as HTML")
+					}
+					failingPath.Store("")
+					refresh()
+					if got := page.MustElement(".card-title").MustText(); got != newTitle {
+						t.Fatalf("recovery title = %q, want %q", got, newTitle)
+					}
+				}
+				return
+			}
+			if scenario == "move_select" {
+				// Choosing a stage commits it; focus staying on the select must
+				// not hold the saved move back as if it were an unsaved edit.
+				page.MustEval(`() => { const s = document.querySelector('.card[data-id="1"] .move-select'); s.focus(); s.value = "Applied"; s.dispatchEvent(new Event("change")); }`)
+				if err := page.Timeout(5 * time.Second).Wait(rod.Eval(`() => !!document.querySelector('.column[data-status="Applied"] .card[data-id="1"]')`)); err != nil {
+					t.Fatalf("moved card not shown in Applied while the stage select had focus: %v", err)
+				}
+				return
+			}
+			if scenario == "move_failed" {
+				// A rejected move leaves the focused select showing the stage the
+				// job is really in, not the one that failed to save.
+				original := page.MustEval(`() => document.querySelector('.card[data-id="1"] .move-select').value`).Str()
+				before, _ := svc.GetJob(ctx, 1)
+				failingPath.Store("/api/jobs/1")
+				page.MustEval(`() => { const s = document.querySelector('.card[data-id="1"] .move-select'); s.focus(); s.value = "Applied"; s.dispatchEvent(new Event("change")); }`)
+				if err := page.Timeout(5 * time.Second).Wait(rod.Eval(`() => document.getElementById('toastContainer').textContent.includes("Couldn't move job")`)); err != nil {
+					t.Fatalf("failed move not reported: %v", err)
+				}
+				state := page.MustEval(`() => { const s = document.activeElement; return { focused: s.classList.contains('move-select') && !!s.closest('.card[data-id="1"]'), value: s.value, lane: s.closest('.column')?.dataset.status }; }`)
+				if !state.Get("focused").Bool() || state.Get("value").Str() != original || state.Get("lane").Str() != original {
+					t.Fatalf("after failed move: %v, want focused select showing %q in lane %q", state, original, original)
+				}
+				if j, _ := svc.GetJob(ctx, 1); j.Status != before.Status {
+					t.Fatalf("persisted status = %q, want %q", j.Status, before.Status)
+				}
+				return
+			}
+			if scenario == "focused_select" {
+				// A focused stage select with no choice made yet is still in use:
+				// a background refresh must wait rather than destroy it.
+				page.MustEval(`() => document.querySelector('.card[data-id="1"] .move-select').focus()`)
+				setTitle("Background title")
+				refresh()
+				if !page.MustEval(`() => document.activeElement.classList.contains('move-select') && document.activeElement.closest('.card[data-id="1"]') && document.querySelector('.card-title').textContent === 'Original title'`).Bool() {
+					t.Fatal("background refresh replaced the focused stage select")
+				}
+				page.MustEval(`() => document.activeElement.blur()`)
+				page.MustWait(`() => document.querySelector('.card-title')?.textContent === 'Background title'`)
+				return
+			}
+			if scenario == "editing" {
+				page.MustEval(`() => toggleCardDetail("1")`)
+				page.MustElement("#detail-1 details summary").MustClick()
+			}
+			holdNext.Store(true)
+			page.MustEval(`() => { window.heldRefresh = refreshAppState(); }`)
+			select {
+			case <-captured:
+			case <-time.After(5 * time.Second):
+				t.Fatal("jobs response was not captured")
+			}
+			if scenario == "editing" {
+				page.MustElement("#edit-title-1").MustSelectAllText().MustInput("My unsaved title")
+			} else {
+				setTitle("Newer title")
+				refresh()
+			}
+			release <- struct{}{}
+			page.MustEval(`async () => { await window.heldRefresh; }`)
+			if scenario == "editing" {
+				if !page.MustEval(`() => document.activeElement.id === 'edit-title-1' && document.activeElement.value === 'My unsaved title'`).Bool() {
+					t.Fatal("in-flight refresh discarded the edit or focus")
+				}
+				page.MustElementR("button", "Save details").MustClick()
+				waitUntil(t, func() bool {
+					j, _ := svc.GetJob(ctx, 1)
+					return j.Title == "My unsaved title"
+				}, "preserved edit was not saved")
+				page.MustWait(`() => document.querySelector('.card-title')?.textContent === 'My unsaved title'`)
+			} else if got := page.MustElement(".card-title").MustText(); got != "Newer title" {
+				t.Fatalf("older response replaced newer title: %q", got)
+			}
+		})
+	}
 }
 
 // The CV/email flow on the board: Ask your AI shows the request, the user
@@ -997,5 +1166,39 @@ func TestBoardExpiryBadges(t *testing.T) {
 	}
 	if page.MustEval(`() => document.body.innerText.includes("delete in")`).Bool() {
 		t.Error(`a card still says "delete in" — nothing is ever deleted`)
+	}
+}
+
+// Background tasks (Jev rating, TopCV sync) get no source chip and no filter
+// checkbox: they don't find jobs.
+func TestBoardHidesTaskSources(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	for _, src := range []string{"careerlink", service.TopCVSyncSource, service.JevRateSource} {
+		st.RecordCrawlRun(ctx, src, true, "", time.Now())
+	}
+	svc.AddJob(ctx, service.NewJob{Title: "A job", Source: "careerlink"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	chips := page.MustElement("#crawlChips").MustText()
+	filters := page.MustElement("#platformFilters").MustText()
+	if !strings.Contains(chips, "careerlink") || !strings.Contains(filters, "careerlink") {
+		t.Fatalf("job source missing: chips %q, filters %q", chips, filters)
+	}
+	for _, task := range []string{service.TopCVSyncSource, service.JevRateSource} {
+		if strings.Contains(chips, task) || strings.Contains(filters, task) {
+			t.Errorf("task %q shown as a source: chips %q, filters %q", task, chips, filters)
+		}
 	}
 }
