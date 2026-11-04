@@ -17,6 +17,23 @@ function formatSalary(s) {
   return out;
 }
 
+// worksSaturday: the job text says Saturday is a working day ("thứ 2 - thứ
+// 7", "T7", "Saturday"), as a whole word, and not negated ("nghỉ thứ 7",
+// "không làm T7", "trừ thứ 7", "off on Saturday", "Saturdays off").
+function worksSaturday(jd) {
+  const text = foldText(jd);
+  const re = /(^|[^a-z0-9])(t7|thu 7|thu bay|saturdays?)(?=$|[^a-z0-9])/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const before = text.slice(Math.max(0, m.index - 14), m.index + m[1].length);
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 8);
+    const negated = /(nghi|khong lam|khong|tru|off|except|no)\s*(on\s*)?(lam\s*)?(vao\s*)?(ngay\s*)?$/.test(before) ||
+      /^\s*(off|nghi)\b/.test(after);
+    if (!negated) return true;
+  }
+  return false;
+}
+
 function renderBoard() {
   const columns = ["Saved", "Waiting to apply", "Applied", "Interview", "Offer", "Closed"];
   const container = document.getElementById("kanbanBoard");
@@ -175,7 +192,7 @@ function renderJobCard(job, container) {
 
   // Calculate Dealbreakers
   const dealbreakers = [];
-  if (job.jd_full && (job.jd_full.toLowerCase().includes("thứ 7") || job.jd_full.toLowerCase().includes("t7") || job.jd_full.toLowerCase().includes("saturday"))) {
+  if (worksSaturday(job.jd_full)) {
     dealbreakers.push("⛔ Làm T7");
   }
   if (!job.salary || job.salary.includes("thỏa thuận") || job.salary.toLowerCase().includes("negotiable") || job.salary.toLowerCase().includes("cạnh tranh")) {
@@ -411,6 +428,7 @@ function renderJobCard(job, container) {
       ${salaryHtml}
       ${masothueHtml}
       ${distanceHtml}
+      ${dealbreakersHtml}
     </div>
     
     <div class="card-footer">
