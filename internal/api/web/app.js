@@ -192,11 +192,6 @@ const APIClient = {
 
 
 
-  async applyJob(id) {
-    // Triggers platform apply engine (on-site apply)
-    const res = await apiFetch(`${API_BASE}/jobs/${id}/apply`, { method: "POST" });
-    return res.json();
-  },
 
   async keepJob(id) {
     const res = await apiFetch(`${API_BASE}/jobs/${id}/keep`, { method: "POST" });
@@ -1239,6 +1234,8 @@ function renderCardDetailContents(job, detailContainer) {
         <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${ready ? `Version ${esc(job.cv_version)} · ${esc(when)}` : "Not written yet."}</p>
         <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
           ${ready ? `<button class="btn-secondary btn-sm" onclick="downloadCV('${job.id}')">Download CV.pdf</button>` : ""}
+          ${ready && /topcv\.vn/.test(job.url) && !job.topcv_status && job.status !== "Applied"
+            ? `<button class="btn-primary btn-sm" onclick="applyOnTopCV('${job.id}')" title="Opens the job in a window with your TopCV login. You submit it there.">Apply on TopCV</button>` : ""}
           <button class="btn-secondary btn-sm" onclick="askAI('cv', '${job.id}')">${ready ? "Ask your AI to improve it" : "Ask your AI to tailor it"}</button>
         </div>
       </div>
@@ -1426,7 +1423,28 @@ async function sendInterviewReply(id) {
 }
 
 async function approveOnSiteApply(id) {
-  await APIClient.applyJob(id);
+  applyOnTopCV(id);
+}
+
+// Assisted apply: you approve by clicking, and you submit on TopCV yourself.
+async function applyOnTopCV(id) {
+  let prep;
+  try {
+    prep = await APIClient.post(`jobs/${id}/apply`);
+  } catch (e) {
+    showToast(e.message, "error");
+    return;
+  }
+  if (prep.cover_letter) {
+    try { await navigator.clipboard.writeText(prep.cover_letter); } catch {}
+  }
+  alert(
+    "A TopCV window is opening with your login. In it:\n\n" +
+    "1. Click Ứng tuyển (Apply)\n" +
+    "2. Upload this CV:\n   " + prep.cv_pdf + "\n" +
+    (prep.cover_letter ? "3. Paste the cover letter (already copied to your clipboard)\n4. Submit, then close the window\n" : "3. Submit, then close the window\n") +
+    "\nbraveduck checks TopCV afterwards and moves the job to Applied if it's there."
+  );
   refreshAppState();
 }
 
@@ -1435,8 +1453,7 @@ async function undoOnSiteApply(id) {
 }
 
 async function retryApply(id) {
-  await APIClient.applyJob(id);
-  refreshAppState();
+  applyOnTopCV(id);
 }
 
 async function saveJobDetails(id) {
@@ -1546,25 +1563,33 @@ function connectLiveUpdates() {
   const es = new EventSource(`${API_BASE}/events?token=${encodeURIComponent(API_TOKEN)}`);
   es.addEventListener("changed", scheduleRefresh);
   es.onerror = () => {
-    // EventSource retries dropped connections itself. It gives up (CLOSED)
-    // when the server answers with an error — e.g. it restarted with a new
-    // token — so wait for the server to be back, then reload the page.
-    if (es.readyState === EventSource.CLOSED) waitForServerThenReload();
+    // EventSource retries dropped connections itself and gives up (CLOSED)
+    // when the server answers with an error. Only a 401 means the server
+    // restarted with a new token (reload to pick it up); any other refusal —
+    // e.g. 503 when live updates aren't available — falls back to polling.
+    if (es.readyState === EventSource.CLOSED) onLiveUpdatesClosed();
   };
 }
 
-function waitForServerThenReload() {
-  showToast("Lost connection to the board server — reconnecting…", "error");
-  const probe = setInterval(async () => {
-    try {
-      if ((await fetch("/healthz", { cache: "no-store" })).ok) {
-        clearInterval(probe);
-        location.reload();
-      }
-    } catch {
-      // still down; keep waiting
-    }
-  }, 3000);
+let pollTimer = null;
+
+async function onLiveUpdatesClosed() {
+  let status = 0;
+  try {
+    status = (await fetch(`${API_BASE}/jobs`, { headers: { Authorization: `Bearer ${API_TOKEN}` }, cache: "no-store" })).status;
+  } catch {
+    // server down: wait for it, then decide again
+  }
+  if (status === 401) {
+    showToast("The board server restarted — reloading…", "info");
+    setTimeout(() => location.reload(), 1000);
+  } else if (status === 0) {
+    showToast("Lost connection to the board server — reconnecting…", "error");
+    setTimeout(onLiveUpdatesClosed, 3000);
+  } else if (!pollTimer) {
+    // Server is fine, live updates aren't: refresh now and then instead.
+    pollTimer = setInterval(scheduleRefresh, 30000);
+  }
 }
 
 // Toast alerts utility

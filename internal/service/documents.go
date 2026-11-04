@@ -209,3 +209,16 @@ func (s *Service) RejectDraft(ctx context.Context, id int64) (jobs.Job, error) {
 	}
 	return s.GetJob(ctx, id)
 }
+
+// currentDraft decodes job id's draft, if it has one.
+func (s *Service) currentDraft(ctx context.Context, id int64) (Draft, jobs.Job, error) {
+	j, err := s.GetJob(ctx, id)
+	if err != nil {
+		return Draft{}, j, err
+	}
+	var d Draft
+	if j.DraftEmail == "" || json.Unmarshal([]byte(j.DraftEmail), &d) != nil {
+		return Draft{}, j, fmt.Errorf("%w: no draft", ErrNotFound)
+	}
+	return d, j, nil
+}

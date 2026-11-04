@@ -132,6 +132,22 @@ func (s *server) draftSent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// applyJob starts an assisted apply: a visible TopCV window on the user's
+// desktop, which they submit themselves. Returns at once (202) with the CV
+// path and cover letter to show; the outcome arrives in the activity feed.
+func (s *server) applyJob(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	prep, err := s.svc.StartAssistApply(id)
+	if errors.Is(err, service.ErrApplyLimit) {
+		writeErr(w, http.StatusTooManyRequests, err)
+		return
+	}
+	reply(w, http.StatusAccepted, prep, err)
+}
+
 func (s *server) draftReject(w http.ResponseWriter, r *http.Request) {
 	if id, ok := pathID(w, r); ok {
 		j, err := s.svc.RejectDraft(r.Context(), id)

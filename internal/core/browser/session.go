@@ -395,3 +395,47 @@ func probe(ctx context.Context, p platform.Platform, s Session, seed string) (st
 	}
 	return LoggedIn, pg, cleanup, nil
 }
+
+// ErrWindowTimeout means the user left a visible window open past its limit.
+var ErrWindowTimeout = errors.New("the window was left open too long")
+
+// ShowPage opens a VISIBLE browser window on url with session s restored (same
+// fingerprint seed) and waits until the user closes it, or the timeout. The
+// user does whatever they need on the page themselves; braveduck touches
+// nothing on it. Used for assisted apply.
+func ShowPage(ctx context.Context, p platform.Platform, s Session, seed, url string, timeout time.Duration) error {
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" && !hasDesktop() {
+		return errors.New("this needs a desktop to show the browser window (no DISPLAY found)")
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	b, cleanup, err := launch(ctx, launchOpts{Headless: false, Seed: seed})
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if err := (proto.StorageSetCookies{Cookies: proto.CookiesToParams(ownCookies(p, s.Cookies))}).Call(b); err != nil {
+		return fmt.Errorf("restore cookies: %w", err)
+	}
+	pg, err := NewPage(b, s)
+	if err != nil {
+		return err
+	}
+	if err := pg.Navigate(url); err != nil {
+		return err
+	}
+	go raiseOnWSL(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return ErrWindowTimeout
+			}
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+		if pages, err := b.Pages(); err != nil || len(pages) == 0 {
+			return nil // the user closed the window
+		}
+	}
+}

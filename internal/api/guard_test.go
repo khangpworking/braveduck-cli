@@ -233,3 +233,16 @@ func TestCVAndDraftAPI(t *testing.T) {
 		t.Fatalf("rate with empty profile = %d, want 409", resp.StatusCode)
 	}
 }
+
+// Apply refuses clearly when it can't run (no window is ever opened here).
+func TestApplyRefusals(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	ts, st := newTestServer(t)
+	id, _ := st.Add(context.Background(), jobs.Job{Title: "VNW", URL: "https://www.vietnamworks.com/x-1-jv"}, time.Now())
+	resp := do(t, http.MethodPost, fmt.Sprintf("%s/api/jobs/%d/apply", ts.URL, id), "")
+	var out map[string]string
+	json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(out["error"], "TopCV jobs") {
+		t.Fatalf("non-TopCV apply = %d %v", resp.StatusCode, out)
+	}
+}
