@@ -54,6 +54,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "list_jobs", "List jobs on the board, newest first. Optionally filter by lane (status) or discovery source.", readOnly, t.listJobs)
 	add(srv, "get_job", "Get one job with every field (JD, score, apply state, notes...).", readOnly, t.getJob)
 	add(srv, "get_stats", "Funnel counts per lane plus the interview rate and morale line.", readOnly, t.getStats)
+	add(srv, "get_setup", "How far the user is with setting braveduck up: CV uploaded, the profile's About me and what they want filled in, how many search terms, and the optional location and TopCV login. done is true once ratings and crawls can work. Use it to guide the user through what's missing (upload_cv, update_profile, set_keywords).", readOnly, t.getSetup)
 	add(srv, "get_today", "What the user should act on now: the best-rated jobs not applied to yet, postings that close within a week, and applications waiting a week or more for an answer. Empty groups are left out.", readOnly, t.getToday)
 	add(srv, "get_keywords", "The crawler keyword filter lists.", readOnly, t.getKeywords)
 	add(srv, "get_rating_config", "The A/B rater config: which model ids score jobs and which one owns the board badge.", readOnly, t.getRatingConfig)
@@ -303,6 +304,10 @@ func (t tools) getJob(ctx context.Context, in idIn) (jobs.Job, error) {
 
 func (t tools) getStats(ctx context.Context, _ struct{}) (service.Stats, error) {
 	return t.svc.Stats(ctx)
+}
+
+func (t tools) getSetup(ctx context.Context, _ struct{}) (service.SetupStatus, error) {
+	return t.svc.Setup(ctx)
 }
 
 type todayOut struct {
