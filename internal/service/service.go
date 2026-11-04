@@ -265,6 +265,13 @@ func (s *Service) UpdateJob(ctx context.Context, id int64, p Patch) (jobs.Job, e
 	if err != nil {
 		return jobs.Job{}, err
 	}
+	// Applying starts the no-answer clock (Today's follow-ups, the sweep),
+	// counted from today unless the job already has its applied date.
+	if p.Status != nil && *p.Status == "applied" && (before.Status == "saved" || before.Status == "waiting") &&
+		jobs.ParseExpiry(before.ExpiresAt).Kind != jobs.KindApplied {
+		anchor := jobs.AppliedPrefix + s.now().Format("2006-01-02")
+		p.ExpiresAt = &anchor
+	}
 	if err := s.st.Patch(ctx, id, p, s.now()); err != nil {
 		return jobs.Job{}, notFound(err)
 	}
