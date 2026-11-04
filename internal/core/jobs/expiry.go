@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -75,8 +76,13 @@ func ParseExpiry(raw string) ParsedExpiry {
 	return ParsedExpiry{Kind: KindUnknown}
 }
 
-// daysUntil: whole days from now to the date (ceil; negative once past).
+// daysUntil: whole days from now to the date (ceil; negative once past). A
+// bare YYYY-MM-DD is a calendar day in now's time zone, so a Vietnamese
+// deadline of "2 Nov" isn't "past" from 07:00 on 2 Nov (UTC midnight).
 func daysUntil(dateStr string, now time.Time) (int, bool) {
+	if d, ok := calendarDays(dateStr, now); ok {
+		return d, true
+	}
 	t, ok := parseTime(dateStr)
 	if !ok {
 		return 0, false
@@ -84,13 +90,28 @@ func daysUntil(dateStr string, now time.Time) (int, bool) {
 	return ceilDiv(float64(t.Sub(now).Milliseconds())), true
 }
 
-// daysSince: whole days from the date to now (floor).
+// daysSince: whole days from the date to now (floor), calendar days for a
+// bare YYYY-MM-DD as in daysUntil.
 func daysSince(dateStr string, now time.Time) (int, bool) {
+	if d, ok := calendarDays(dateStr, now); ok {
+		return -d, true
+	}
 	t, ok := parseTime(dateStr)
 	if !ok {
 		return 0, false
 	}
 	return floorDiv(float64(now.Sub(t).Milliseconds())), true
+}
+
+// calendarDays is date minus today, in whole calendar days in now's zone; ok
+// is false unless dateStr is a bare YYYY-MM-DD.
+func calendarDays(dateStr string, now time.Time) (int, bool) {
+	d, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(dateStr), now.Location())
+	if err != nil {
+		return 0, false
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return int(math.Round(d.Sub(today).Hours() / 24)), true // DST days aren't 24 h
 }
 
 type ExpiryState string

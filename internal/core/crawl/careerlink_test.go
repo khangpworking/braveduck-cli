@@ -77,3 +77,37 @@ func TestCareerLinkSearchPageFails(t *testing.T) {
 		t.Fatalf("err = %v, want the search page's HTTP 403", err)
 	}
 }
+
+// A result already on the board comes back from the search page alone (link
+// and title), without fetching its detail page.
+func TestCareerLinkSkipsKnownListings(t *testing.T) {
+	var requests []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.Path)
+		switch r.URL.Path {
+		case "/vieclam/list":
+			fmt.Fprint(w, clSearchPage)
+		case "/tim-viec-lam/growth-marketing-executive/3648824":
+			fmt.Fprint(w, clDetail("Growth Marketing Executive", "Duck Co"))
+		default:
+			http.Error(w, "gone", http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := &CareerLink{Base: srv.URL, Client: srv.Client(), PerQuery: 2}
+	c.SkipKnown(func(u string) bool { return strings.HasSuffix(u, "/3655895") })
+	ls, err := c.Search(context.Background(), "ai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(requests, " "), "3655895") {
+		t.Fatalf("fetched the known listing's detail page: %v", requests)
+	}
+	if len(ls) != 2 || ls[0].Title != "AI Developer" || ls[0].URL != "https://www.careerlink.vn/tim-viec-lam/ai-developer/3655895" || ls[0].Company != "" {
+		t.Fatalf("listings = %+v, want the known one from the search page, then the fetched one", ls)
+	}
+	if ls[1].Company != "Duck Co" {
+		t.Fatalf("unknown listing not fetched: %+v", ls[1])
+	}
+}
