@@ -1978,7 +1978,7 @@ let refreshPending = false;
 
 function isEditingCard() {
   const el = document.activeElement;
-  return !!(el && el.closest && el.closest("#kanbanBoard") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  return !!(el && el.closest && el.closest("#kanbanBoard") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.classList.contains("move-select"));
 }
 
 function scheduleRefresh() {
