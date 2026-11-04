@@ -277,8 +277,14 @@ func TestLoginsPanel(t *testing.T) {
 
 	// Disconnect asks for confirmation, then deletes.
 	wait, handle := page.MustHandleDialog()
-	go func() { wait(); handle(true, "") }()
-	page.MustElementR("button", "Disconnect").MustClick()
+	go func() {
+		// rod's wait panics once the page's context ends; in a goroutine
+		// that would take down the whole test binary, not just this test.
+		defer func() { _ = recover() }()
+		wait()
+		handle(true, "")
+	}()
+	page.MustElementR("button", "Disconnect").MustEval(`() => this.click()`)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if _, err := st.GetSession(ctx, "topcv"); store.IsNotFound(err) {
@@ -1011,7 +1017,10 @@ func TestBoardUploadsCV(t *testing.T) {
 	// The second upload asks before replacing what's in About me.
 	wait, handle := page.MustHandleDialog()
 	page.MustElement("#cvFileInput").MustSetFiles(second)
-	go page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
+	go func() {
+		defer func() { _ = recover() }() // see TestLoginsPanel: a panic here would end the whole run
+		page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
+	}()
 	if d := wait(); !strings.Contains(d.Message, "About me") {
 		t.Fatalf("dialog = %q", d.Message)
 	}
