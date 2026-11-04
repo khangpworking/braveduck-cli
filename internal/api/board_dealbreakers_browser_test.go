@@ -45,3 +45,33 @@ func TestBoardSaturdayDealbreaker(t *testing.T) {
 		}
 	}
 }
+
+// Undisclosed pay is flagged however it's written (VietnamWorks says
+// "Thương lượng"), and the word isn't shown as a salary chip.
+func TestBoardUndisclosedPayDealbreaker(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	svc.AddJob(ctx, service.NewJob{Title: "Word", Salary: "Thương lượng"})
+	svc.AddJob(ctx, service.NewJob{Title: "Figure", Salary: "16000000 - 22000000 VND/month"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	got := page.MustEval(`() => Object.fromEntries([...document.querySelectorAll(".card")].map(c =>
+		[c.querySelector(".card-title").textContent.trim(), [c.textContent.includes("Lương thỏa thuận"), !!c.querySelector(".salary-chip")]]))`).Map()
+	if w := got["Word"].Arr(); !w[0].Bool() || w[1].Bool() {
+		t.Errorf("Thương lượng: pill %v chip %v, want the pill and no chip", w[0], w[1])
+	}
+	if f := got["Figure"].Arr(); f[0].Bool() || !f[1].Bool() {
+		t.Errorf("a real figure: pill %v chip %v, want a chip and no pill", f[0], f[1])
+	}
+}
