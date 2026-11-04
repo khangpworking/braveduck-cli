@@ -69,22 +69,31 @@ func canonicalize(s Source, u *url.URL, host string) string {
 		return out.String()
 	}
 	out.Host = "www.facebook.com"
-	if strings.HasSuffix(out.Path, ".php") {
-		// permalink.php / story.php carry the post in the query.
-		q := url.Values{}
-		for _, k := range []string{"story_fbid", "id"} {
-			if v := u.Query().Get(k); v != "" {
-				q.Set(k, v)
-			}
-		}
-		out.RawQuery = q.Encode()
-		return out.String()
+	query := u.Query()
+	// A group link that opens one post (?multi_permalinks=P) is that post.
+	if m := fbGroupRE.FindStringSubmatch(out.Path); m != nil && query.Get("multi_permalinks") != "" {
+		return "https://www.facebook.com/groups/" + m[1] + "/posts/" + strings.Split(query.Get("multi_permalinks"), ",")[0] + "/"
 	}
 	if m := fbPermalinkRE.FindStringSubmatch(out.Path); m != nil {
 		out.Path = "/groups/" + m[1] + "/posts/" + m[2] + "/"
 	}
-	if !strings.HasSuffix(out.Path, "/") {
+	if !strings.HasSuffix(out.Path, "/") && !strings.HasSuffix(out.Path, ".php") {
 		out.Path += "/"
 	}
+	// Keep only the parameters that name the post (permalink.php, story.php,
+	// photo.php, /watch/?v=); tracking parameters go.
+	q := url.Values{}
+	for _, k := range fbPostParams {
+		if v := query.Get(k); v != "" {
+			q.Set(k, v)
+		}
+	}
+	out.RawQuery = q.Encode()
 	return out.String()
 }
+
+// fbPostParams are the query parameters that identify a Facebook post.
+var fbPostParams = []string{"story_fbid", "id", "fbid", "v"}
+
+// fbGroupRE matches a bare group link: /groups/<id>/.
+var fbGroupRE = regexp.MustCompile(`^/groups/([^/]+)/?$`)

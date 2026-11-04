@@ -110,8 +110,13 @@ func (s *Service) SyncTopCV(ctx context.Context) (SyncResult, error) {
 		if !onBoard {
 			// The same job pasted without its TopCV link (e.g. as text) is
 			// the one applied to: update it rather than add a second card.
-			if dups := board.find(nj); len(dups) > 0 {
-				j, onBoard = dups[0], true
+			// Only a card with no TopCV link of its own: one linking to
+			// another TopCV job is a different job.
+			for _, d := range board.find(nj) {
+				if topcv.JobIDFromURL(d.URL) == "" {
+					j, onBoard = d, true
+					break
+				}
 			}
 		}
 		if !onBoard {

@@ -198,7 +198,8 @@ func schedByName(t *testing.T, s *Service) map[string]SourceSchedule {
 }
 
 // A job the user pasted (by link or as text) isn't added again when a crawl
-// finds it, and neither is one listing found under two links in one run.
+// finds it. Two links with the same title are two listings (a re-post, or
+// another city), so both are added.
 func TestCrawlSkipsJobsAlreadyOnBoard(t *testing.T) {
 	s := newSvc(t)
 	ctx := context.Background()
@@ -216,11 +217,11 @@ func TestCrawlSkipsJobsAlreadyOnBoard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Found != 4 || res.Duplicates != 3 || res.Added != 1 {
-		t.Fatalf("result = %+v, want 4 found, 3 already on the board, 1 added", res)
+	if res.Found != 4 || res.Duplicates != 2 || res.Added != 2 {
+		t.Fatalf("result = %+v, want 4 found, 2 already on the board, 2 added", res)
 	}
-	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 3 {
-		t.Fatalf("board has %d jobs, want the 2 pasted + Product Owner once", len(list))
+	if list, _ := s.ListJobs(ctx, ListFilter{}); len(list) != 4 {
+		t.Fatalf("board has %d jobs, want the 2 pasted + both Product Owner listings", len(list))
 	}
 }
 

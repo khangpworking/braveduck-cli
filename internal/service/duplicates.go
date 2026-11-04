@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
@@ -12,8 +13,10 @@ import (
 // A job that's already on the board is never added again, however it comes
 // in: a paste, `add`, a crawl or the TopCV sync. Two jobs are the same listing
 // when they share a link (in canonical form, so links stored with tracking
-// parts still match), a title at the same company, or their job text. Blank
-// fields never match.
+// parts still match), or their job text, or — when one of them has no link
+// (pasted text) and the other isn't Closed — a title at the same company. Two
+// links are two listings even with the same title: a re-post, or the same
+// role in another city. Blank fields never match.
 
 // DuplicateError is a job that's already on the board; Jobs are the matches.
 // It matches ErrDuplicate.
@@ -84,7 +87,11 @@ func (x *dupIndex) find(j jobs.Job) []jobs.Job {
 	var out []jobs.Job
 	seen := map[int64]bool{}
 	for _, k := range dupKeys(j) {
+		byTitle := strings.HasPrefix(k, "title\x00")
 		for _, o := range x.keys[k] {
+			if byTitle && (strings.TrimSpace(j.URL) != "" && strings.TrimSpace(o.URL) != "" || o.Status == "closed") {
+				continue // two links are two listings; a closed job doesn't block a new one
+			}
 			if !seen[o.ID] {
 				seen[o.ID] = true
 				out = append(out, o)
@@ -106,16 +113,30 @@ func (s *Service) rejectDuplicates(ctx context.Context, j jobs.Job) error {
 	return nil
 }
 
-// postText is a job's text without a trailing footer after a "---" line
-// (fb-watcher appends the author, group and matched keywords there), so the
-// same post compares equal however it was added.
+// postText is a job's text without a metadata footer — a "---" line then a
+// few "Key: value" lines, as fb-watcher appends (author, group, matched
+// keywords) — so the same post compares equal however it was added. A "---"
+// divider inside a description is kept.
 func postText(jd string) string {
 	jd = strings.ReplaceAll(jd, "\r\n", "\n")
-	if i := strings.Index(jd, "\n---\n"); i >= 0 {
-		return jd[:i]
+	i := strings.LastIndex(jd, "\n---\n")
+	if i < 0 {
+		return jd
 	}
-	return strings.TrimSuffix(jd, "\n---")
+	tail := strings.Split(strings.TrimSpace(jd[i+5:]), "\n")
+	if len(tail) == 0 || len(tail) > 6 {
+		return jd
+	}
+	for _, line := range tail {
+		if !footerLineRE.MatchString(line) {
+			return jd
+		}
+	}
+	return jd[:i]
 }
+
+// footerLineRE is one "Key: value" line of a metadata footer.
+var footerLineRE = regexp.MustCompile(`^[A-Z][A-Za-z ]{1,30}: \S`)
 
 // fold lowercases and collapses whitespace, for comparing text.
 func fold(s string) string {

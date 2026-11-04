@@ -98,3 +98,24 @@ func TestSyncTopCVMatchesPastedJob(t *testing.T) {
 		t.Fatalf("pasted card = %q / %q", j.Status, j.TopcvStatus)
 	}
 }
+
+// A card linking to a different TopCV job is a different job, even with the
+// same title and company.
+func TestSyncTopCVDoesNotMatchAnotherTopCVJob(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	other, _ := s.AddJob(ctx, NewJob{Title: "AI Content Operator", Company: "Vinh Cara", URL: "https://www.topcv.vn/viec-lam/ai-content-operator/1000001.html"})
+	orig := fetchApplications
+	t.Cleanup(func() { fetchApplications = orig })
+	fetchApplications = func(context.Context, *Service) ([]topcv.Application, error) {
+		return []topcv.Application{{JobID: "2176176", Title: "AI Content Operator", Company: "Vinh Cara",
+			URL: "https://www.topcv.vn/viec-lam/ai-content-operator/2176176.html"}}, nil
+	}
+	res, err := s.SyncTopCV(ctx)
+	if err != nil || res.Added != 1 {
+		t.Fatalf("result = %+v %v, want the application added as its own card", res, err)
+	}
+	if j, _ := s.GetJob(ctx, other.ID); j.Status != "saved" || j.TopcvStatus != "" {
+		t.Fatalf("the other TopCV job was updated: %q / %q", j.Status, j.TopcvStatus)
+	}
+}
