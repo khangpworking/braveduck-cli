@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="braveduck-token" content="">
-  <title>Career Command Center</title>
+  <title>braveduck — job board</title>
   <!-- Offline/buildless: no web fonts. app.css falls back to a system font stack. -->
   <link rel="stylesheet" href="app.css">
 </head>
@@ -13,7 +13,7 @@
   <!-- Top Nav Header -->
   <header class="top-nav">
     <div class="nav-left">
-      <h1 class="nav-title">Career</h1>
+      <h1 class="nav-title">braveduck</h1>
       <div class="stat-pills" id="statPills">
         <!-- Live count pills injected via JS -->
       </div>
@@ -56,6 +56,7 @@
 
     <!-- Toolbar Filters -->
     <section class="toolbar">
+      <input type="search" id="jobSearch" class="text-input search-input" placeholder="Search jobs  ( / )" aria-label="Search jobs" autocomplete="off">
       <div class="filters" id="platformFilters">
         <!-- Checkboxes injected by JS dynamically -->
       </div>

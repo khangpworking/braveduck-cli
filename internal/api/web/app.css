@@ -999,9 +999,6 @@ a:hover {
 
 /* Responsive Styles */
 @media (max-width: 768px) {
-  .setup-card {
-    margin: var(--spacing-md) var(--spacing-md) 0;
-  }
   .widgets-row {
     grid-template-columns: 1fr;
     padding: var(--spacing-md) var(--spacing-md) 0;
@@ -1111,4 +1108,27 @@ a:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .setup-card {
+    margin: var(--spacing-md) var(--spacing-md) 0;
+  }
+}
+
+/* Search box */
+.search-input {
+  width: 220px;
+  padding: 6px 10px;
+  font-size: 13px;
+  margin-right: var(--spacing-md);
+}
+@media (max-width: 768px) {
+  .search-input {
+    width: 100%;
+    margin: 0 0 var(--spacing-sm);
+  }
+}
+.search-input + .filters {
+  flex: 1;
 }

@@ -112,7 +112,8 @@ const AppState = {
   platforms: [],
   activity: [],
   filters: {
-    platform: "All"
+    platform: "All",
+    query: "" // the search box
   },
   sorting: {
     Saved: "Most recent" // or "Highest score"
@@ -747,6 +748,25 @@ function updatePlatformFilter(checkbox) {
   renderBoard();
 }
 
+// foldText lowercases and drops Vietnamese accents, so "ky su" finds "Kỹ sư".
+function foldText(v) {
+  return String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase();
+}
+
+// formatSalary shortens what job sites write in đồng: "16000000 - 22000000
+// VND/month" reads "16–22 triệu/tháng". Anything else is shown as written.
+function formatSalary(s) {
+  if (!/vnd/i.test(s) || !/\d{6,}/.test(s)) return s;
+  const millions = n => {
+    const m = Number(n) / 1e6;
+    return Number.isInteger(m) ? String(m) : m.toFixed(1).replace(/\.0$/, "");
+  };
+  let out = s.replace(/(\d{6,})\s*-\s*(\d{6,})/, (_, a, b) => `${millions(a)}–${millions(b)}`)
+    .replace(/\d{6,}/g, n => millions(n));
+  out = out.replace(/\s*VND\s*\/\s*month/i, " triệu/tháng").replace(/\s*VND\s*\/\s*year/i, " triệu/năm").replace(/\s*VND\b/i, " triệu");
+  return out;
+}
+
 function renderBoard() {
   const columns = ["Saved", "Waiting to apply", "Applied", "Interview", "Offer", "Closed"];
   const container = document.getElementById("kanbanBoard");
@@ -756,6 +776,13 @@ function renderBoard() {
   let filteredJobs = AppState.jobs;
   if (AppState.filters.platform !== "All") {
     filteredJobs = filteredJobs.filter(j => j.discovery_source === AppState.filters.platform);
+  }
+  const words = foldText(AppState.filters.query).split(/\s+/).filter(Boolean);
+  if (words.length) {
+    filteredJobs = filteredJobs.filter(j => {
+      const hay = foldText([j.title, j.company, j.location, j.skills, j.salary, j.notes, j.discovery_source].join(" "));
+      return words.every(w => hay.includes(w));
+    });
   }
 
   columns.forEach(colName => {
@@ -892,7 +919,7 @@ function renderJobCard(job, container) {
   }
   if (job.company_active_date && job.company_active_date !== "🏢 …" && job.company_active_date !== "🏢 Unknown") {
     const year = new Date(job.company_active_date).getFullYear();
-    if (2026 - year < 2) {
+    if (new Date().getFullYear() - year < 2) {
       dealbreakers.push(`⛔ Cty <2 năm (${year})`);
     }
   }
@@ -945,7 +972,7 @@ function renderJobCard(job, container) {
   }
 
   // Salary chip
-  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip">💰 ${esc(job.salary)}</span>` : "";
+  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip" title="${esc(job.salary)}">💰 ${esc(formatSalary(job.salary))}</span>` : "";
 
   // Company active date (masothue link)
   let masothueHtml = "";
@@ -968,7 +995,7 @@ function renderJobCard(job, container) {
     const icon = km <= ((AppState.location && AppState.location.max_km) || 10) ? "✅" : "🔴";
     distanceHtml = `<span class="intel-badge">${icon} ${km < 10 ? km.toFixed(1) : Math.round(km)} km</span>`;
   } else if (!locSet) {
-    distanceHtml = `<span class="intel-badge" title="Set your location (📍 Location) to see distances.">📍 ? km</span>`;
+    // No location yet: nothing to measure from, so no badge (📍 Location sets it).
   } else if (job.company_geo_status === "geocode_failed") {
     distanceHtml = `<span class="intel-badge" title="This job's address couldn't be found on the map.">📍 unknown</span>`;
   } else if (job.company_geo_status === "no_address") {
@@ -2125,6 +2152,28 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("sourcesBtn").addEventListener("click", async () => {
     sourcesModal.classList.add("open");
     await renderSources();
+  });
+
+  // Search: filters cards as you type; "/" jumps to it, Esc clears it.
+  const search = document.getElementById("jobSearch");
+  search.addEventListener("input", () => {
+    AppState.filters.query = search.value;
+    renderBoard();
+  });
+  search.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      search.value = "";
+      AppState.filters.query = "";
+      renderBoard();
+      search.blur();
+    }
+  });
+  document.addEventListener("keydown", e => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
+    if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      search.focus();
+    }
   });
 
   const profileModal = document.getElementById("profileModalOverlay");

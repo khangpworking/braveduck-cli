@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 
@@ -393,8 +394,8 @@ func TestLocationWindow(t *testing.T) {
 	page := b.MustPage("")
 	proto.EmulationSetGeolocationOverride{Latitude: ptrF(10.7725), Longitude: ptrF(106.6980), Accuracy: ptrF(50)}.Call(page)
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	if txt := page.MustElement(".card .card-meta").MustText(); !strings.Contains(txt, "? km") {
-		t.Fatalf("before a location is set, card shows %q", txt)
+	if txt := page.MustElement(".card .card-meta").MustText(); strings.Contains(txt, "km") {
+		t.Fatalf("before a location is set, card shows a distance badge: %q", txt)
 	}
 
 	openModal(t, page, "locationBtn", "locationModalOverlay")
@@ -587,5 +588,58 @@ func TestBoardGetStarted(t *testing.T) {
 			t.Fatal("Get started still shown once About me, what they want and search terms are all set")
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// Search narrows the board as you type (accents optional), "/" jumps to it;
+// cards show đồng salaries in triệu and no distance badge before a location
+// is set.
+func TestBoardSearchAndCards(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	ctx := context.Background()
+	svc.AddJob(ctx, service.NewJob{Title: "Kỹ Sư AI", Company: "Sao Mai", Salary: "16000000 - 22000000 VND/month"})
+	svc.AddJob(ctx, service.NewJob{Title: "Data Analyst", Company: "Đà Nẵng Duck Co"})
+	svc.AddJob(ctx, service.NewJob{Title: "Marketing Executive", Company: "Awing"})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElement(".card")
+	cards := func() string {
+		return page.MustEval(`() => [...document.querySelectorAll(".card .card-title")].map(e => e.textContent.trim()).sort().join("|")`).Str()
+	}
+	if got := cards(); got != "Data Analyst|Kỹ Sư AI|Marketing Executive" {
+		t.Fatalf("cards = %q", got)
+	}
+	if chip := page.MustElement(".salary-chip").MustText(); !strings.Contains(chip, "16–22 triệu/tháng") {
+		t.Fatalf("salary chip = %q", chip)
+	}
+	if page.MustEval(`() => document.body.innerText.includes("? km")`).Bool() {
+		t.Fatal("a distance badge is shown with no location set")
+	}
+
+	page.Keyboard.MustType('/')
+	if !page.MustEval(`() => document.activeElement.id === "jobSearch"`).Bool() {
+		t.Fatal(`"/" didn't focus the search box`)
+	}
+	page.MustElement("#jobSearch").MustInput("ky su")
+	if got := cards(); got != "Kỹ Sư AI" {
+		t.Fatalf(`"ky su" shows %q, want only the accented match`, got)
+	}
+	page.MustElement("#jobSearch").MustSelectAllText().MustInput("da nang duck")
+	if got := cards(); got != "Data Analyst" {
+		t.Fatalf(`"da nang duck" shows %q, want the company match`, got)
+	}
+	page.Keyboard.MustType(input.Escape)
+	if got := cards(); got != "Data Analyst|Kỹ Sư AI|Marketing Executive" {
+		t.Fatalf("after Esc = %q, want every card back", got)
 	}
 }
