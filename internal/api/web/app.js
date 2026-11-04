@@ -222,6 +222,13 @@ const APIClient = {
     return body;
   },
 
+  async syncPlatform(id) {
+    const res = await apiFetch(`${API_BASE}/platforms/${encodeURIComponent(id)}/sync`, { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
   async disconnectPlatform(id) {
     const res = await apiFetch(`${API_BASE}/platforms/${encodeURIComponent(id)}/login`, { method: "DELETE" });
     const body = await res.json();
@@ -315,9 +322,11 @@ async function renderPlatforms() {
   list.innerHTML = platforms.map(p => {
     const [label, color] = PLATFORM_STATUS[p.status] || [p.status, "var(--muted)"];
     const saved = p.status !== "not_connected" && p.status !== "connecting";
+    const sync = p.id === "topcv" && p.status === "connected"
+      ? `<button class="btn-secondary btn-sm" onclick="syncPlatform(${jsArg(p.id)}, this)">Sync applications</button>` : "";
     const action = p.status === "connecting" ? ""
       : saved
-        ? `<button class="btn-secondary btn-sm" onclick="disconnectPlatform(${jsArg(p.id)})">Disconnect</button>
+        ? `${sync}<button class="btn-secondary btn-sm" onclick="disconnectPlatform(${jsArg(p.id)})">Disconnect</button>
            <button class="btn-secondary btn-sm" onclick="connectPlatform(${jsArg(p.id)})">Log in again</button>`
         : `<button class="btn-primary btn-sm" onclick="connectPlatform(${jsArg(p.id)})">Connect</button>`;
     return `
@@ -404,6 +413,19 @@ async function connectPlatform(id) {
     showToast(`Couldn't start login: ${e.message}`, "error");
   }
   renderPlatforms();
+}
+
+async function syncPlatform(id, btn) {
+  btn.disabled = true;
+  btn.textContent = "Syncing…";
+  try {
+    const r = await APIClient.syncPlatform(id);
+    showToast(`TopCV: ${r.found} applications — ${r.updated} updated, ${r.moved} moved to Applied, ${r.added} added`, "success");
+  } catch (e) {
+    showToast(`Sync failed: ${e.message}`, "error");
+  }
+  renderPlatforms();
+  refreshAppState();
 }
 
 async function disconnectPlatform(id) {
@@ -840,15 +862,15 @@ function renderJobCard(job, container) {
 
   // Platform badges
   let platformStatusHtml = "";
-  if (job.discovery_source === "TopCV" && job.topcv_status) {
+  if (job.topcv_status) {
+    // Codes written by the TopCV status sync (internal/core/topcv).
     const labels = {
-      seen: "👁 seen",
-      reviewing: "📋 reviewing",
-      considering: "🤔 considering",
-      suitable: "✅ suitable",
-      rejected: "❌ rejected"
+      sent: "📨 TopCV: sent",
+      seen: "👁 TopCV: CV viewed",
+      suitable: "✅ TopCV: suitable",
+      rejected: "❌ TopCV: not suitable"
     };
-    platformStatusHtml = `<span class="apply-badge">${esc(labels[job.topcv_status] || job.topcv_status)}</span>`;
+    platformStatusHtml = `<span class="apply-badge" title="${esc(job.apply_detail)}">${esc(labels[job.topcv_status] || job.topcv_status)}</span>`;
   } else if (job.discovery_source === "VietnamWorks" && job.vnw_status) {
     platformStatusHtml = `<span class="apply-badge">${job.vnw_status === "seen" ? "👁 seen" : esc(job.vnw_status)}</span>`;
   }

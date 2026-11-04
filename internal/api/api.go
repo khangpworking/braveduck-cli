@@ -61,6 +61,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("GET /api/platforms", s.listPlatforms)
 	mux.HandleFunc("POST /api/platforms/{name}/login", s.connectPlatform)
 	mux.HandleFunc("DELETE /api/platforms/{name}/login", s.disconnectPlatform)
+	mux.HandleFunc("POST /api/platforms/{name}/sync", s.syncPlatform)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
 	mux.HandleFunc("PUT /api/keywords", s.putKeywords)
 	mux.HandleFunc("GET /api/crawl-schedule", s.getCrawlSchedule)
@@ -276,11 +277,7 @@ func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
 // that's a 501 with a clear message rather than a faked success.
 func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 	source := r.PathValue("source")
-	builtin := false
-	for _, id := range s.svc.BuiltinCrawlers() {
-		builtin = builtin || id == source
-	}
-	if !builtin {
+	if !s.svc.IsBuiltinSource(source) {
 		writeJSON(w, http.StatusNotImplemented, map[string]any{
 			"ok":      false,
 			"source":  source,
@@ -344,6 +341,17 @@ func (s *server) connectPlatform(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusAccepted, st, err)
+}
+
+// syncPlatform reads the user's application history on the site (TopCV only
+// for now) and updates the board.
+func (s *server) syncPlatform(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("name") != "topcv" {
+		writeErr(w, http.StatusBadRequest, errors.New("status sync is available for TopCV only"))
+		return
+	}
+	res, err := s.svc.SyncTopCV(context.WithoutCancel(r.Context()))
+	reply(w, http.StatusOK, res, err)
 }
 
 func (s *server) disconnectPlatform(w http.ResponseWriter, r *http.Request) {

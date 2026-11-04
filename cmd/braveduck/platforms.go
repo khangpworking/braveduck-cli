@@ -115,3 +115,16 @@ func cmdLogout(ctx context.Context, svc *service.Service, args []string) error {
 	}
 	return nil
 }
+
+func cmdSync(ctx context.Context, svc *service.Service, args []string) error {
+	if len(args) != 1 || strings.ToLower(args[0]) != "topcv" {
+		return errors.New("usage: braveduck sync topcv")
+	}
+	res, err := svc.SyncTopCV(ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("TopCV: %d application(s) — %d status update(s), %d moved to Applied, %d added to the board\n",
+		res.Found, res.Updated, res.Moved, res.Added)
+	return nil
+}

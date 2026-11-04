@@ -434,3 +434,15 @@ func affectedOne(res sql.Result) error {
 	}
 	return nil
 }
+
+// SetTopcvStatus records a job's TopCV application status (a short code) and
+// the site's own status line, stamping updated_at.
+func (s *Store) SetTopcvStatus(ctx context.Context, id int64, status, detail string, now time.Time) error {
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE jobs SET topcv_status = ?, apply_detail = ?, updated_at = ? WHERE id = ?",
+		status, detail, now.UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return err
+	}
+	return affectedOne(res)
+}

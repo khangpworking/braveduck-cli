@@ -67,8 +67,12 @@ AI agents
   mcp        MCP server on stdio, for Claude Code / Codex / agy
              (claude mcp add braveduck -- braveduck mcp)
 
+Job-site status
+  sync topcv           read your TopCV application history; update the board
+                       (also runs as the "topcv-sync" source in crawl-schedule)
+
 Not in this build (need a live browser/LLM)
-  cv, draft, apply, sync
+  cv, draft, apply
 
 Other
   doctor     environment + database health check
@@ -153,7 +157,9 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return mcpserver.Serve(ctx, svc)
-	case "cv", "draft", "apply", "sync":
+	case "sync":
+		return cmdSync(ctx, svc, rest)
+	case "cv", "draft", "apply":
 		return fmt.Errorf("%q needs a live browser/LLM and isn't wired in this build yet", cmd)
 	default:
 		return fmt.Errorf("unknown command %q (try `braveduck help`)", cmd)

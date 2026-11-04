@@ -78,6 +78,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "get_crawl_schedule", "How often each job source fetches new jobs (every_minutes; 0 = off).", readOnly, t.getCrawlSchedule)
 	add(srv, "set_crawl_schedule", "Set how often a source fetches new jobs: every_minutes 0 (off) or 15-1440 for built-in crawlers (5-1440 for external tools).", idempotentWrite, t.setCrawlSchedule)
 	add(srv, "set_keywords", "Replace one or more keyword lists. search_queries are what crawlers search for; positive_title / negative_title / negative_content / negative_company filter results. Lists you don't pass are left alone.", idempotentWrite, t.setKeywords)
+	add(srv, "sync_platform", "Read the user's application history on a job site (platform: topcv) with their saved login, read-only, and update the board: TopCV status per job, Saved/Waiting jobs moved to Applied, missing applications added.", write, t.syncPlatform)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
@@ -391,4 +392,11 @@ func (t tools) setCrawlSchedule(ctx context.Context, in scheduleIn) (service.Sou
 
 func (t tools) setKeywords(ctx context.Context, in keywordsIn) (keyword.Sets, error) {
 	return t.svc.SetKeywords(ctx, keyword.Sets(in.Lists))
+}
+
+func (t tools) syncPlatform(ctx context.Context, in platformIn) (service.SyncResult, error) {
+	if in.Platform != "topcv" {
+		return service.SyncResult{}, fmt.Errorf("%w: status sync is available for topcv only", service.ErrInvalid)
+	}
+	return t.svc.SyncTopCV(ctx)
 }
