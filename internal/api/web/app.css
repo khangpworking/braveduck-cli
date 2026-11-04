@@ -1003,6 +1003,9 @@ a:hover {
 
 /* Responsive Styles */
 @media (max-width: 768px) {
+  .setup-card {
+    margin: var(--spacing-md) var(--spacing-md) 0;
+  }
   .widgets-row {
     grid-template-columns: 1fr;
     padding: var(--spacing-md) var(--spacing-md) 0;
@@ -1075,4 +1078,61 @@ a:hover {
   .column.expanded .column-header::after {
     transform: rotate(180deg);
   }
+}
+
+/* Get started checklist */
+.setup-card {
+  margin: var(--spacing-lg) var(--spacing-xxl) 0;
+}
+.setup-card[hidden] {
+  display: none;
+}
+.setup-intro {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 4px 0 12px;
+}
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.setup-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 13px;
+}
+.setup-step.done {
+  opacity: 0.7;
+}
+.setup-step .setup-step-title {
+  font-weight: 600;
+}
+.setup-step .setup-step-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.setup-step button {
+  align-self: flex-start;
+}
+
+/* Profile editor */
+.modal.modal-wide {
+  width: 94vw;
+  max-width: 880px;
+}
+.profile-editor {
+  width: 100%;
+  height: min(60vh, 560px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
 }

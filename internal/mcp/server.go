@@ -69,6 +69,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "keep_job", "Toggle a job's keep flag (kept jobs are exempt from auto-clear).", write, t.keepJob)
 	add(srv, "delete_job", "Permanently delete a job and its ratings.", destructive, t.deleteJob)
 	add(srv, "get_profile", "The user's profile (CV + what they want) that jobs are rated against, its file path, and whether it has been filled in.", readOnly, t.getProfile)
+	add(srv, "update_profile", "Replace the user's profile (Markdown: \"# About me\", \"# What I'm looking for\", compensation, location, deal-breakers…) that jobs are rated against. Read it with get_profile first and keep the user's own words; only write what the user told you.", idempotentWrite, t.updateProfile)
 	add(srv, "get_rating_queue", "Jobs waiting for a score (oldest first), plus the user's profile, the scoring rubric and the default rater id. Judge each job, then call submit_rating for it. Fails if the profile is still empty.", readOnly, t.ratingQueue)
 	add(srv, "rate_job", "Everything needed to rate (or re-rate) one job: the user's profile, the rubric and the job. Then call submit_rating.", readOnly, t.rateJob)
 	add(srv, "submit_rating", "Save your verdict for one job: score 1.0-5.0 (letter is derived if omitted: A>=4.5, B>=4.0, C>=3.5, D>=3.0, else F) and 3-4 short reasons separated by ' • '. "+
@@ -364,6 +365,14 @@ func (t tools) setRatingConfig(ctx context.Context, in ratingIO) (ratingIO, erro
 
 func (t tools) getProfile(ctx context.Context, _ struct{}) (service.Profile, error) {
 	return t.svc.Profile(ctx)
+}
+
+type profileIn struct {
+	Text string `json:"text" jsonschema:"the whole new profile, in Markdown"`
+}
+
+func (t tools) updateProfile(ctx context.Context, in profileIn) (service.Profile, error) {
+	return t.svc.SaveProfile(ctx, in.Text)
 }
 
 func (t tools) ratingQueue(ctx context.Context, in queueIn) (service.RatingBrief, error) {

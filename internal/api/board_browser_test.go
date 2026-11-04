@@ -577,3 +577,56 @@ func TestBoardUploadsCV(t *testing.T) {
 		t.Fatalf("profile after replace (%v):\n%s", err, b)
 	}
 }
+
+// Get started: a fresh board lists the steps; the profile editor saves to the
+// profile file, and the card goes away once the needed steps are done.
+func TestBoardGetStarted(t *testing.T) {
+	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	dir := t.TempDir()
+	svc := service.New(st)
+	svc.SetDataDir(dir)
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+	ctx := context.Background()
+
+	page := launchBrowser(t).MustPage("")
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	page.MustElementR("#setupSteps", "Say what you're looking for")
+	if n := page.MustEval(`() => document.querySelectorAll("#setupSteps button").length`).Int(); n != 3 {
+		t.Fatalf("%d open steps on a fresh board, want 3", n)
+	}
+
+	// Step 2 opens the editor on the real profile template.
+	page.MustElement(`#setupSteps button[data-setup="wants"]`).MustClick()
+	page.MustElementR("#profileStatus", "Still empty")
+	text := page.MustElement("#profileText")
+	if v := text.MustProperty("value").Str(); !strings.Contains(v, "# What I'm looking for") {
+		t.Fatalf("editor = %.80q, want the profile template", v)
+	}
+	page.MustEval(`() => { const t = document.getElementById("profileText");
+		t.value = t.value.replace("- Target roles / job titles:", "- Target roles / job titles: Marketing AI, AI automation")
+			.replace("# What I'm looking for", "Marketing executive, 3 years of AI automation with n8n.\n\n# What I'm looking for"); }`)
+	clickID(page, "saveProfileBtn")
+	page.MustElementR("#profileStatus", "Filled in")
+	b, _ := os.ReadFile(filepath.Join(dir, "profile.md"))
+	if !strings.Contains(string(b), "Target roles / job titles: Marketing AI, AI automation") {
+		t.Fatalf("profile file not saved:\n%s", b)
+	}
+	page.MustElement(`#setupSteps li.done`)
+
+	// The last needed step (search terms, here added over the API) hides the card.
+	svc.SetKeywords(ctx, map[string][]string{"search_queries": {"n8n"}})
+	page.MustEval(`() => refreshAppState()`)
+	deadline := time.Now().Add(5 * time.Second)
+	for !page.MustEval(`() => document.getElementById("setupCard").hidden`).Bool() {
+		if time.Now().After(deadline) {
+			t.Fatal("Get started still shown once About me, what they want and search terms are all set")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
