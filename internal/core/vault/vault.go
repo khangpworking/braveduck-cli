@@ -133,8 +133,12 @@ func keychainKey() ([]byte, bool) {
 		ok  bool
 	}
 	ch := make(chan result, 1)
+	// Read keyringAPI once, here: the goroutine may outlive this call (a hung
+	// keychain is abandoned after the timeout) and must not race with whoever
+	// sets keyringAPI next.
+	kr := keyringAPI
 	go func() {
-		if s, err := keyringAPI.Get(keyringService, keyringUser); err == nil {
+		if s, err := kr.Get(keyringService, keyringUser); err == nil {
 			if dec, err := hex.DecodeString(s); err == nil && len(dec) == keyLen {
 				ch <- result{dec, true}
 				return
@@ -150,7 +154,7 @@ func keychainKey() ([]byte, bool) {
 			ch <- result{nil, false}
 			return
 		}
-		if err := keyringAPI.Set(keyringService, keyringUser, hex.EncodeToString(key)); err != nil {
+		if err := kr.Set(keyringService, keyringUser, hex.EncodeToString(key)); err != nil {
 			ch <- result{nil, false}
 			return
 		}
