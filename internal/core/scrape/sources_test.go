@@ -16,6 +16,10 @@ func TestSupportedLink(t *testing.T) {
 		{"https://m.facebook.com/groups/1329241984892387/posts/1828228748327039?__cft__[0]=AZ&__tn__=R", "facebook", "https://www.facebook.com/groups/1329241984892387/posts/1828228748327039/"},
 		{"https://web.facebook.com/groups/1329241984892387/permalink/1828228748327039/", "facebook", "https://www.facebook.com/groups/1329241984892387/posts/1828228748327039/"},
 		{"https://www.facebook.com/permalink.php?story_fbid=123&id=456&mibextid=x", "facebook", "https://www.facebook.com/permalink.php?id=456&story_fbid=123"},
+		// Distinct posts keep distinct links: the post id survives, tracking goes.
+		{"https://www.facebook.com/groups/1329/?multi_permalinks=456&ref=share", "facebook", "https://www.facebook.com/groups/1329/posts/456/"},
+		{"https://m.facebook.com/photo.php?fbid=777&set=a.1&__cft__=x", "facebook", "https://www.facebook.com/photo.php?fbid=777"},
+		{"https://www.facebook.com/watch/?v=888&ref=sharing", "facebook", "https://www.facebook.com/watch/?v=888"},
 	} {
 		src, got, ok := SupportedLink(tc.in)
 		if !ok || src.ID != tc.source || got != tc.canonical {

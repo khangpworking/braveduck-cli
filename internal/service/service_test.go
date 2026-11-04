@@ -325,3 +325,34 @@ func TestAddFromContentRejectsDuplicates(t *testing.T) {
 		t.Fatalf("board has %d jobs, want the 4 originals + 2 new", len(list))
 	}
 }
+
+// The title rule only stands in for a missing link: two links are two
+// listings, and a Closed job doesn't block a new posting of the same role.
+func TestDuplicateTitleRuleNeedsAMissingLink(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	old, _ := s.AddJob(ctx, NewJob{Title: "Backend Developer", Company: "Duck Co", URL: "https://www.topcv.vn/viec-lam/backend/1.html"})
+	if _, err := s.AddJob(ctx, NewJob{Title: "Backend Developer", Company: "Duck Co", URL: "https://www.topcv.vn/viec-lam/backend/2.html"}); err != nil {
+		t.Fatalf("a second listing with its own link: %v, want added", err)
+	}
+	if _, err := s.AddJob(ctx, NewJob{Title: "backend developer", Company: "duck co"}); !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("the same role pasted without a link = %v, want ErrDuplicate", err)
+	}
+	s.SetStatus(ctx, old.ID, "closed")
+	c, _ := s.AddJob(ctx, NewJob{Title: "Data Analyst", Company: "MoMo"})
+	s.SetStatus(ctx, c.ID, "closed")
+	if _, err := s.AddJob(ctx, NewJob{Title: "Data Analyst", Company: "MoMo"}); err != nil {
+		t.Fatalf("re-adding a role whose old card is Closed: %v, want added", err)
+	}
+}
+
+func TestPostTextStripsOnlyAMetadataFooter(t *testing.T) {
+	intro := strings.Repeat("Duck Co builds payments for Vietnam. ", 3)
+	if got := postText(intro + "\n---\nAuthor: Vy\nGroup: AI Jobs VN (https://fb.com/groups/1/)\nMatched keywords: ai"); got != intro {
+		t.Fatalf("fb-watcher footer kept: %q", got)
+	}
+	jd := intro + "\n---\nResponsibilities\n- build the ledger\n- review PRs"
+	if got := postText(jd); got != jd {
+		t.Fatalf("a description's --- divider was cut: %q", got)
+	}
+}
