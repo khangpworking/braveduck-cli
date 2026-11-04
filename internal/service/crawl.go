@@ -269,8 +269,9 @@ func (s *Service) SetCrawlSchedule(ctx context.Context, source string, everyMinu
 }
 
 // RunScheduler crawls each built-in source when its interval has passed,
-// checking once a minute, and moves expired jobs to Closed once an hour
-// (SweepExpired), until ctx ends. `braveduck serve` runs it. Failures are
+// checking once a minute, moves expired jobs to Closed once an hour
+// (SweepExpired) and backs the database up once a day (Backup), until ctx
+// ends. `braveduck serve` runs it. Failures are
 // reported to the crawl panel; they never stop the loop.
 func (s *Service) RunScheduler(ctx context.Context, tick time.Duration) {
 	t := time.NewTicker(tick)
@@ -279,6 +280,7 @@ func (s *Service) RunScheduler(ctx context.Context, tick time.Duration) {
 	for {
 		s.runDue(ctx)
 		s.sweepIfDue(ctx, &lastSweep)
+		s.backupIfDue(ctx)
 		select {
 		case <-ctx.Done():
 			return

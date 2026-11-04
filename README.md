@@ -56,7 +56,10 @@ A new board walks you through the same steps (**Get started**: CV → what
 you're looking for → search terms). Everything else is under **⚙ Settings**.
 
 Data lives in `~/.braveduck/braveduck.db` (override with `--db` or `BRAVEDUCK_DB`).
-`braveduck doctor` checks your setup.
+`braveduck doctor` checks your setup. While the board runs it keeps a daily
+copy of the database for a week in `~/.braveduck/backups/`; `braveduck backup`
+makes one now. To restore, stop the board and copy a backup over
+`braveduck.db`.
 
 ### Use it from Claude Code (MCP)
 

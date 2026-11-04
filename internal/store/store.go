@@ -14,6 +14,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -543,4 +544,17 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx,
 		"INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
 	return err
+}
+
+// Backup writes a consistent copy of the database to dest (which must not
+// exist yet) with VACUUM INTO, safe while the board is running, and makes
+// it readable by the user only.
+func (s *Store) Backup(ctx context.Context, dest string) error {
+	if _, err := os.Stat(dest); err == nil {
+		return fmt.Errorf("backup: %s already exists", dest)
+	}
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
+		return fmt.Errorf("backup: %w", err)
+	}
+	return os.Chmod(dest, 0o600)
 }

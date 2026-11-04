@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -161,5 +163,35 @@ func TestDeleteAndMissing(t *testing.T) {
 	}
 	if err := s.SetStatus(ctx, 999, "applied", now); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("SetStatus missing = %v, want ErrNoRows", err)
+	}
+}
+
+func TestBackup(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "bd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	s.Add(ctx, jobs.Job{Title: "kept"}, time.Now())
+
+	dest := filepath.Join(dir, "copy.db")
+	if err := s.Backup(ctx, dest); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(dest); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("backup file: %v %v, want private", fi, err)
+	}
+	c, err := Open(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if list, _ := c.List(ctx, ListFilter{}); len(list) != 1 || list[0].Title != "kept" {
+		t.Fatalf("backup holds %+v", list)
+	}
+	if err := s.Backup(ctx, dest); err == nil {
+		t.Fatal("overwrote an existing file")
 	}
 }
