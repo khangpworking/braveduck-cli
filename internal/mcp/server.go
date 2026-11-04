@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/geo"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
@@ -85,6 +86,8 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "submit_draft", "Save an application email draft (to, subject, body) for the user to review. braveduck never sends it; the user sends it from their own mail app.", write, t.submitDraft)
 	add(srv, "reject_draft", "Discard a job's email draft.", destructive, t.rejectDraft)
 	add(srv, "apply_job", "Assisted apply to a TopCV job: opens a visible window on the user's screen with their login; THEY submit it (braveduck never clicks submit). Needs a tailored CV. Returns at once with the CV file to upload and the cover letter; the outcome appears in get_activity. Only call this when the user asks to apply to that job. Limits: 10 per day, 5 minutes apart.", write, t.applyJob)
+	add(srv, "get_location", "The user's location and maximum commute (jobs farther than max_km are flagged on the board).", readOnly, t.getLocation)
+	add(srv, "set_location", "Set the user's location: either `address` (looked up with OpenStreetMap; the first match is used — confirm it with the user) or lat/lng, plus optional max_km. Only do this when the user asks.", idempotentWrite, t.setLocation)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly
@@ -255,6 +258,13 @@ type draftIn struct {
 	To      string `json:"to,omitempty" jsonschema:"recipient; defaults to the job's contact email"`
 	Subject string `json:"subject"`
 	Body    string `json:"body" jsonschema:"plain text"`
+}
+
+type locationIn struct {
+	Address string  `json:"address,omitempty" jsonschema:"a street address, district or city"`
+	Lat     float64 `json:"lat,omitempty"`
+	Lng     float64 `json:"lng,omitempty"`
+	MaxKM   float64 `json:"max_km,omitempty" jsonschema:"maximum commute in km (1-500); omit to keep the current one"`
 }
 
 type queueIn struct {
@@ -450,4 +460,27 @@ func (t tools) rejectDraft(ctx context.Context, in idIn) (jobs.Job, error) {
 
 func (t tools) applyJob(_ context.Context, in idIn) (service.ApplyPrep, error) {
 	return t.svc.StartAssistApply(in.ID)
+}
+
+func (t tools) getLocation(ctx context.Context, _ struct{}) (service.Location, error) {
+	return t.svc.GetLocation(ctx)
+}
+
+func (t tools) setLocation(ctx context.Context, in locationIn) (service.Location, error) {
+	p, label := geo.Point{Lat: in.Lat, Lng: in.Lng}, ""
+	if in.Address != "" {
+		places, err := t.svc.SearchPlaces(ctx, in.Address)
+		if err != nil {
+			return service.Location{}, err
+		}
+		if len(places) == 0 {
+			return service.Location{}, fmt.Errorf("%w: no place matches %q", service.ErrInvalid, in.Address)
+		}
+		p, label = places[0].Point, places[0].Label
+	}
+	l, err := t.svc.SetLocation(ctx, p, label, in.MaxKM)
+	if err == nil {
+		go t.svc.UpdateDistances(context.Background(), service.MaxLookupsPerPass)
+	}
+	return l, err
 }

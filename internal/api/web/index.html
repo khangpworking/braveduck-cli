@@ -57,6 +57,7 @@
         <button class="btn-secondary btn-sm" id="ratingBtn">⚙ Rating</button>
         <button class="btn-secondary btn-sm" id="platformsBtn">🔑 Logins</button>
         <button class="btn-secondary btn-sm" id="sourcesBtn">⏱ Sources</button>
+        <button class="btn-secondary btn-sm" id="locationBtn">📍 Location</button>
       </div>
     </section>
 
@@ -126,6 +127,35 @@
   </div>
 
   <!-- Rating Config Modal -->
+  <div class="modal-overlay" id="locationModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Your location</h3>
+        <button class="btn-close modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px 0;">
+          Used to show how far each job is. It stays on this computer; typed addresses are looked up with
+          OpenStreetMap, and the map loads OpenStreetMap tiles.
+        </p>
+        <button class="btn-primary btn-sm" id="useMyLocationBtn">Use my current location</button>
+        <div style="display:flex; gap:6px; margin: 10px 0 6px;">
+          <input type="text" id="placeSearch" class="text-input" placeholder="…or search an address, district or city" style="flex:1;">
+          <button class="btn-secondary btn-sm" id="placeSearchBtn">Search</button>
+        </div>
+        <div id="placeResults" style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px;"></div>
+        <div id="locationMap" style="height: 260px; border-radius: 8px; border: 1px solid var(--hairline);"></div>
+        <p id="locationPicked" style="font-size: 12px; color: var(--muted); margin: 6px 0;">Click the map to place your pin.</p>
+        <label for="maxKmInput" style="font-size:12px; font-weight:600;">Maximum commute (km)</label>
+        <input type="number" id="maxKmInput" class="text-input" min="1" max="500" step="1" style="width: 100px;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-sm" id="clearLocationBtn">Forget my location</button>
+        <button class="btn-primary btn-sm" id="saveLocationBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="askModalOverlay">
     <div class="modal">
       <div class="modal-header">

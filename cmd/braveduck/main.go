@@ -48,6 +48,11 @@ Keywords (crawler filter lists — start empty)
   keywords rm  <list> <term>...  remove terms from a list
   keywords check <id>            test a stored job against the filter
 
+Your location (for job distances; addresses looked up with OpenStreetMap)
+  location                          show it
+  location set "<address>" [--max-km 10]   or: location set --lat 10.77 --lng 106.70
+  location clear                    forget it and all job distances
+
 Job-site logins (you log in yourself; braveduck keeps the session, encrypted)
   platforms            list sites and whether you're logged in
   login <site>         open a browser window to log in to a site
@@ -142,6 +147,8 @@ func run(args []string) error {
 		return cmdToggle(ctx, svc, rest, "keep")
 	case "rm", "delete":
 		return cmdDelete(ctx, svc, rest)
+	case "location":
+		return cmdLocation(ctx, svc, rest)
 	case "platforms":
 		return cmdPlatforms(ctx, svc, rest)
 	case "login":

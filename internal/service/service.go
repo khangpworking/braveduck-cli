@@ -40,6 +40,7 @@ type Service struct {
 	profilePath string         // see SetProfilePath / SetDataDir
 	plat        *platformState // see SetDataDir
 	crawl       *crawlState    // see SetCrawlers
+	geo         geocoder       // see SetGeocoder
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.

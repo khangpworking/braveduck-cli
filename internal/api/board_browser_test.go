@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/khangpworking/braveduck-cli/internal/core/geo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,7 +34,18 @@ func launchBrowser(t *testing.T) *rod.Browser {
 	// Every page op gets a deadline, so a stuck step fails this test with a
 	// timeout error instead of hanging the whole suite.
 	b := rod.New().ControlURL(l.MustLaunch()).MustConnect().Timeout(60 * time.Second)
-	t.Cleanup(func() { b.CancelTimeout().MustClose() })
+	// Close, then kill the process and remove its profile: otherwise every
+	// test's Chromium keeps running underneath the next test.
+	t.Cleanup(func() { _ = b.CancelTimeout().Close(); l.Kill(); l.Cleanup() })
+	go b.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
+		t.Logf("DIALOG %s: %q", e.Type, e.Message)
+	}, func(e *proto.RuntimeExceptionThrown) {
+		t.Logf("JS EXCEPTION: %s", e.ExceptionDetails.Exception.Description)
+	}, func(e *proto.PageFrameNavigated) {
+		t.Logf("NAVIGATED %s", e.Frame.URL)
+	}, func(e *proto.TargetTargetCrashed) {
+		t.Logf("RENDERER CRASHED")
+	})()
 	return b
 }
 
@@ -114,7 +126,7 @@ func TestLoginsPanel(t *testing.T) {
 	defer ts.Close()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	clickID(page, "platformsBtn")
+	openModal(t, page, "platformsBtn", "platformsModalOverlay")
 	page.MustElement("#platformsList strong")
 
 	text := page.MustElement("#platformsList").MustText()
@@ -155,7 +167,7 @@ func TestRatingSettings(t *testing.T) {
 	ctx := context.Background()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	clickID(page, "ratingBtn")
+	openModal(t, page, "ratingBtn", "ratingModalOverlay")
 	page.MustElement("#ratingModalOverlay.open") // opens once the stored config has loaded
 	if v := page.MustElement("#defaultModelInput").MustProperty("value").Str(); v == "" {
 		t.Fatal("default rater not pre-filled from the stored config")
@@ -181,7 +193,7 @@ func TestRatingSettings(t *testing.T) {
 	}
 
 	// Too many raters: the server refuses and the window says why.
-	clickID(page, "ratingBtn")
+	openModal(t, page, "ratingBtn", "ratingModalOverlay")
 	page.MustElement("#ratingModalOverlay.open")
 	page.MustElement("#challengerModelsInput").MustSelectAllText().MustInput("a, b, c")
 	clickID(page, "saveRatingConfigBtn")
@@ -208,7 +220,7 @@ func TestKeywordsAndSources(t *testing.T) {
 	ctx := context.Background()
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
-	clickID(page, "keywordsBtn")
+	openModal(t, page, "keywordsBtn", "keywordsModalOverlay")
 	page.MustElement("#kw-search_queries").MustInput("n8n, ai automation")
 	clickID(page, "saveKeywordsBtn")
 	waitUntil(t, func() bool {
@@ -216,7 +228,7 @@ func TestKeywordsAndSources(t *testing.T) {
 		return len(k["search_queries"]) == 2
 	}, "search queries not saved")
 
-	clickID(page, "sourcesBtn")
+	openModal(t, page, "sourcesBtn", "sourcesModalOverlay")
 	page.MustElement("#sourcesList select")
 	page.MustEval(`() => { const s = [...document.querySelectorAll("#sourcesList select")].pop(); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
 	waitUntil(t, func() bool {
@@ -345,6 +357,91 @@ func TestAskAICVAndDraft(t *testing.T) {
 // board re-renders right after load; a DOM click is what a user's click
 // delivers anyway.
 func clickID(page *rod.Page, id string) {
-	page.MustElement("#" + id)
+	if _, err := page.Timeout(10 * time.Second).Element("#" + id); err != nil {
+		info, ierr := page.Timeout(5 * time.Second).Info()
+		html, herr := page.Timeout(5 * time.Second).HTML()
+		panic(fmt.Sprintf("#%s not found: %v | url=%v (%v) | html=%.300q (%v)", id, err, info, ierr, html, herr))
+	}
 	page.MustEval(`id => document.getElementById(id).click()`, id)
+}
+
+type boardFakeGeo struct{}
+
+func (boardFakeGeo) Search(_ context.Context, q string, _ int, _ geo.Point) ([]geo.Place, error) {
+	if strings.Contains(q, "Landmark") {
+		return []geo.Place{{Point: geo.Point{Lat: 10.7949, Lng: 106.7219}, Label: "Landmark 81, Bình Thạnh"}}, nil
+	}
+	return nil, geo.ErrNotFound
+}
+
+// The Location window: "use my current location" (permission granted,
+// position faked through the browser), save, and the card shows a distance.
+func TestLocationWindow(t *testing.T) {
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	svc.SetGeocoder(boardFakeGeo{})
+	ctx := context.Background()
+	j, _ := svc.AddJob(ctx, service.NewJob{Title: "Near job"})
+	svc.UpdateJob(ctx, j.ID, service.Patch{Location: strPtr("Landmark 81")})
+	ts := httptest.NewServer(Handler(st, svc, testToken))
+	defer ts.Close()
+
+	b := launchBrowser(t)
+	proto.BrowserGrantPermissions{Permissions: []proto.BrowserPermissionType{proto.BrowserPermissionTypeGeolocation}}.Call(b)
+	page := b.MustPage("")
+	proto.EmulationSetGeolocationOverride{Latitude: ptrF(10.7725), Longitude: ptrF(106.6980), Accuracy: ptrF(50)}.Call(page)
+	page.MustNavigate(ts.URL).MustWaitLoad()
+	if txt := page.MustElement(".card .card-meta").MustText(); !strings.Contains(txt, "? km") {
+		t.Fatalf("before a location is set, card shows %q", txt)
+	}
+
+	openModal(t, page, "locationBtn", "locationModalOverlay")
+	page.MustElement("#locationModalOverlay.open")
+	clickID(page, "useMyLocationBtn")
+	waitUntil(t, func() bool {
+		return strings.Contains(page.MustElement("#locationPicked").MustText(), "10.77250")
+	}, "browser location not picked")
+	page.MustElement("#maxKmInput").MustSelectAllText().MustInput("8")
+	clickID(page, "saveLocationBtn")
+	waitUntil(t, func() bool { l, _ := svc.GetLocation(ctx); return l.Set && l.MaxKM == 8 }, "location not saved")
+
+	waitUntil(t, func() bool { jj, _ := svc.GetJob(ctx, j.ID); return jj.HasDistance }, "distance not computed")
+	page.MustEval(`() => refreshAppState()`)
+	waitUntil(t, func() bool {
+		return strings.Contains(page.MustElement(".card .card-meta").MustText(), "✅ 3.")
+	}, "card doesn't show the distance badge")
+
+	// Address search goes through braveduck's API (fake geocoder here).
+	openModal(t, page, "locationBtn", "locationModalOverlay")
+	page.MustElement("#placeSearch").MustInput("Landmark 81")
+	clickID(page, "placeSearchBtn")
+	page.MustElementR("#placeResults button", "Bình Thạnh").MustClick()
+	if txt := page.MustElement("#locationPicked").MustText(); !strings.Contains(txt, "Landmark 81") {
+		t.Fatalf("search result not picked: %q", txt)
+	}
+}
+
+func strPtr(s string) *string { return &s }
+func ptrF(f float64) *float64 { return &f }
+
+// openModal clicks a toolbar button until its window is open (up to 5 tries,
+// 1 s apart): on rare runs the first click lands while the board is still
+// rendering after load and has no visible effect.
+func openModal(t *testing.T, page *rod.Page, btnID, overlayID string) {
+	t.Helper()
+	for i := 0; i < 5; i++ {
+		clickID(page, btnID)
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			// Short, retried evals: on rare runs one CDP evaluate never
+			// returns, while the next one does.
+			if v, err := page.Timeout(2*time.Second).Eval(`id => document.getElementById(id).classList.contains("open")`, overlayID); err == nil && v.Value.Bool() {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	t.Fatalf("%s didn't open %s", btnID, overlayID)
 }

@@ -57,6 +57,23 @@ var migrations = []string{
 	// 6: assisted-apply attempts, for the daily cap and the cooldown.
 	`CREATE TABLE IF NOT EXISTS apply_attempts (at TEXT NOT NULL);
 	 CREATE INDEX IF NOT EXISTS idx_apply_attempts_at ON apply_attempts(at);`,
+	// 7: the user's location (one row) and a geocoding cache (each address
+	// is looked up once, per the OpenStreetMap usage policy).
+	`CREATE TABLE IF NOT EXISTS user_location (
+	   id     INTEGER PRIMARY KEY CHECK (id = 1),
+	   lat    REAL NOT NULL,
+	   lng    REAL NOT NULL,
+	   label  TEXT NOT NULL DEFAULT '',
+	   max_km REAL NOT NULL DEFAULT 10
+	 );
+	 CREATE TABLE IF NOT EXISTS geocode_cache (
+	   query TEXT PRIMARY KEY,
+	   found INTEGER NOT NULL,
+	   lat   REAL,
+	   lng   REAL,
+	   label TEXT,
+	   at    TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

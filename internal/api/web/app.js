@@ -333,6 +333,120 @@ async function renderPlatforms() {
   }).join("");
 }
 
+// --- Location window (browser location, address search, Leaflet map) ------------
+const LEAFLET = {
+  css: ["https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="],
+  js: ["https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="]
+};
+let leafletReady = null, locMap = null, locMarker = null, picked = null;
+
+// Leaflet loads only when the window opens (pinned version + integrity hash),
+// so the board contacts nobody unless the user wants the map.
+function loadLeaflet() {
+  if (!leafletReady) {
+    leafletReady = new Promise((resolve, reject) => {
+      const css = Object.assign(document.createElement("link"), { rel: "stylesheet", href: LEAFLET.css[0], integrity: LEAFLET.css[1], crossOrigin: "" });
+      const js = Object.assign(document.createElement("script"), { src: LEAFLET.js[0], integrity: LEAFLET.js[1], crossOrigin: "" });
+      js.onload = resolve;
+      js.onerror = () => { leafletReady = null; reject(new Error("map library didn't load (offline?)")); };
+      document.head.append(css, js);
+    });
+  }
+  return leafletReady;
+}
+
+function pickPoint(lat, lng, label) {
+  picked = { lat, lng, label: label || "" };
+  document.getElementById("locationPicked").textContent =
+    `Pin: ${label ? label + " — " : ""}${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (locMap) {
+    if (!locMarker) locMarker = L.marker([lat, lng]).addTo(locMap);
+    locMarker.setLatLng([lat, lng]);
+    locMap.setView([lat, lng], Math.max(locMap.getZoom(), 13));
+  }
+}
+
+async function openLocationWindow() {
+  document.getElementById("locationModalOverlay").classList.add("open");
+  const cur = AppState.location || {};
+  document.getElementById("maxKmInput").value = cur.max_km || 10;
+  document.getElementById("placeResults").innerHTML = "";
+  picked = cur.set ? { lat: cur.lat, lng: cur.lng, label: cur.label } : null;
+  document.getElementById("locationPicked").textContent = cur.set
+    ? `Saved: ${cur.label || ""} (${cur.lat.toFixed(5)}, ${cur.lng.toFixed(5)})` : "Click the map to place your pin.";
+  try {
+    await loadLeaflet();
+  } catch (e) {
+    document.getElementById("locationMap").textContent = `Map unavailable: ${e.message}. You can still search or use your current location.`;
+    return;
+  }
+  if (!locMap) {
+    locMap = L.map("locationMap").setView(cur.set ? [cur.lat, cur.lng] : [16, 106], cur.set ? 13 : 5);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(locMap);
+    locMap.on("click", e => pickPoint(e.latlng.lat, e.latlng.lng, ""));
+  }
+  setTimeout(() => locMap.invalidateSize(), 50);
+  if (cur.set) pickPoint(cur.lat, cur.lng, cur.label);
+}
+
+function useMyLocation() {
+  if (!navigator.geolocation) {
+    showToast("This browser can't share its location — search or click the map instead.", "error");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => pickPoint(pos.coords.latitude, pos.coords.longitude, "My current location"),
+    err => showToast(err.code === 1 ? "Location permission denied — search or click the map instead." : `Couldn't get your location: ${err.message}`, "error"),
+    { enableHighAccuracy: false, timeout: 15000 }
+  );
+}
+
+async function searchPlace() {
+  const q = document.getElementById("placeSearch").value.trim();
+  const box = document.getElementById("placeResults");
+  box.innerHTML = `<span style="font-size:12px; color:var(--muted)">Searching…</span>`;
+  try {
+    const res = await apiFetch(`${API_BASE}/places?q=${encodeURIComponent(q)}`);
+    const places = await res.json();
+    if (!res.ok) throw new Error(places.error || `HTTP ${res.status}`);
+    box.innerHTML = places.length ? places.map((p, i) =>
+      `<button class="btn-secondary btn-sm" style="text-align:left;" data-i="${i}">${esc(p.label)}</button>`).join("")
+      : `<span style="font-size:12px; color:var(--muted)">No match. Try adding the city.</span>`;
+    box.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+      const p = places[Number(b.dataset.i)];
+      pickPoint(p.lat, p.lng, p.label);
+    }));
+  } catch (e) {
+    box.innerHTML = `<span style="font-size:12px; color:var(--error)">${esc(e.message)}</span>`;
+  }
+}
+
+async function saveLocation() {
+  if (!picked) {
+    showToast("Pick a place first: your current location, a search result, or a click on the map.", "error");
+    return;
+  }
+  try {
+    await APIClient.put("location", { ...picked, max_km: Number(document.getElementById("maxKmInput").value) || 0 });
+    document.getElementById("locationModalOverlay").classList.remove("open");
+    showToast("Location saved — job distances update shortly.", "success");
+  } catch (e) {
+    showToast(`Couldn't save: ${e.message}`, "error");
+  }
+  refreshAppState();
+}
+
+async function clearLocation() {
+  if (!confirm("Forget your location and all job distances?")) return;
+  await apiFetch(`${API_BASE}/location`, { method: "DELETE" });
+  picked = null;
+  if (locMarker) { locMarker.remove(); locMarker = null; }
+  document.getElementById("locationModalOverlay").classList.remove("open");
+  refreshAppState();
+}
+
 // Readable names for keyword lists (keys mirror internal/core/keyword.Lists).
 const KEYWORD_LABELS = {
   search_queries: "Search queries — what crawlers search for (comma-separated)",
@@ -433,6 +547,10 @@ async function disconnectPlatform(id) {
 }
 
 async function refreshAppState() {
+  try {
+    const res = await apiFetch(`${API_BASE}/location`);
+    if (res.ok) AppState.location = await res.json();
+  } catch {}
   // A login finishing writes the session, which triggers a live update; keep
   // an open logins panel current too.
   if (document.getElementById("platformsModalOverlay").classList.contains("open")) {
@@ -765,8 +883,9 @@ function renderJobCard(job, container) {
   if (!job.salary || job.salary.includes("thỏa thuận") || job.salary.toLowerCase().includes("negotiable") || job.salary.toLowerCase().includes("cạnh tranh")) {
     dealbreakers.push("⛔ Lương thỏa thuận");
   }
-  if (job.company_distance_km && parseFloat(job.company_distance_km) > 10) {
-    dealbreakers.push(`⛔ Xa ${esc(job.company_distance_km)}km`);
+  const maxKm = (AppState.location && AppState.location.max_km) || 10;
+  if (job.company_geo_status === "ok" && job.company_distance_km > maxKm) {
+    dealbreakers.push(`⛔ ${Math.round(job.company_distance_km)} km away`);
   }
   if (job.company_active_date && job.company_active_date !== "🏢 …" && job.company_active_date !== "🏢 Unknown") {
     const year = new Date(job.company_active_date).getFullYear();
@@ -838,19 +957,21 @@ function renderJobCard(job, container) {
     }
   }
 
-  // Distance Intel Badge
+  // Distance badge: ✅ within your maximum commute, 🔴 beyond it.
   let distanceHtml = "";
-  if (job.company_distance_km) {
-    if (job.company_distance_km === "🚗 …") {
-      distanceHtml = `<span class="intel-badge">🚗 …</span>`;
-    } else {
-      let icon = "✅";
-      if (job.company_geo_status === "ok") icon = "🟡";
-      if (job.company_geo_status === "far") icon = "🔴";
-      distanceHtml = `<span class="intel-badge">${icon} ${esc(job.company_distance_km)}km</span>`;
-    }
+  const locSet = AppState.location && AppState.location.set;
+  if (job.company_geo_status === "ok" && typeof job.company_distance_km === "number") {
+    const km = job.company_distance_km;
+    const icon = km <= ((AppState.location && AppState.location.max_km) || 10) ? "✅" : "🔴";
+    distanceHtml = `<span class="intel-badge">${icon} ${km < 10 ? km.toFixed(1) : Math.round(km)} km</span>`;
+  } else if (!locSet) {
+    distanceHtml = `<span class="intel-badge" title="Set your location (📍 Location) to see distances.">📍 ? km</span>`;
+  } else if (job.company_geo_status === "geocode_failed") {
+    distanceHtml = `<span class="intel-badge" title="This job's address couldn't be found on the map.">📍 unknown</span>`;
+  } else if (job.company_geo_status === "no_address") {
+    distanceHtml = `<span class="intel-badge" title="This job has no address. Add one under Edit details.">📍 no address</span>`;
   } else {
-    distanceHtml = `<span class="intel-badge" title="Unknown distance. Pin card to trigger lookup.">📍 ? km</span>`;
+    distanceHtml = `<span class="intel-badge" title="Looking up this address…">📍 …</span>`;
   }
 
   // Platform badges
@@ -1808,6 +1929,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
 
+  document.getElementById("locationBtn").addEventListener("click", openLocationWindow);
+  document.getElementById("useMyLocationBtn").addEventListener("click", useMyLocation);
+  document.getElementById("placeSearchBtn").addEventListener("click", searchPlace);
+  document.getElementById("placeSearch").addEventListener("keydown", e => { if (e.key === "Enter") searchPlace(); });
+  document.getElementById("saveLocationBtn").addEventListener("click", saveLocation);
+  document.getElementById("clearLocationBtn").addEventListener("click", clearLocation);
+
   const sourcesModal = document.getElementById("sourcesModalOverlay");
   document.getElementById("sourcesBtn").addEventListener("click", async () => {
     sourcesModal.classList.add("open");
@@ -1828,6 +1956,7 @@ document.addEventListener("DOMContentLoaded", () => {
       platformsModal.classList.remove("open");
       sourcesModal.classList.remove("open");
       document.getElementById("askModalOverlay").classList.remove("open");
+      document.getElementById("locationModalOverlay").classList.remove("open");
     });
   });
 
