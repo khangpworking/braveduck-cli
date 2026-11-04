@@ -402,6 +402,7 @@ async function openLocationWindow() {
   }
   setTimeout(() => locMap.invalidateSize(), 50);
   if (cur.set) pickPoint(cur.lat, cur.lng, cur.label);
+  else if (locMarker) { locMarker.remove(); locMarker = null; }
 }
 
 function useMyLocation() {
