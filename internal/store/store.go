@@ -349,14 +349,15 @@ func (s *Store) Update(ctx context.Context, j jobs.Job, now time.Time) error {
 // Patch writes only the named columns, so two clients editing different fields
 // of the same job can't clobber each other (a full-row Update could).
 type JobPatch struct {
-	Status   *string
-	Pinned   *bool
-	Keep     *bool
-	Notes    *string
-	Title    *string
-	Company  *string
-	Salary   *string
-	Location *string
+	Status    *string
+	Pinned    *bool
+	Keep      *bool
+	Notes     *string
+	Title     *string
+	Company   *string
+	Salary    *string
+	Location  *string
+	ExpiresAt *string // the expires_at grammar (jobs.ParseExpiry); set by the service, not the board
 }
 
 // Patch applies p to job id, stamping updated_at. An empty patch still checks
@@ -375,6 +376,7 @@ func (s *Store) Patch(ctx context.Context, id int64, p JobPatch, now time.Time) 
 	}
 	for col, v := range map[string]*string{
 		"notes": p.Notes, "title": p.Title, "company": p.Company, "salary": p.Salary, "location": p.Location,
+		"expires_at": p.ExpiresAt,
 	} {
 		if v != nil {
 			set, args = append(set, col+" = ?"), append(args, *v)

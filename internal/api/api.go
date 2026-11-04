@@ -246,7 +246,10 @@ func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	j, err := s.svc.UpdateJob(r.Context(), id, service.Patch(p))
+	j, err := s.svc.UpdateJob(r.Context(), id, service.Patch{
+		Status: p.Status, Pinned: p.Pinned, Keep: p.Keep, Notes: p.Notes,
+		Title: p.Title, Company: p.Company, Salary: p.Salary, Location: p.Location,
+	})
 	reply(w, http.StatusOK, j, err)
 }
 
