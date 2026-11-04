@@ -67,7 +67,7 @@ Job-site logins (you log in yourself; braveduck keeps the session, encrypted)
   platforms check <site>   re-check whether a saved login still works
 
 Crawlers (search queries come from: braveduck keywords add search_queries ...)
-  crawl [<source>]                      fetch new jobs now (built-in: vietnamworks)
+  crawl [<source>]                      fetch new jobs now (built-in: vietnamworks, careerlink)
   crawl-schedule                        how often each source fetches new jobs
   crawl-schedule <source> <2h|30m|off>  change it (built-ins run while the board is up)
   crawl-report <source> --ok            external tools: record a successful run

@@ -88,6 +88,8 @@ function normalizeJob(j) {
           ? j.skills.split(",").map(s => s.trim()).filter(Boolean)
           : []),
     expires_at: decodeExpiresAt(j.expires_at),
+    // "applied:YYYY-MM-DD" starts the wait-for-an-answer clock (Today's follow-ups).
+    applied_on: typeof j.expires_at === "string" && j.expires_at.startsWith("applied:") ? j.expires_at.slice("applied:".length) : "",
     // The store keeps the draft as JSON {to, subject, body}; "" = none.
     draft_email: parseDraft(j.draft_email),
     ratings: j.ratings || {}
@@ -112,7 +114,8 @@ const AppState = {
   platforms: [],
   activity: [],
   filters: {
-    platform: "All"
+    platform: "All",
+    query: "" // the search box
   },
   sorting: {
     Saved: "Most recent" // or "Highest score"
@@ -569,6 +572,7 @@ async function refreshAppState() {
 
 function renderAll() {
   renderStatPills();
+  renderToday();
   renderMoraleWidget();
   renderCrawlStatus();
   renderPlatformFilters();
@@ -596,6 +600,62 @@ function renderStatPills() {
     <span class="stat-pill">Interview <strong>${counts.Interview}</strong></span>
     <span class="stat-pill">Offer <strong>${counts.Offer}</strong></span>
   `;
+}
+
+// --- Today -------------------------------------------------------------------
+// What to act on now: the best-rated jobs not applied to yet, deadlines in
+// the coming week, and applications that have waited a week for an answer.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function todayGroups(jobs, now = new Date()) {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysUntil = iso => Math.round((new Date(`${iso}T00:00:00`) - startOfToday) / DAY_MS);
+  const open = j => j.status === "Saved" || j.status === "Waiting to apply";
+
+  const top = jobs
+    .filter(j => open(j) && j.score_status === "scored" && (j.score_letter === "A" || j.score_letter === "B"))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(j => ({ job: j, why: `${j.score_letter} · ${Number(j.score).toFixed(1)}` }));
+
+  const deadlines = jobs
+    .filter(j => open(j) && /^\d{4}-\d{2}-\d{2}$/.test(j.expires_at))
+    .map(j => ({ job: j, days: daysUntil(j.expires_at) }))
+    .filter(d => d.days >= 0 && d.days <= 7)
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 3)
+    .map(d => ({ job: d.job, why: d.days === 0 ? "closes today" : d.days === 1 ? "closes tomorrow" : `closes in ${d.days} days` }));
+
+  const followUps = jobs
+    .filter(j => j.status === "Applied" && /^\d{4}-\d{2}-\d{2}$/.test(j.applied_on))
+    .map(j => ({ job: j, days: -daysUntil(j.applied_on) }))
+    .filter(d => d.days >= 7)
+    .sort((a, b) => b.days - a.days)
+    .slice(0, 3)
+    .map(d => ({ job: d.job, why: `applied ${d.days} days ago` }));
+
+  return [
+    { title: "Best matches to apply for", items: top },
+    { title: "Deadlines this week", items: deadlines },
+    { title: "Follow up", items: followUps },
+  ].filter(g => g.items.length);
+}
+
+function renderToday() {
+  const list = document.getElementById("todayList");
+  const groups = todayGroups(AppState.jobs);
+  if (!groups.length) {
+    list.innerHTML = `<div class="today-empty">Nothing needs you today. New jobs are found and rated in the background.</div>`;
+    return;
+  }
+  list.innerHTML = groups.map(g => `
+    <div class="today-group">
+      <div class="today-group-title">${esc(g.title)}</div>
+      <ul>${g.items.map(it => `
+        <li><button class="today-item" data-job="${esc(it.job.id)}">${esc(it.job.title)}<span class="today-why">${esc(it.why)}</span></button></li>`).join("")}
+      </ul>
+    </div>`).join("");
+  list.querySelectorAll("button[data-job]").forEach(btn => btn.addEventListener("click", () => showJobCard(btn.dataset.job)));
 }
 
 function renderMoraleWidget() {
@@ -629,11 +689,11 @@ function renderMoraleWidget() {
   const sublineEl = document.getElementById("moraleSubline");
   const msgEl = document.getElementById("moraleMessage");
 
-  sublineEl.innerText = `${wins} interviews / ${totalResolved} resolved answered · ${pending} pending`;
+  sublineEl.innerText = `${wins} interview${wins === 1 ? "" : "s"} from ${totalResolved} answered application${totalResolved === 1 ? "" : "s"} · ${pending} waiting`;
 
   if (totalResolved < 3) {
     rateEl.innerText = "—";
-    msgEl.innerText = "Too early to tell. Keep applying to collect traction stats. (Còn quá sớm để đánh giá. Hãy tiếp tục ứng tuyển.)";
+    msgEl.innerText = "Your interview rate shows once 3 applications have an answer.";
   } else {
     const rate = Math.round((wins / totalResolved) * 100);
     rateEl.innerText = `${rate}%`;
@@ -747,6 +807,25 @@ function updatePlatformFilter(checkbox) {
   renderBoard();
 }
 
+// foldText lowercases and drops Vietnamese accents, so "ky su" finds "Kỹ sư".
+function foldText(v) {
+  return String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase();
+}
+
+// formatSalary shortens what job sites write in đồng: "16000000 - 22000000
+// VND/month" reads "16–22 triệu/tháng". Anything else is shown as written.
+function formatSalary(s) {
+  if (!/vnd/i.test(s) || !/\d{6,}/.test(s)) return s;
+  const millions = n => {
+    const m = Number(n) / 1e6;
+    return Number.isInteger(m) ? String(m) : m.toFixed(1).replace(/\.0$/, "");
+  };
+  let out = s.replace(/(\d{6,})\s*-\s*(\d{6,})/, (_, a, b) => `${millions(a)}–${millions(b)}`)
+    .replace(/\d{6,}/g, n => millions(n));
+  out = out.replace(/\s*VND\s*\/\s*month/i, " triệu/tháng").replace(/\s*VND\s*\/\s*year/i, " triệu/năm").replace(/\s*VND\b/i, " triệu");
+  return out;
+}
+
 function renderBoard() {
   const columns = ["Saved", "Waiting to apply", "Applied", "Interview", "Offer", "Closed"];
   const container = document.getElementById("kanbanBoard");
@@ -756,6 +835,13 @@ function renderBoard() {
   let filteredJobs = AppState.jobs;
   if (AppState.filters.platform !== "All") {
     filteredJobs = filteredJobs.filter(j => j.discovery_source === AppState.filters.platform);
+  }
+  const words = foldText(AppState.filters.query).split(/\s+/).filter(Boolean);
+  if (words.length) {
+    filteredJobs = filteredJobs.filter(j => {
+      const hay = foldText([j.title, j.company, j.location, j.skills, j.salary, j.notes, j.discovery_source].join(" "));
+      return words.every(w => hay.includes(w));
+    });
   }
 
   columns.forEach(colName => {
@@ -892,7 +978,7 @@ function renderJobCard(job, container) {
   }
   if (job.company_active_date && job.company_active_date !== "🏢 …" && job.company_active_date !== "🏢 Unknown") {
     const year = new Date(job.company_active_date).getFullYear();
-    if (2026 - year < 2) {
+    if (new Date().getFullYear() - year < 2) {
       dealbreakers.push(`⛔ Cty <2 năm (${year})`);
     }
   }
@@ -945,7 +1031,7 @@ function renderJobCard(job, container) {
   }
 
   // Salary chip
-  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip">💰 ${esc(job.salary)}</span>` : "";
+  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip" title="${esc(job.salary)}">💰 ${esc(formatSalary(job.salary))}</span>` : "";
 
   // Company active date (masothue link)
   let masothueHtml = "";
@@ -968,7 +1054,7 @@ function renderJobCard(job, container) {
     const icon = km <= ((AppState.location && AppState.location.max_km) || 10) ? "✅" : "🔴";
     distanceHtml = `<span class="intel-badge">${icon} ${km < 10 ? km.toFixed(1) : Math.round(km)} km</span>`;
   } else if (!locSet) {
-    distanceHtml = `<span class="intel-badge" title="Set your location (📍 Location) to see distances.">📍 ? km</span>`;
+    // No location yet: nothing to measure from, so no badge (📍 Location sets it).
   } else if (job.company_geo_status === "geocode_failed") {
     distanceHtml = `<span class="intel-badge" title="This job's address couldn't be found on the map.">📍 unknown</span>`;
   } else if (job.company_geo_status === "no_address") {
@@ -2125,6 +2211,28 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("sourcesBtn").addEventListener("click", async () => {
     sourcesModal.classList.add("open");
     await renderSources();
+  });
+
+  // Search: filters cards as you type; "/" jumps to it, Esc clears it.
+  const search = document.getElementById("jobSearch");
+  search.addEventListener("input", () => {
+    AppState.filters.query = search.value;
+    renderBoard();
+  });
+  search.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      search.value = "";
+      AppState.filters.query = "";
+      renderBoard();
+      search.blur();
+    }
+  });
+  document.addEventListener("keydown", e => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
+    if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      search.focus();
+    }
   });
 
   const profileModal = document.getElementById("profileModalOverlay");

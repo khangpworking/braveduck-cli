@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="braveduck-token" content="">
-  <title>Career Command Center</title>
+  <title>braveduck — job board</title>
   <!-- Offline/buildless: no web fonts. app.css falls back to a system font stack. -->
   <link rel="stylesheet" href="app.css">
 </head>
@@ -13,7 +13,7 @@
   <!-- Top Nav Header -->
   <header class="top-nav">
     <div class="nav-left">
-      <h1 class="nav-title">Career</h1>
+      <h1 class="nav-title">braveduck</h1>
       <div class="stat-pills" id="statPills">
         <!-- Live count pills injected via JS -->
       </div>
@@ -33,11 +33,15 @@
 
     <!-- Top Widgets Row -->
     <section class="widgets-row">
-      <!-- Morale Widget -->
-      <div class="widget cream-callout" id="moraleWidget">
-        <div class="morale-rate" id="moraleRate">—</div>
-        <div class="morale-subline" id="moraleSubline">calculating morale...</div>
-        <div class="morale-message" id="moraleMessage">Loading stats...</div>
+      <!-- Today: what to act on now, plus the interview-rate line -->
+      <div class="widget soft-card today-widget" id="todayWidget">
+        <h3 class="widget-title">Today</h3>
+        <div id="todayList" class="today-list"></div>
+        <div class="today-stats" id="moraleWidget">
+          <span class="today-rate" id="moraleRate">—</span>
+          <span id="moraleSubline"></span>
+          <div class="morale-message" id="moraleMessage"></div>
+        </div>
       </div>
       
       <!-- Crawl Status Widget -->
@@ -56,6 +60,7 @@
 
     <!-- Toolbar Filters -->
     <section class="toolbar">
+      <input type="search" id="jobSearch" class="text-input search-input" placeholder="Search jobs  ( / )" aria-label="Search jobs" autocomplete="off">
       <div class="filters" id="platformFilters">
         <!-- Checkboxes injected by JS dynamically -->
       </div>

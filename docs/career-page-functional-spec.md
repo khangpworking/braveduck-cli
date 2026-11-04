@@ -18,16 +18,21 @@ board. The user is a single person managing their own search.
 ## 2. Page-level chrome (top to bottom)
 
 ### 2.1 Header bar
-- **Page title** ("Career").
+- **Page title** ("braveduck").
 - **Stat pills** — live counts: total `saved`, `applied`, `interview`, `offer`.
   Purpose: at-a-glance funnel size.
 - **+ Add Job button** — toggles a drawer holding the paste form (2.4).
 
-### 2.2 Interview-rate morale widget
-- A big **percentage** = interviews landed ÷ CVs that have had time to answer.
-- Subline: `interviews / resolved answered · N pending`.
-- A **tiered encouragement message** (bilingual) whose tone escalates with the
-  rate (from "too early to tell" → "keep going" → "you're a superstar").
+### 2.2 Today (with the interview-rate line)
+- **Today** lists what to act on now, each item opening its card:
+  - *best matches to apply for* — Saved/Waiting jobs rated A or B, best first (top 3);
+  - *deadlines this week* — open jobs whose posting closes within 7 days;
+  - *follow up* — jobs still in Applied ≥ 7 days after their applied date.
+  With nothing to act on it says so.
+- Underneath, the **interview rate** = interviews landed ÷ CVs that have had time
+  to answer, with `N interviews from M answered applications · K waiting`.
+- A **tiered encouragement message** whose tone escalates with the rate (below
+  3 answered applications it says the rate shows once 3 have an answer).
 - Rules that define it: a card is *resolved* once it reached interview/offer (a
   win) OR aged past a 14-day response window with no reply (a miss); freshly-sent
   CVs are *pending* (not counted, so they don't unfairly tank the rate). Needs
@@ -104,7 +109,8 @@ Every element and its purpose:
   - masothue cell: 📅 founding date (linked to tax-registry page), or 🏢 Unknown,
     or 🏢 … while looking up.
   - distance cell: ✅/🟡/🔴 + km from home (≤8 ideal, 8–10 ok, >10 too far), or
-    🚗 … / 📍 ? km when unknown.
+    📍 … while looking up, 📍 unknown / 📍 no address when it can't be placed.
+    No badge until the user has set their location (nothing to measure from).
 - **Footer row**:
   - age ("today" / "Nd") + platform source label + ✉ marker if email-apply.
   - **Expiry badge** (see 7).

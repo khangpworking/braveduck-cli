@@ -37,7 +37,7 @@ type Crawler interface {
 
 // Builtin returns braveduck's own crawlers.
 func Builtin() []Crawler {
-	return []Crawler{NewVietnamWorks()}
+	return []Crawler{NewVietnamWorks(), NewCareerLink()}
 }
 
 var (
