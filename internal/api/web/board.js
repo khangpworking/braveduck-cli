@@ -17,6 +17,13 @@ function formatSalary(s) {
   return out;
 }
 
+// payUndisclosed: no salary, or a word instead of a figure — thỏa thuận /
+// thương lượng / cạnh tranh / negotiable / competitive, any case or accents.
+function payUndisclosed(salary) {
+  const s = foldText(salary).trim();
+  return !s || /thoa thuan|thuong luong|canh tranh|negotiable|competitive/.test(s);
+}
+
 // worksSaturday: the job text says Saturday is a working day ("thứ 2 - thứ
 // 7", "T7", "Saturday"), as a whole word, and not negated ("nghỉ thứ 7",
 // "không làm T7", "trừ thứ 7", "off on Saturday", "Saturdays off").
@@ -195,7 +202,7 @@ function renderJobCard(job, container) {
   if (worksSaturday(job.jd_full)) {
     dealbreakers.push("⛔ Làm T7");
   }
-  if (!job.salary || job.salary.includes("thỏa thuận") || job.salary.toLowerCase().includes("negotiable") || job.salary.toLowerCase().includes("cạnh tranh")) {
+  if (payUndisclosed(job.salary)) {
     dealbreakers.push("⛔ Lương thỏa thuận");
   }
   const maxKm = (AppState.location && AppState.location.max_km) || 10;
@@ -257,7 +264,7 @@ function renderJobCard(job, container) {
   }
 
   // Salary chip
-  const salaryHtml = job.salary && !job.salary.includes("thỏa thuận") ? `<span class="salary-chip" title="${esc(job.salary)}">💰 ${esc(formatSalary(job.salary))}</span>` : "";
+  const salaryHtml = job.salary && !payUndisclosed(job.salary) ? `<span class="salary-chip" title="${esc(job.salary)}">💰 ${esc(formatSalary(job.salary))}</span>` : "";
 
   // Company active date (masothue link)
   let masothueHtml = "";
