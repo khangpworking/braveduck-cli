@@ -3,6 +3,7 @@ package crawl
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,7 +27,12 @@ type CareerLink struct {
 	Client   *http.Client
 	PerQuery int
 	Delay    time.Duration
+
+	known func(url string) bool // see SkipKnown
 }
+
+// SkipKnown makes Search skip the detail page of listings the board has.
+func (c *CareerLink) SkipKnown(known func(url string) bool) { c.known = known }
 
 // NewCareerLink returns the crawler with production settings.
 func NewCareerLink() *CareerLink {
@@ -40,8 +46,12 @@ func NewCareerLink() *CareerLink {
 
 func (c *CareerLink) Name() string { return "careerlink" }
 
-// careerLinkJobRE matches a result's detail link: /tim-viec-lam/<slug>/<id>.
-var careerLinkJobRE = regexp.MustCompile(`href="(/tim-viec-lam/[a-z0-9-]+/[0-9]+)"`)
+// careerLinkJobRE matches a result's detail link: /tim-viec-lam/<slug>/<id>;
+// careerLinkTitleRE the same link with the title attribute results carry.
+var (
+	careerLinkJobRE   = regexp.MustCompile(`href="(/tim-viec-lam/[a-z0-9-]+/[0-9]+)"`)
+	careerLinkTitleRE = regexp.MustCompile(`<a [^>]*title="([^"]+)"[^>]*href="(/tim-viec-lam/[a-z0-9-]+/[0-9]+)"`)
+)
 
 // Search returns up to PerQuery listings for query, in the site's order.
 func (c *CareerLink) Search(ctx context.Context, query string) ([]Listing, error) {
@@ -58,9 +68,20 @@ func (c *CareerLink) Search(ctx context.Context, query string) ([]Listing, error
 		}
 	}
 
+	titles := map[string]string{}
+	for _, m := range careerLinkTitleRE.FindAllStringSubmatch(page, -1) {
+		titles[m[2]] = html.UnescapeString(m[1])
+	}
+
 	var listings []Listing
-	for i, p := range paths {
-		if i > 0 && c.Delay > 0 {
+	fetched := 0
+	for _, p := range paths {
+		u := "https://www.careerlink.vn" + p
+		if c.known != nil && c.known(u) {
+			listings = append(listings, Listing{Title: titles[p], URL: u}) // on the board: no detail fetch
+			continue
+		}
+		if fetched++; fetched > 1 && c.Delay > 0 {
 			select {
 			case <-ctx.Done():
 				return listings, ctx.Err()
@@ -81,7 +102,7 @@ func (c *CareerLink) Search(ctx context.Context, query string) ([]Listing, error
 		listings = append(listings, Listing{
 			Title:       jp.Title,
 			Company:     jp.Company,
-			URL:         "https://www.careerlink.vn" + p,
+			URL:         u,
 			Location:    jp.Location,
 			Salary:      jp.Salary,
 			Skills:      jp.Skills,
