@@ -2,16 +2,18 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
 // CrawlSource is one crawler's health plus the jobs it contributed today.
 type CrawlSource struct {
 	Name      string `json:"name"`
-	Count     int    `json:"count"`     // jobs from this source saved today
-	Healthy   bool   `json:"healthy"`   // see CrawlStatus
-	LastRun   string `json:"lastRun"`   // ISO timestamp of the last run attempt
-	LastError string `json:"lastError"` // why the last run failed ("" if it didn't)
+	Count     int    `json:"count"`          // jobs from this source saved today
+	Healthy   bool   `json:"healthy"`        // see CrawlStatus
+	LastRun   string `json:"lastRun"`        // ISO timestamp of the last run attempt
+	LastError string `json:"lastError"`      // why the last run failed ("" if it didn't)
+	Task      bool   `json:"task,omitempty"` // a background task (rating, sync), not a job source; set by the service
 }
 
 // StaleAfter is the shortest silence after which the board calls a reported
@@ -82,22 +84,28 @@ type CrawlStatusView struct {
 }
 
 // CrawlStatus reports per-source crawl health from crawl_runs, joined with the
-// count of jobs each source saved today. "Today" is now's UTC date, matching
-// how saved_at is stored. Sources with no crawl_runs row simply don't appear;
-// NewJobsToday still counts every job saved today, source-tagged or not.
+// count of jobs each source saved today. "Today" is now's calendar day in
+// now's time zone (saved_at is UTC, so the day's bounds are converted).
+// Sources with no crawl_runs row simply don't appear; NewJobsToday still
+// counts every job saved today, source-tagged or not.
 //
-// A source is healthy when its last run succeeded within StaleAfter. Rows
+// A source is healthy when its last run succeeded within StaleAfter, or twice
+// its interval if that's longer. The interval is its stored schedule, else
+// defaultEvery[name] (a built-in on its default schedule), in minutes. Rows
 // from before crawl-report existed (no last_success_at) fall back to "last
 // succeeded today".
-func (s *Store) CrawlStatus(ctx context.Context, now time.Time) (CrawlStatusView, error) {
-	today := now.UTC().Format("2006-01-02")
+func (s *Store) CrawlStatus(ctx context.Context, now time.Time, defaultEvery map[string]int) (CrawlStatusView, error) {
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	today := start.Format("2006-01-02")
+	from, to := start.UTC().Format(time.RFC3339), start.AddDate(0, 0, 1).UTC().Format(time.RFC3339)
+	todayUTC := now.UTC().Format("2006-01-02") // last_success_date is a UTC date
 
 	// Per-source count of jobs saved today (saved_at is a UTC RFC3339 string).
 	counts := map[string]int{}
 	total := 0
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT COALESCE(discovery_source,''), COUNT(*) FROM jobs WHERE substr(saved_at,1,10) = ? GROUP BY discovery_source",
-		today)
+		"SELECT COALESCE(discovery_source,''), COUNT(*) FROM jobs WHERE saved_at >= ? AND saved_at < ? GROUP BY discovery_source",
+		from, to)
 	if err != nil {
 		return CrawlStatusView{}, err
 	}
@@ -121,7 +129,7 @@ func (s *Store) CrawlStatus(ctx context.Context, now time.Time) (CrawlStatusView
 	crawlRows, err := s.db.QueryContext(ctx,
 		`SELECT r.name, COALESCE(r.last_success_date,''), COALESCE(r.last_run_at,''),
 		        COALESCE(r.last_success_at,''), r.last_ok, COALESCE(r.last_error,''),
-		        COALESCE(c.every_minutes, 0)
+		        c.every_minutes
 		 FROM crawl_runs r LEFT JOIN crawl_schedule c ON c.source = r.name
 		 ORDER BY r.name`)
 	if err != nil {
@@ -132,15 +140,20 @@ func (s *Store) CrawlStatus(ctx context.Context, now time.Time) (CrawlStatusView
 	sources := []CrawlSource{}
 	for crawlRows.Next() {
 		var name, lastSuccess, lastRun, successAt, lastErr string
-		var lastOK, every int
-		if err := crawlRows.Scan(&name, &lastSuccess, &lastRun, &successAt, &lastOK, &lastErr, &every); err != nil {
+		var lastOK int
+		var stored sql.NullInt64
+		if err := crawlRows.Scan(&name, &lastSuccess, &lastRun, &successAt, &lastOK, &lastErr, &stored); err != nil {
 			return CrawlStatusView{}, err
+		}
+		every := defaultEvery[name]
+		if stored.Valid {
+			every = int(stored.Int64)
 		}
 		stale := StaleAfter
 		if d := 2 * time.Duration(every) * time.Minute; d > stale {
 			stale = d
 		}
-		healthy := lastSuccess == today
+		healthy := lastSuccess == todayUTC
 		if successAt != "" {
 			t, err := time.Parse(time.RFC3339, successAt)
 			healthy = err == nil && lastOK == 1 && now.Sub(t) <= stale

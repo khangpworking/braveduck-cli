@@ -749,7 +749,9 @@ function renderCrawlStatus() {
 
   // Render per-source chips
   const chipsContainer = document.getElementById("crawlChips");
-  chipsContainer.innerHTML = status.sources
+  // Background tasks (rating, status sync) find no jobs: no chip, and no
+  // filter below, but a failing one still shows in the warnings.
+  chipsContainer.innerHTML = status.sources.filter(s => !s.task)
     .map(s => `<span class="chip">${esc(s.name)} <strong style="color:var(--ink)">${esc(s.count)}</strong></span>`)
     .join("");
 
@@ -803,7 +805,7 @@ function renderPlatformFilters() {
   const platforms = new Set(["All"]);
   // Crawl sources always appear
   if (AppState.crawlStatus && AppState.crawlStatus.sources) {
-    AppState.crawlStatus.sources.forEach(s => platforms.add(s.name));
+    AppState.crawlStatus.sources.filter(s => !s.task).forEach(s => platforms.add(s.name));
   }
   // Other platforms from jobs
   AppState.jobs.forEach(j => {

@@ -246,3 +246,23 @@ func TestCrawlTellsSkippersWhatsKnown(t *testing.T) {
 		t.Fatal("the crawler wasn't given a check that knows the board's links")
 	}
 }
+
+func TestCrawlStatusMarksTasks(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	for _, src := range []string{"careerlink", TopCVSyncSource, JevRateSource} {
+		s.st.RecordCrawlRun(ctx, src, true, "", s.now())
+	}
+	v, err := s.CrawlStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range v.Sources {
+		if want := src.Name != "careerlink"; src.Task != want {
+			t.Errorf("%s: Task = %v, want %v", src.Name, src.Task, want)
+		}
+		if !src.Healthy {
+			t.Errorf("%s unhealthy right after a successful run", src.Name)
+		}
+	}
+}

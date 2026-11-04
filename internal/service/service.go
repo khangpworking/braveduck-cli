@@ -403,7 +403,11 @@ func (s *Service) SetKeywords(ctx context.Context, sets keyword.Sets) (keyword.S
 
 // CrawlStatus reports per-source crawl health and today's find count.
 func (s *Service) CrawlStatus(ctx context.Context) (store.CrawlStatusView, error) {
-	return s.st.CrawlStatus(ctx, s.now())
+	v, err := s.st.CrawlStatus(ctx, s.now(), s.builtinSources())
+	for i, src := range v.Sources {
+		v.Sources[i].Task = src.Name == TopCVSyncSource || src.Name == JevRateSource
+	}
+	return v, err
 }
 
 // crawlSourceRE is what a source name may look like: the board shows it and
@@ -423,7 +427,7 @@ func (s *Service) ReportCrawl(ctx context.Context, source string, ok bool, reaso
 		reason = reason[:300]
 	}
 	wasFailing := false
-	if v, err := s.st.CrawlStatus(ctx, s.now()); err == nil {
+	if v, err := s.st.CrawlStatus(ctx, s.now(), nil); err == nil {
 		for _, src := range v.Sources {
 			if src.Name == source && src.LastError != "" {
 				wasFailing = true
