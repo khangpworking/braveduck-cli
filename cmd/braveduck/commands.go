@@ -219,11 +219,14 @@ func scoreCell(j jobs.Job) string {
 	return fmt.Sprintf("%.1f", j.Score)
 }
 
+// trunc shortens s to at most n characters (runes, not bytes: cutting bytes
+// splits Vietnamese letters into "�").
 func trunc(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }
 
 func splitCSV(s string) []string {

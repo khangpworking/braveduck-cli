@@ -45,6 +45,10 @@ var migrations = []string{
 	 ALTER TABLE platform_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'unknown';
 	 ALTER TABLE platform_sessions ADD COLUMN checked_at TEXT;
 	 ALTER TABLE platform_sessions ADD COLUMN account_hint TEXT;`,
+	// 4: external crawlers report each run (braveduck crawl-report).
+	`ALTER TABLE crawl_runs ADD COLUMN last_success_at TEXT;
+	 ALTER TABLE crawl_runs ADD COLUMN last_ok INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE crawl_runs ADD COLUMN last_error TEXT;`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the
