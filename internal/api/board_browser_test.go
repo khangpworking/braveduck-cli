@@ -139,6 +139,7 @@ func TestBoardClosedOverlaysDoNotTakeFocus(t *testing.T) {
 		t.Fatal("open drawer input cannot receive focus")
 	}
 	clickID(page, "closeDrawerBtn")
+	page.MustElement("#closeDrawerBtn").MustWaitInvisible()
 
 	openModal(t, page, "ratingBtn", "ratingModalOverlay")
 	page.MustElement("#defaultModelInput").MustFocus()

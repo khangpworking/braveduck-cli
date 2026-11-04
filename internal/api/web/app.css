@@ -797,13 +797,14 @@ a:hover {
   background: var(--canvas);
   box-shadow: -8px 0 32px rgba(24, 29, 38, 0.12);
   z-index: 1001;
-  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.25s;
   display: flex;
   flex-direction: column;
 }
 .drawer.open {
   visibility: visible;
   right: 0;
+  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
 }
 .drawer-header {
   padding: var(--spacing-lg) var(--spacing-xl);
@@ -848,7 +849,7 @@ a:hover {
   z-index: 1050;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, visibility 0s linear 0.2s;
   backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
@@ -858,6 +859,7 @@ a:hover {
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
+  transition: opacity 0.2s ease, visibility 0s;
 }
 .modal {
   background: var(--canvas);
