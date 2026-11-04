@@ -212,13 +212,17 @@ func TestKeywordsAndSources(t *testing.T) {
 
 	page.MustElement("#sourcesBtn").MustClick()
 	page.MustElement("#sourcesList select")
-	page.MustEval(`() => { const s = document.querySelector("#sourcesList select"); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
+	page.MustEval(`() => { const s = [...document.querySelectorAll("#sourcesList select")].pop(); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
 	waitUntil(t, func() bool {
-		sc, _ := svc.CrawlSchedules(ctx)
-		return len(sc) == 1 && sc[0].EveryMinutes == 360
+		for _, sc := range must(svc.CrawlSchedules(ctx)) {
+			if sc.Source == "vietnamworks" {
+				return sc.EveryMinutes == 360
+			}
+		}
+		return false
 	}, "schedule not saved")
 
-	page.MustElementR("button", "Crawl now").MustClick()
+	page.MustEval(`() => [...document.querySelectorAll("#sourcesList button")].pop().click()`)
 	waitUntil(t, func() bool {
 		l, _ := svc.ListJobs(ctx, service.ListFilter{Source: "vietnamworks"})
 		return len(l) == 1
@@ -242,3 +246,5 @@ func waitUntil(t *testing.T, cond func() bool, msg string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+func must[T any](v T, _ error) T { return v }

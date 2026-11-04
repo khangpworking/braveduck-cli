@@ -122,8 +122,9 @@ func TestCrawlSchedules(t *testing.T) {
 	s.ReportCrawl(ctx, "facebook", true, "") // an external source
 
 	got, _ := s.CrawlSchedules(ctx)
-	if len(got) != 2 || got[1].Source != "vietnamworks" || got[1].EveryMinutes != DefaultEveryMinutes || got[1].Configured || !got[1].Builtin ||
-		got[0].Source != "facebook" || got[0].Builtin || got[0].EveryMinutes != 0 {
+	if len(got) != 3 || got[2].Source != "vietnamworks" || got[2].EveryMinutes != DefaultEveryMinutes || got[2].Configured || !got[2].Builtin ||
+		got[0].Source != "facebook" || got[0].Builtin || got[0].EveryMinutes != 0 ||
+		got[1].Source != TopCVSyncSource || got[1].EveryMinutes != 360 || !got[1].Builtin {
 		t.Fatalf("schedules = %+v", got)
 	}
 
@@ -142,7 +143,7 @@ func TestCrawlSchedules(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ = s.CrawlSchedules(ctx)
-	if got[0].EveryMinutes != 5 || got[1].EveryMinutes != 0 || !got[1].Configured {
+	if got[0].EveryMinutes != 5 || got[2].EveryMinutes != 0 || !got[2].Configured {
 		t.Fatalf("after set = %+v", got)
 	}
 }

@@ -67,11 +67,23 @@ type CrawlResult struct {
 	Added    int    `json:"added"`    // new on the board
 }
 
-// Crawl runs one built-in crawler now: every search query, keyword filters
-// applied, duplicates skipped. The run is reported to the crawl panel either way.
+// TopCVSyncSource is the schedule/crawl-panel id of the TopCV status sync, a
+// built-in task alongside the crawlers (default every 6 h, only while the user
+// is logged in to TopCV).
+const TopCVSyncSource = "topcv-sync"
+
+const defaultSyncEveryMinutes = 360
+
+// Crawl runs one built-in source now: a crawler (every search query, keyword
+// filters applied, duplicates skipped) or the TopCV status sync. The run is
+// reported to the crawl panel either way.
 func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error) {
 	source = strings.ToLower(strings.TrimSpace(source))
 	cs := s.crawlers()
+	if source == TopCVSyncSource {
+		r, err := s.SyncTopCV(ctx)
+		return CrawlResult{Source: source, Found: r.Found, Added: r.Added}, err
+	}
 	c, ok := cs.crawlers[source]
 	if !ok {
 		return CrawlResult{}, fmt.Errorf("%w: %q isn't a built-in crawler (built-in: %s)", ErrInvalid, source, strings.Join(s.BuiltinCrawlers(), ", "))
@@ -167,6 +179,15 @@ func (s *Service) BuiltinCrawlers() []string {
 	return ids
 }
 
+// builtinSources are the sources braveduck runs itself: crawlers + the sync.
+func (s *Service) builtinSources() map[string]int {
+	m := map[string]int{TopCVSyncSource: defaultSyncEveryMinutes}
+	for id := range s.crawlers().crawlers {
+		m[id] = DefaultEveryMinutes
+	}
+	return m
+}
+
 // SourceSchedule is one source's fetch setting.
 type SourceSchedule struct {
 	Source       string `json:"source"`
@@ -183,7 +204,8 @@ func (s *Service) CrawlSchedules(ctx context.Context) ([]SourceSchedule, error) 
 		return nil, err
 	}
 	known := map[string]bool{}
-	for _, id := range s.BuiltinCrawlers() {
+	builtin := s.builtinSources()
+	for id := range builtin {
 		known[id] = true
 	}
 	if v, err := s.st.CrawlStatus(ctx, s.now()); err == nil {
@@ -194,13 +216,12 @@ func (s *Service) CrawlSchedules(ctx context.Context) ([]SourceSchedule, error) 
 	for src := range stored {
 		known[src] = true
 	}
-	builtin := s.crawlers().crawlers
 	var out []SourceSchedule
 	for src := range known {
-		_, isBuiltin := builtin[src]
+		def, isBuiltin := builtin[src]
 		every, configured := stored[src]
 		if !configured && isBuiltin {
-			every = DefaultEveryMinutes
+			every = def
 		}
 		out = append(out, SourceSchedule{Source: src, EveryMinutes: every, Builtin: isBuiltin, Configured: configured})
 	}
@@ -214,7 +235,7 @@ func (s *Service) SetCrawlSchedule(ctx context.Context, source string, everyMinu
 	if !crawlSourceRE.MatchString(source) {
 		return SourceSchedule{}, fmt.Errorf("%w: source %q: use lowercase letters, digits, - or _", ErrInvalid, source)
 	}
-	_, isBuiltin := s.crawlers().crawlers[source]
+	_, isBuiltin := s.builtinSources()[source]
 	min := MinEveryMinutes
 	if isBuiltin {
 		min = MinBuiltinEveryMinutes
@@ -261,9 +282,24 @@ func (s *Service) runDue(ctx context.Context) {
 		if !sc.Builtin || sc.EveryMinutes == 0 {
 			continue
 		}
+		if sc.Source == TopCVSyncSource && !s.platformConnected(ctx, "topcv") {
+			continue // nothing to sync without a login; don't flag it as failing
+		}
 		if t, ok := last[sc.Source]; ok && s.now().Sub(t) < time.Duration(sc.EveryMinutes)*time.Minute {
 			continue
 		}
 		_, _ = s.Crawl(ctx, sc.Source) // the outcome is in the crawl panel
 	}
+}
+
+// platformConnected reports whether id has a saved, not-expired session.
+func (s *Service) platformConnected(ctx context.Context, id string) bool {
+	ps, err := s.st.GetSession(ctx, id)
+	return err == nil && ps.Status != "expired"
+}
+
+// IsBuiltinSource reports whether braveduck runs source itself.
+func (s *Service) IsBuiltinSource(source string) bool {
+	_, ok := s.builtinSources()[source]
+	return ok
 }
