@@ -154,7 +154,7 @@ func TestErrorsAreToolErrors(t *testing.T) {
 		{"add_job", "title", map[string]any{}},                                      // nothing to add
 		{"add_job", "not both", map[string]any{"content": "https://x.vn/j", "title": "X"}},
 		{"ask_model", "not wired", map[string]any{"id": 1}}, // honest stub
-		{"crawl", "search queries", map[string]any{"source": "vietnamworks"}},
+		{"crawl", "search terms", map[string]any{"source": "vietnamworks"}},
 		{"set_crawl_schedule", "use 0", map[string]any{"source": "vietnamworks", "every_minutes": 7}},
 		{"set_keywords", "unknown keyword list", map[string]any{"lists": map[string]any{"nope": []string{"x"}}}},
 		{"get_job", "", map[string]any{"id": "abc"}}, // schema validation

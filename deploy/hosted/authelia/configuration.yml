@@ -1,0 +1,53 @@
+# Authelia for the braveduck shared server. Values in {{ env "..." }} come from
+# .env; the secrets are read from files (the *_FILE variables in compose.yaml).
+# Reference: https://www.authelia.com/configuration/prologue/introduction/
+
+server:
+  address: 'tcp://:9091/'
+
+log:
+  level: 'info'
+
+theme: 'auto'
+
+# Users live in a file: add one with ./add-user.sh. Passwords are stored as
+# argon2id hashes, never in plain text.
+authentication_backend:
+  file:
+    path: '/config/users_database.yml'
+    watch: true
+  password_reset:
+    disable: true # there's no mail server by default; the admin resets passwords
+
+access_control:
+  default_policy: 'deny'
+  rules:
+    - domain: '{{ env "BRAVEDUCK_DOMAIN" }}'
+      policy: '{{ env "BRAVEDUCK_POLICY" }}'
+
+session:
+  cookies:
+    - domain: '{{ env "COOKIE_DOMAIN" }}'
+      authelia_url: 'https://{{ env "AUTH_DOMAIN" }}'
+      default_redirection_url: 'https://{{ env "BRAVEDUCK_DOMAIN" }}'
+      inactivity: '1 day'
+      expiration: '1 week'
+      remember_me: '1 month'
+
+# Slows down password guessing: 5 failures in 2 minutes locks the user out
+# for 10 minutes.
+regulation:
+  max_retries: 5
+  find_time: '2 minutes'
+  ban_time: '10 minutes'
+
+storage:
+  local:
+    path: '/config/db.sqlite3'
+
+# One-time codes (e.g. registering an authenticator app) are written to this
+# file for the admin to pass on. Set up smtp instead to email them:
+# https://www.authelia.com/configuration/notifications/smtp/
+notifier:
+  filesystem:
+    filename: '/config/notification.txt'

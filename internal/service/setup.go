@@ -53,11 +53,13 @@ type SetupStatus struct {
 	Location      bool `json:"location"`       // for job distances
 	TopCV         bool `json:"topcv"`          // logged in, for sync and apply
 	Done          bool `json:"done"`           // the needed steps are all done
+
+	Hosted *HostedInfo `json:"hosted,omitempty"` // set on a shared server
 }
 
 // Setup reports the getting-started steps.
 func (s *Service) Setup(ctx context.Context) (SetupStatus, error) {
-	var st SetupStatus
+	st := SetupStatus{Hosted: s.hosted}
 	if _, ok, err := s.BaseCV(ctx); err != nil {
 		return st, err
 	} else {

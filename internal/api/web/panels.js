@@ -10,12 +10,16 @@ const PLATFORM_STATUS = {
 async function renderPlatforms() {
   const list = document.getElementById("platformsList");
   const platforms = await APIClient.getPlatforms();
-  list.innerHTML = platforms.map(p => {
+  // A login window would open on the shared server, not in front of the user.
+  const hosted = Boolean(AppState.setup && AppState.setup.hosted);
+  const note = hosted ? `<p class="hint" style="font-size: 13px; color: var(--muted);">Logging in to a job site opens a browser window on your own computer, so it's off on this shared server. Run braveduck on your computer to apply through your accounts.</p>` : "";
+  list.innerHTML = note + platforms.map(p => {
     const [label, color] = PLATFORM_STATUS[p.status] || [p.status, "var(--muted)"];
     const saved = p.status !== "not_connected" && p.status !== "connecting";
     const sync = p.id === "topcv" && p.status === "connected"
       ? `<button class="btn-secondary btn-sm" onclick="syncPlatform(${jsArg(p.id)}, this)">Sync applications</button>` : "";
     const action = p.status === "connecting" ? ""
+      : hosted ? (saved ? `<button class="btn-secondary btn-sm" onclick="disconnectPlatform(${jsArg(p.id)})">Disconnect</button>` : "")
       : saved
         ? `${sync}<button class="btn-secondary btn-sm" onclick="disconnectPlatform(${jsArg(p.id)})">Disconnect</button>
            <button class="btn-secondary btn-sm" onclick="connectPlatform(${jsArg(p.id)})">Log in again</button>`

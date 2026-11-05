@@ -85,6 +85,24 @@ func Open(dir string) (*Vault, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newVault(key, source)
+}
+
+// OpenFile is Open with only the key file in dir: no passphrase and no OS
+// keychain, both of which are one per machine. A shared server uses it so
+// every user's sessions are sealed under that user's own key.
+func OpenFile(dir string) (*Vault, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	key, err := readOrCreate(filepath.Join(dir, keyFileName), keyLen)
+	if err != nil {
+		return nil, err
+	}
+	return newVault(key, SourceKeyFile)
+}
+
+func newVault(key []byte, source string) (*Vault, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

@@ -140,6 +140,16 @@ on other sites it asks whether you submitted. With a TopCV login,
 `braveduck sync topcv` (also every 6 h) moves the jobs you applied to on
 TopCV to Applied.
 
+### Run it for several people
+
+`braveduck serve --users DIR` is a shared server: everyone logs in and gets
+their own board, with their own data. Logins are handled by
+[Authelia](https://www.authelia.com) behind [Caddy](https://caddyserver.com)
+(HTTPS from Let's Encrypt); [deploy/hosted](deploy/hosted/README.md) has the
+Docker Compose setup, scripts to add people, and a test of the whole chain.
+Job-site logins and assisted apply open windows on your own screen, so they
+stay on braveduck running on your computer.
+
 ## Why
 
 Job boards (TopCV, VietnamWorks, JobOKO, CareerLink…) are noisy and repetitive.

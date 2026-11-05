@@ -63,6 +63,9 @@ var renderCVPDF = browser.RenderPDF
 
 // PrepareApply checks job id can be applied to now and writes its CV PDF.
 func (s *Service) PrepareApply(ctx context.Context, id int64) (ApplyPrep, error) {
+	if s.hosted != nil {
+		return ApplyPrep{}, ErrHosted
+	}
 	j, err := s.GetJob(ctx, id)
 	if err != nil {
 		return ApplyPrep{}, err

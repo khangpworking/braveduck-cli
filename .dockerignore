@@ -1,0 +1,7 @@
+.git
+/braveduck
+*.exe
+deploy/hosted/secrets
+deploy/hosted/.env
+deploy/hosted/authelia/users_database.yml
+deploy/hosted/authelia/db.sqlite3
