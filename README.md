@@ -48,18 +48,37 @@ braveduck add https://www.facebook.com/groups/.../posts/.../ - < post.txt   # Fa
 braveduck keywords add search_queries "n8n" "marketing ai"   # what the crawlers search for
 braveduck crawl        # fetch new jobs now (they also run on a schedule while the board is up)
 braveduck today        # what to act on now
-braveduck list
+braveduck list --search "ky su ai"   # accents optional
+braveduck export --out jobs.csv      # every job as a spreadsheet (--json for full records)
 braveduck serve        # web board on http://127.0.0.1:8080
 ```
 
 A new board walks you through the same steps (**Get started**: CV → what
 you're looking for → search terms). Everything else is under **⚙ Settings**.
+On the board, `/` searches, `n` adds a job, Esc closes a window and `?` lists
+the shortcuts.
 
 Data lives in `~/.braveduck/braveduck.db` (override with `--db` or `BRAVEDUCK_DB`).
-`braveduck doctor` checks your setup. While the board runs it keeps a daily
+`braveduck doctor` checks your setup (including whether the board is running).
+While the board runs it keeps a daily
 copy of the database for a week in `~/.braveduck/backups/`; `braveduck backup`
 makes one now. To restore, stop the board and copy a backup over
 `braveduck.db`.
+
+Crawls, rating, the expiry sweep and backups only run while the board does.
+To keep it running on Linux, a systemd user service works:
+
+```ini
+# ~/.config/systemd/user/braveduck.service
+[Service]
+ExecStart=%h/go/bin/braveduck serve --no-open
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+then `systemctl --user enable --now braveduck`.
 
 ### Use it from Claude Code (MCP)
 
