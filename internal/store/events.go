@@ -45,3 +45,14 @@ func (s *Store) RecentEvents(ctx context.Context, limit int) ([]Event, error) {
 	}
 	return out, rows.Err()
 }
+
+// PruneEvents keeps the newest keep events and deletes the rest, so the
+// activity feed can't grow without bound.
+func (s *Store) PruneEvents(ctx context.Context, keep int) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM events WHERE id <= (SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET ?)", keep)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

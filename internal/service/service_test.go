@@ -356,3 +356,28 @@ func TestPostTextStripsOnlyAMetadataFooter(t *testing.T) {
 		t.Fatalf("a description's --- divider was cut: %q", got)
 	}
 }
+
+func TestListJobsQuery(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	s.AddJob(ctx, NewJob{Title: "Kỹ Sư AI", Company: "Sao Mai"})
+	s.AddJob(ctx, NewJob{Title: "Data Analyst", Company: "Đà Nẵng Duck Co"})
+	s.AddJob(ctx, NewJob{Title: "Marketing Executive", Company: "Awing", Salary: "16000000 VND"})
+	for q, want := range map[string]string{
+		"ky su":        "Kỹ Sư AI",
+		"DA NANG duck": "Data Analyst",
+		"awing 16000":  "Marketing Executive",
+		"ai sao":       "Kỹ Sư AI",
+	} {
+		list, err := s.ListJobs(ctx, ListFilter{Query: q})
+		if err != nil || len(list) != 1 || list[0].Title != want {
+			t.Errorf("query %q = %v %v, want only %q", q, list, err, want)
+		}
+	}
+	if list, _ := s.ListJobs(ctx, ListFilter{Query: "nothing like this"}); len(list) != 0 {
+		t.Errorf("no-match query returned %d", len(list))
+	}
+	if list, _ := s.ListJobs(ctx, ListFilter{Query: "  "}); len(list) != 3 {
+		t.Errorf("blank query returned %d, want all 3", len(list))
+	}
+}

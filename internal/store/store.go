@@ -298,6 +298,7 @@ func (s *Store) Get(ctx context.Context, id int64) (jobs.Job, error) {
 type ListFilter struct {
 	Status string
 	Source string
+	Query  string // words to search for; applied by the service (accent-insensitive), not here
 }
 
 // List returns jobs matching the filter, newest first by saved_at.

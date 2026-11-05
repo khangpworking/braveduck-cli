@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -34,5 +36,21 @@ func TestRatedLine(t *testing.T) {
 	}
 	if got := ratedLine(j, ""); got != "job #7 rated B 3.9" {
 		t.Errorf("default = %q", got)
+	}
+}
+
+func TestBoardLine(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			http.NotFound(w, r)
+		}
+	}))
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	if got := boardLine(addr); !strings.Contains(got, "running on http://"+addr) {
+		t.Fatalf("up = %q", got)
+	}
+	srv.Close()
+	if got := boardLine(addr); !strings.Contains(got, "NOT RUNNING") {
+		t.Fatalf("down = %q", got)
 	}
 }

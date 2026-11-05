@@ -255,3 +255,34 @@ func hasLabel(labels []string, want string) bool {
 	}
 	return false
 }
+
+func TestClockOf(t *testing.T) {
+	day := func(d int) string { return now.AddDate(0, 0, d).Format("2006-01-02") }
+	for _, tc := range []struct {
+		j                Job
+		kind, state      string
+		days, closesIn   int
+		hasClock, counts bool
+	}{
+		{Job{Status: "saved", ExpiresAt: "expire:" + day(20)}, "deadline", "ok", 20, 0, true, false},
+		{Job{Status: "waiting", ExpiresAt: "expire:" + day(5)}, "deadline", "warning", 5, 0, true, false},
+		{Job{Status: "saved", ExpiresAt: "expire:" + day(-3)}, "deadline", "expired", -3, 4, true, true},
+		{Job{Status: "applied", ExpiresAt: "applied:" + day(-4)}, "applied", "silent", 4, 0, true, false},
+		{Job{Status: "applied", ExpiresAt: "applied:" + day(-22)}, "applied", "countdown", 22, 5, true, true},
+		{j: Job{Status: "applied", ExpiresAt: "expire:" + day(5)}}, // a deadline on an applied job: no clock
+		{j: Job{Status: "interview", ExpiresAt: "applied:" + day(-60)}},
+		{j: Job{Status: "saved"}},
+	} {
+		c := ClockOf(tc.j, now)
+		if (c != nil) != tc.hasClock {
+			t.Errorf("%+v: clock %+v, want present=%v", tc.j, c, tc.hasClock)
+			continue
+		}
+		if c == nil {
+			continue
+		}
+		if c.Kind != tc.kind || c.State != tc.state || c.Days != tc.days || (c.ClosesIn != nil) != tc.counts || tc.counts && *c.ClosesIn != tc.closesIn {
+			t.Errorf("%+v: clock %+v (closes_in %v), want %s/%s %d closes in %d", tc.j, c, c.ClosesIn, tc.kind, tc.state, tc.days, tc.closesIn)
+		}
+	}
+}

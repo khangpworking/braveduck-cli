@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
 	"github.com/khangpworking/braveduck-cli/internal/service"
@@ -80,6 +82,7 @@ func cmdDoctor(dbPath string) error {
 	if hint := browser.LibsHint(); hint != "" {
 		fmt.Printf("  browser:    missing system libraries%s\n", hint)
 	}
+	fmt.Println(boardLine(defaultBoardAddr))
 	fmt.Println("  status:     healthy")
 	return nil
 }
@@ -115,4 +118,21 @@ func ifNot(ok bool, hint string) string {
 		return ""
 	}
 	return hint
+}
+
+// defaultBoardAddr is where `braveduck serve` listens unless told otherwise.
+const defaultBoardAddr = "127.0.0.1:8080"
+
+// boardLine reports whether the board is up: it runs the crawls, Jev rating,
+// the sweep and the daily backup, so "not running" means none of those happen.
+func boardLine(addr string) string {
+	c := http.Client{Timeout: 2 * time.Second}
+	resp, err := c.Get("http://" + addr + "/healthz")
+	if err == nil {
+		resp.Body.Close()
+	}
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "  board:      NOT RUNNING on " + addr + " — crawls, rating, sweeps and backups only run while `braveduck serve` does"
+	}
+	return "  board:      running on http://" + addr
 }
