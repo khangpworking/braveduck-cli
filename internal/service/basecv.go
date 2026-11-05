@@ -72,7 +72,7 @@ func (s *Service) UploadCV(ctx context.Context, name string, data []byte, replac
 	if err != nil {
 		return BaseCV{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	text, err := cvfile.Text(kind, data)
+	text, err := cvfile.Text(ctx, kind, data)
 	if err != nil {
 		return BaseCV{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}

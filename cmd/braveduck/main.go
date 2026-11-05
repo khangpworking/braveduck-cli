@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/khangpworking/braveduck-cli/internal/core/cvfile"
 	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -114,6 +115,9 @@ Global
 `
 
 func main() {
+	if cvfile.IsChild() { // started by cvfile to read one PDF under limits
+		os.Exit(cvfile.RunChild())
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "braveduck: "+err.Error())
 		os.Exit(1)
