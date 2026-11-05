@@ -167,14 +167,22 @@ func launchRemote(ctx context.Context, svc string, o launchOpts) (*rod.Browser, 
 	if !o.Headless {
 		return nil, nil, errors.New("browser: a window can't open in the browser service")
 	}
-	l, err := launcher.NewManaged(svc)
+	addr, err := serviceURL(svc)
 	if err != nil {
-		return nil, nil, fmt.Errorf("browser: the browser service at %s: %w", svc, err)
+		return nil, nil, fmt.Errorf("browser: the browser service's key: %w", err)
+	}
+	// Errors may quote addr, which holds the key: never pass that on.
+	redact := func(err error) error {
+		return fmt.Errorf("browser: the browser service at %s: %s", svc, strings.ReplaceAll(err.Error(), addr, svc))
+	}
+	l, err := launcher.NewManaged(addr)
+	if err != nil {
+		return nil, nil, redact(err)
 	}
 	l = withFlags(l.Context(ctx).Headless(true).Leakless(true), o.Seed)
 	client, err := l.Client()
 	if err != nil {
-		return nil, nil, fmt.Errorf("browser: the browser service at %s: %w", svc, err)
+		return nil, nil, redact(err)
 	}
 	b := rod.New().Client(client).Context(ctx)
 	if err := b.Connect(); err != nil {

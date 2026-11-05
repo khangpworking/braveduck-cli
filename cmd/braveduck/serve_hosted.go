@@ -38,6 +38,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	maxUsers := fs.Int("max-users", 50, "most users the server holds")
 	maxBrowsers := fs.Int("max-browsers", 2, "most browsers (crawls, page fetches, PDFs) running at once, for all users together")
 	logout := fs.String("logout-url", "", "the login service's log-out page, linked from the board")
+	usersFile := fs.String("login-users-file", "", "the login service's users file (Authelia's users_database.yml): agent keys of users removed or disabled there stop working")
 	maxJobs := fs.Int("max-jobs-per-user", 5000, "jobs each user's board holds (0 = no limit)")
 	jevDaily := fs.Int("jev-daily-limit", 50, "Jev ratings per user per day, paid by the server's key (0 = no limit)")
 	if err := fs.Parse(args); err != nil {
@@ -62,7 +63,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	defer cancel()
 	h, err := hosted.New(srvCtx, hosted.Options{
 		Dir: *users, UserHeader: *header, Secret: secret,
-		MaxUsers: *maxUsers, LogoutURL: *logout, JevDaily: *jevDaily, MaxJobs: *maxJobs, Tick: time.Minute,
+		MaxUsers: *maxUsers, LogoutURL: *logout, JevDaily: *jevDaily, MaxJobs: *maxJobs, UsersFile: *usersFile, Tick: time.Minute,
 	})
 	if err != nil {
 		return err

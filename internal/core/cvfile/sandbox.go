@@ -52,8 +52,19 @@ func RunChild() int {
 	return 0
 }
 
+// childSlots lets one PDF child run at a time, so several heavy
+// uploads together stay within the server's memory (each child may use
+// childMemory).
+var childSlots = make(chan struct{}, 1)
+
 // pdfTextSandboxed runs pdfText in the child process.
 func pdfTextSandboxed(ctx context.Context, data []byte) (string, error) {
+	select {
+	case childSlots <- struct{}{}:
+		defer func() { <-childSlots }()
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err

@@ -64,7 +64,8 @@ pids="$pids $!"
 XDG_DATA_HOME=$work/xdg XDG_CONFIG_HOME=$work/xdg ./caddy run --config Caddyfile --adapter caddyfile >caddy.log 2>&1 &
 pids="$pids $!"
 HOME=$work TYPESAFE_API_KEY="" ./braveduck serve --users "$work/users" --addr 127.0.0.1:8096 \
-	--proxy-secret-file secrets/proxy_secret --logout-url https://auth.braveduck.test:8443/logout >braveduck.log 2>&1 &
+	--proxy-secret-file secrets/proxy_secret --logout-url https://auth.braveduck.test:8443/logout \
+	--login-users-file "$work/config/users_database.yml" >braveduck.log 2>&1 &
 pids="$pids $!"
 
 # c is curl reaching both test domains on this machine (Caddy's local CA).
@@ -120,9 +121,16 @@ check "her agent reaches her MCP with the key alone" yes "$(mcp "Bearer $key" | 
 check "the agent isn't offered upload_cv (it reads server files)" no "$(mcp "Bearer $key" | python3 -c 'import json,sys; n=[t["name"] for t in json.load(sys.stdin)["result"]["tools"]]; print("yes" if "upload_cv" in n else "no")')"
 check "her password doesn't open /mcp (keys only)" 401 "$(code "Basic $(printf 'alice:alice-password-123' | base64)")"
 check "bob's name on alice's key is refused" 401 "$(code "Bearer bob:${key#alice:}")"
+# Disabling alice in Authelia's users file (in place, as the scripts do) stops her agent too.
+sed -i '/^  alice:$/,/^  [^ ]/s/disabled: false/disabled: true/' config/users_database.yml
+check "disabling alice in Authelia stops her agent key" 401 "$(code "Bearer $key")"
+sed -i '/^  alice:$/,/^  [^ ]/s/disabled: true/disabled: false/' config/users_database.yml
+check "enabling her again lets it back in" 200 "$(code "Bearer $key")"
 check "a login cookie alone doesn't open /mcp" 401 "$(c -b alice.jar -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "$J/mcp")"
 c -b alice.jar -c alice.jar -o /dev/null "$A/logout"
-check "after logging out the board is closed" 401 "$(c -b alice.jar -o /dev/null -w '%{http_code}' "$J/api/setup")"
+# Closed: a 401, or a redirect to the login page (Authelia ends a session
+# outright when its user is disabled, as above).
+check "after logging out the board is closed" yes "$(case "$(c -b alice.jar -o /dev/null -w '%{http_code}' "$J/api/setup")" in 401 | 302) echo yes ;; *) echo no ;; esac)"
 
 if [ "$fails" -ne 0 ]; then
 	echo "== $fails check(s) failed; logs:"

@@ -139,6 +139,8 @@ func run(args []string) error {
 		return nil
 	case "doctor":
 		return cmdDoctor(dbPath)
+	case "browser-service": // deploy/hosted's browser container
+		return cmdBrowserService(rest)
 	case "serve":
 		if isHostedServe(rest) { // one database per user, not --db's
 			return cmdServeHosted(context.Background(), rest)

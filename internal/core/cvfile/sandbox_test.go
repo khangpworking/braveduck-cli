@@ -63,3 +63,21 @@ func TestPDFBombIsRefused(t *testing.T) {
 	}
 	t.Logf("refused in %v", time.Since(start).Round(time.Millisecond))
 }
+
+// One PDF child runs at a time; a reader waiting for its turn gives up
+// with its context.
+func TestPDFChildrenAreCapped(t *testing.T) {
+	for range cap(childSlots) {
+		childSlots <- struct{}{}
+	}
+	defer func() {
+		for range cap(childSlots) {
+			<-childSlots
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := pdfTextSandboxed(ctx, []byte("%PDF-1.4")); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("a second PDF child at once: %v", err)
+	}
+}

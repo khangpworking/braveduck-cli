@@ -4,9 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -158,5 +161,56 @@ func TestMCPRefusesCrossSiteBrowsers(t *testing.T) {
 	s.ServeHTTP(w, r)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("cross-site POST = %d, want 403", w.Code)
+	}
+}
+
+// With the login service's users file, an agent key stops working as soon
+// as its user is disabled or removed there (and if the file is unreadable).
+func TestAgentKeyFollowsTheLoginUsers(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	usersFile := filepath.Join(t.TempDir(), "users_database.yml")
+	write := func(yml string) {
+		t.Helper()
+		if err := os.WriteFile(usersFile, []byte(yml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		future := time.Now().Add(time.Duration(len(yml)) * time.Second) // a new mtime every write
+		os.Chtimes(usersFile, future, future)
+	}
+	write("users:\n  alice:\n    disabled: false\n    password: 'x'\n")
+	s, err := New(context.Background(), Options{Dir: t.TempDir(), UserHeader: "Remote-User", Secret: secret, MaxUsers: 5, UsersFile: usersFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	key := agentKey(t, s, "alice")
+	call := func() int {
+		r := httptest.NewRequest("POST", MCPPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		r.Header.Set(SecretHeader, secret)
+		r.Header.Set("Authorization", "Bearer "+key)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		return w.Code
+	}
+	if c := call(); c != http.StatusOK {
+		t.Fatalf("active user: %d", c)
+	}
+	write("users:\n  alice:\n    disabled: true\n    password: 'x'\n")
+	if c := call(); c != http.StatusUnauthorized {
+		t.Fatalf("disabled user: %d, want 401", c)
+	}
+	write("users:\n  bob:\n    password: 'y'\n")
+	if c := call(); c != http.StatusUnauthorized {
+		t.Fatalf("removed user: %d, want 401", c)
+	}
+	write("users:\n  Alice:\n    password: 'x'\n")
+	if c := call(); c != http.StatusOK {
+		t.Fatalf("back again: %d", c)
+	}
+	os.Remove(usersFile)
+	if c := call(); c != http.StatusUnauthorized {
+		t.Fatalf("no users file: %d, want 401", c)
 	}
 }

@@ -62,7 +62,12 @@ type Options struct {
 	MaxUsers   int    // data dirs the server will hold; new users past it are refused
 	LogoutURL  string // shown on the board; "" hides the link
 	MaxJobs    int    // jobs per user's board; 0 = no cap
-	JevDaily   int    // Jev calls per user per day (the admin's key pays); 0 = no cap
+
+	// UsersFile is the login service's users file (Authelia's
+	// users_database.yml). When set, an agent key works only while its
+	// user is in it and not disabled.
+	UsersFile string
+	JevDaily  int // Jev calls per user per day (the admin's key pays); 0 = no cap
 
 	// Tick is how often each user's scheduler looks for due work (crawls,
 	// rating, sweeps, backups); 0 turns schedulers off (tests).
@@ -71,8 +76,9 @@ type Options struct {
 
 // Server routes each request to its user's board.
 type Server struct {
-	opts Options
-	ctx  context.Context // ends every user's scheduler
+	opts   Options
+	ctx    context.Context // ends every user's scheduler
+	logins *loginUsers     // nil: no users file to check
 
 	mu    sync.Mutex
 	users map[string]*tenant
@@ -109,6 +115,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	}
 	_ = os.Chmod(opts.Dir, 0o700) // best effort: it may predate braveduck
 	s := &Server{opts: opts, ctx: ctx, users: map[string]*tenant{}}
+	if opts.UsersFile != "" {
+		s.logins = &loginUsers{path: opts.UsersFile}
+	}
 	entries, err := os.ReadDir(opts.Dir)
 	if err != nil {
 		return nil, err
@@ -194,7 +203,7 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request) {
 		t = s.users[name]
 		s.mu.Unlock()
 	}
-	if t == nil || !t.svc.CheckAgentKey(r.Context(), key) {
+	if t == nil || !t.svc.CheckAgentKey(r.Context(), key) || (s.logins != nil && !s.logins.allowed(name)) {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="braveduck"`)
 		writeErr(w, http.StatusUnauthorized, "this needs your agent key: make one on your board (Ask your AI)")
 		return

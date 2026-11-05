@@ -12,7 +12,7 @@ braveduck doesn't handle logins itself; two well-known tools do:
 | [Caddy](https://caddyserver.com) | The web server people reach. Gets HTTPS certificates from Let's Encrypt by itself, and asks Authelia about every request. |
 | [Authelia](https://www.authelia.com) | The login page. Passwords (stored only as argon2id hashes), optional two-factor, lock-out after repeated wrong passwords. |
 | braveduck | `braveduck serve --users DIR`: one complete board per user, in `DIR/<user>/`. Only Caddy can reach it. |
-| [go-rod's browser service](https://github.com/go-rod/rod) | Chromium, for reading job pages and making CV PDFs. It renders other sites' pages, so it runs in a container of its own: no users' data, no secrets, no route to the login service. |
+| Browser service | Chromium, for reading job pages and making CV PDFs: go-rod's [launcher manager](https://github.com/go-rod/rod) behind a key (`braveduck browser-service`). It renders other sites' pages, so it runs in a container of its own: no users' data, no route to the login service. |
 
 ## Before you start
 
@@ -63,7 +63,14 @@ board. The board shows who is logged in, with a **Log out** link.
   or passkey; the one-time codes for that land in
   `authelia/notification.txt` unless you
   [set up email](https://www.authelia.com/configuration/notifications/smtp/).
-- **Update:** `git pull && docker compose up -d --build`.
+- **Update:** `git pull && ./setup.sh --secrets && docker compose up -d --build`
+  (`--secrets` adds any secret a newer version needs; it never changes
+  existing ones).
+- **Disable someone for a while:** set `disabled: true` in their entry. Their
+  logins and their AI agent's key stop working at once. Edit
+  `authelia/users_database.yml` in place (as `add-user.sh` and
+  `remove-user.sh` do); an editor that replaces the file needs
+  `docker compose restart braveduck` afterwards.
 - **Logs:** `docker compose logs -f braveduck` (or `caddy`, `authelia`).
 
 ## Backups
@@ -122,9 +129,9 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
 ## Where the browser runs
 
 Job pages are other people's code. Chromium runs them in the `browser`
-container (go-rod's `rod-manager`), not next to the users' data: braveduck
-asks it for a browser over the private `browser` network and the browser is
-killed when braveduck lets go. That container has no volume, a read-only
+container, not next to the users' data: braveduck asks it for a browser over
+the private `browser` network (with a key, so a page can't start browsers
+itself), and the browser is killed when braveduck lets go. That container has no volume, a read-only
 filesystem apart from `/tmp`, no Linux capabilities, and memory and process
 limits; it can reach the internet but not Caddy or Authelia. On a cloud
 server, also block the provider's metadata address (169.254.169.254) for
