@@ -85,7 +85,9 @@ services:
       - browser
     read_only: true
     tmpfs:
-      - /tmp
+      # rod-manager runs its small watchdog binary ("leakless", which kills
+      # browsers if the manager dies) from /tmp, so this tmpfs needs exec.
+      - /tmp:exec,mode=1777,size=1g
     shm_size: 1gb
     mem_limit: 2g
     pids_limit: 512

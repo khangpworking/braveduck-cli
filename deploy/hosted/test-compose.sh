@@ -85,7 +85,8 @@ check "alice's board lives in her own private folder" 700 "$(compose exec -T bra
 
 if [ "$fails" -ne 0 ]; then
 	echo "== $fails check(s) failed; logs:"
-	compose logs --tail 20
+	compose logs --tail 20 caddy authelia braveduck
+	compose logs --tail 80 browser | grep -v '^\S*\s*|\s\s*/' | tail -30
 	exit 1
 fi
 echo "== all checks passed"
