@@ -52,4 +52,19 @@ func TestBoardOnSharedServer(t *testing.T) {
 	if !strings.Contains(text, "Disconnect") {
 		t.Fatalf("a saved login can't be removed:\n%s", text)
 	}
+
+	// Ask your AI shows how to connect an agent to this board over HTTPS.
+	if _, err := svc.SaveProfile(context.Background(), "# About me\nGo developer.\n\n# What I'm looking for\nBackend roles.\n"); err != nil {
+		t.Fatal(err)
+	}
+	j, err := svc.AddJob(context.Background(), service.NewJob{Title: "Go Engineer", Company: "Duck Co", JD: "Go."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page.MustEval(`id => askAI("cv", String(id))`, j.ID)
+	page.MustWait(`() => !document.getElementById("askConnect").hidden`)
+	cmd := page.MustElement("#askConnectCmd").MustText()
+	if !strings.Contains(cmd, "claude mcp add --transport http braveduck "+ts.URL+"/mcp") || !strings.Contains(cmd, "alice<b>:YOUR_PASSWORD") {
+		t.Fatalf("connect command = %q", cmd)
+	}
 }

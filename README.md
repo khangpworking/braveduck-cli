@@ -147,8 +147,9 @@ their own board, with their own data. Logins are handled by
 [Authelia](https://www.authelia.com) behind [Caddy](https://caddyserver.com)
 (HTTPS from Let's Encrypt); [deploy/hosted](deploy/hosted/README.md) has the
 Docker Compose setup, scripts to add people, and a test of the whole chain.
-Job-site logins and assisted apply open windows on your own screen, so they
-stay on braveduck running on your computer.
+AI agents connect to `https://…/mcp` with the person's own login. Job-site
+logins and assisted apply open windows on your own screen, so they stay on
+braveduck running on your computer.
 
 ## Why
 

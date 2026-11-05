@@ -89,8 +89,19 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
   that the person must see and use; on a server that window would open where
   nobody can see it. The board says so and offers neither. To apply through
   your accounts, run braveduck on your own computer.
-- **The MCP server** (`braveduck mcp`, for AI agents) runs only on your own
-  computer: it talks over stdin, not the network.
+- **AI agents** connect over HTTPS to `https://BOARD_DOMAIN/mcp` with the
+  person's own login (HTTP Basic, checked by Authelia like the login page,
+  lock-out included). In Claude Code:
+
+  ```bash
+  claude mcp add --transport http braveduck https://jobs.example.com/mcp \
+    --header "Authorization: Basic $(printf '%s' 'alice:HER_PASSWORD' | base64)"
+  ```
+
+  The board's **Ask your AI** window shows this command with the right
+  address. Tools that read files on the machine braveduck runs on
+  (`upload_cv`) or open windows there (`connect_platform`, `apply_job`) are
+  left out; upload the CV on the board instead.
 - **Session keys** are a file in each user's folder, never the server's
   keychain or a shared passphrase, so one user's saved logins can't be opened
   with another's key.

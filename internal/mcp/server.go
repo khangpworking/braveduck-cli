@@ -107,8 +107,17 @@ func NewServer(svc *service.Service) *mcp.Server {
 	} {
 		addStub(srv, name)
 	}
+	if svc.Hosted() != nil {
+		srv.RemoveTools(localOnlyTools...)
+	}
 	return srv
 }
+
+// localOnlyTools only make sense with braveduck on the user's own computer:
+// upload_cv reads a file path on the machine braveduck runs on (on a shared
+// server, another user's files), and the others open a browser window there.
+// A shared server leaves them out; the board uploads CVs instead.
+var localOnlyTools = []string{"upload_cv", "connect_platform", "apply_job", "confirm_applied"}
 
 // --- annotations ---
 
@@ -393,6 +402,9 @@ type uploadCVIn struct {
 }
 
 func (t tools) uploadCV(ctx context.Context, in uploadCVIn) (service.BaseCV, error) {
+	if t.svc.Hosted() != nil { // never registered there; refuse all the same
+		return service.BaseCV{}, service.ErrHosted
+	}
 	fi, err := os.Stat(in.Path)
 	if err != nil {
 		return service.BaseCV{}, fmt.Errorf("%w: %w", service.ErrInvalid, err)
