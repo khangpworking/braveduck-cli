@@ -15,6 +15,8 @@ import (
 	"time"
 	"unicode"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/khangpworking/braveduck-cli/internal/core/apply"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
@@ -64,6 +66,15 @@ func (s *Service) ListJobs(ctx context.Context, f ListFilter) ([]jobs.Job, error
 	list, err := s.st.List(ctx, f)
 	if list == nil {
 		list = []jobs.Job{}
+	}
+	if words := strings.Fields(searchFold(f.Query)); len(words) > 0 {
+		kept := list[:0]
+		for _, j := range list {
+			if matchesAll(j, words) {
+				kept = append(kept, j)
+			}
+		}
+		list = kept
 	}
 	maxKM := s.maxKM(ctx)
 	for i := range list {
@@ -511,4 +522,32 @@ func notFound(err error) error {
 // too, so a client hanging up mid-request doesn't lose the log line.
 func (s *Service) logEvent(ctx context.Context, typ, message string) {
 	_ = s.st.LogEvent(context.WithoutCancel(ctx), typ, message, s.now())
+}
+
+// matchesAll: every search word appears in the job's title, company,
+// location, skills, salary, notes or source — the board's search box rule.
+func matchesAll(j jobs.Job, words []string) bool {
+	hay := searchFold(strings.Join([]string{j.Title, j.Company, j.Location, j.Skills, j.Salary, j.Notes, j.DiscoverySource}, " "))
+	for _, w := range words {
+		if !strings.Contains(hay, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// searchFold lowercases and drops Vietnamese accents, so "ky su" finds
+// "Kỹ sư" and "da nang" finds "Đà Nẵng".
+func searchFold(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		if r == 'đ' || r == 'Đ' {
+			r = 'd'
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }
