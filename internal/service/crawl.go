@@ -118,7 +118,12 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 	cs.mu.Unlock()
 	defer func() { cs.mu.Lock(); delete(cs.running, source); cs.mu.Unlock() }()
 
+	release, err := takeSiteTurn(ctx, source)
+	if err != nil {
+		return CrawlResult{Source: source}, err
+	}
 	res, err := s.crawlOnce(ctx, c)
+	release()
 	if err != nil {
 		_ = s.ReportCrawl(ctx, source, false, err.Error())
 		return res, err
@@ -130,6 +135,24 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 		s.logEvent(ctx, "added", fmt.Sprintf("%s: %d new job(s)", source, res.Added))
 	}
 	return res, nil
+}
+
+// siteTurns lets one crawl of each job site run at a time across the whole
+// process: on a shared server every user's service crawls the same sites,
+// and the sites should see one polite crawler, not one per user.
+var siteTurns sync.Map // source → chan struct{} (capacity 1)
+
+// takeSiteTurn waits until no other crawl of source runs in this process;
+// the returned func ends the turn.
+func takeSiteTurn(ctx context.Context, source string) (func(), error) {
+	v, _ := siteTurns.LoadOrStore(source, make(chan struct{}, 1))
+	turn := v.(chan struct{})
+	select {
+	case turn <- struct{}{}:
+		return func() { <-turn }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *Service) crawlOnce(ctx context.Context, c crawl.Crawler) (CrawlResult, error) {
