@@ -52,7 +52,8 @@ visible-window features (job-site login, assisted apply), seals sessions with
 a key file per user (never the OS keychain or a shared passphrase), and all
 users share a cap on running browsers. `/mcp` is each user's MCP server over
 Streamable HTTP (stateless, cross-origin protected), without the tools that
-read server files or open windows. With `BRAVEDUCK_BROWSER_SERVICE` set,
+read server files or open windows; it skips Authelia and takes the agent key
+the user made on the board (`<user>:<random>`, only its hash stored). With `BRAVEDUCK_BROWSER_SERVICE` set,
 every browser runs in go-rod's browser service (its own container in
 `deploy/hosted`) instead of beside the users' data. Setup and an end-to-end test of the
 chain: `deploy/hosted`.

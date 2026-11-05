@@ -36,10 +36,14 @@ BRAVEDUCK_MAX_USERS=50
 BRAVEDUCK_MAX_BROWSERS=2
 # TYPESAFE_API_KEY=   # optional, see compose.yaml
 BRAVEDUCK_JEV_DAILY_LIMIT=50
+BRAVEDUCK_MAX_JOBS_PER_USER=5000
+BRAVEDUCK_MEM_LIMIT=2g
 # Authelia runs as you, so authelia/ stays yours (add-user.sh writes to it).
 PUID=$(id -u)
 PGID=$(id -g)
 ENV
+
+chmod 600 .env # it may hold TYPESAFE_API_KEY
 
 # The secrets directory is private; the files are readable inside the
 # containers (compose mounts them as they are on disk).
@@ -53,6 +57,7 @@ for name in proxy_secret session_secret storage_encryption_key jwt_secret; do
 done
 
 [ -e authelia/users_database.yml ] || printf 'users:\n' >authelia/users_database.yml
+chmod 700 authelia # password hashes, and one-time codes in notification.txt
 
 echo "Done. Next:"
 echo "  1. Point $board and $auth (DNS A/AAAA records) at this server."

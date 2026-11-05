@@ -190,8 +190,12 @@
           braveduck doesn't run an AI itself. In <strong>Claude Code</strong> (with braveduck connected), paste this:
         </p>
         <div id="askConnect" hidden style="font-size: 12px; color: var(--muted); margin: 0 0 8px 0;">
-          Connect Claude Code to this board once (in a terminal, with your login's password):
-          <pre id="askConnectCmd" style="white-space: pre-wrap; background: var(--hairline); padding: 8px; border-radius: 6px; margin: 4px 0;"></pre>
+          <span id="askConnectText">Connect Claude Code to this board once, with a key for your agent (not your password):</span>
+          <pre id="askConnectCmd" hidden style="white-space: pre-wrap; background: var(--hairline); padding: 8px; border-radius: 6px; margin: 4px 0;"></pre>
+          <div style="display:flex; gap:6px; margin-top: 4px;">
+            <button class="btn-secondary btn-sm" id="agentKeyNew">Make a key for your agent</button>
+            <button class="btn-secondary btn-sm" id="agentKeyRevoke" hidden>Remove the key</button>
+          </div>
         </div>
         <pre id="askPrompt" style="white-space: pre-wrap; background: var(--hairline); padding: 8px; border-radius: 6px; font-size: 12px; margin: 0 0 6px 0;"></pre>
         <div style="display:flex; gap:6px; margin-bottom: 12px;">

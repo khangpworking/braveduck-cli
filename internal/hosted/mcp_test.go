@@ -13,29 +13,41 @@ import (
 	"github.com/khangpworking/braveduck-cli/internal/service"
 )
 
-// asUser is what the proxy adds to an agent's requests once it has logged in.
-type asUser struct {
-	user   string
-	secret string
-}
+// withKey is an agent's request as the proxy passes it on: the agent's key,
+// plus the proxy's secret.
+type withKey struct{ key string }
 
-func (a asUser) RoundTrip(r *http.Request) (*http.Response, error) {
+func (a withKey) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
-	r.Header.Set(SecretHeader, a.secret)
-	r.Header.Set("Remote-User", a.user)
+	r.Header.Set(SecretHeader, secret)
+	r.Header.Set("Authorization", "Bearer "+a.key)
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-func connectMCP(t *testing.T, url, user string) *mcp.ClientSession {
+// agentKey opens user's board and makes their agent key, as on the board.
+func agentKey(t *testing.T, s *Server, user string) string {
+	t.Helper()
+	tn, err := s.user(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := tn.svc.NewAgentKey(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
+}
+
+func connectMCP(t *testing.T, url, key string) *mcp.ClientSession {
 	t.Helper()
 	c := mcp.NewClient(&mcp.Implementation{Name: "test-agent", Version: "1"}, nil)
 	cs, err := c.Connect(context.Background(), &mcp.StreamableClientTransport{
 		Endpoint:   url + MCPPath,
-		HTTPClient: &http.Client{Transport: asUser{user, secret}},
+		HTTPClient: &http.Client{Transport: withKey{key}},
 		MaxRetries: -1,
 	}, nil)
 	if err != nil {
-		t.Fatalf("%s connects: %v", user, err)
+		t.Fatalf("connect with %q: %v", key, err)
 	}
 	t.Cleanup(func() { cs.Close() })
 	return cs
@@ -48,7 +60,7 @@ func TestMCPOverHTTPPerUser(t *testing.T) {
 	ts := httptest.NewServer(s)
 	defer ts.Close()
 	ctx := context.Background()
-	alice, bob := connectMCP(t, ts.URL, "alice"), connectMCP(t, ts.URL, "bob")
+	alice, bob := connectMCP(t, ts.URL, agentKey(t, s, "alice")), connectMCP(t, ts.URL, agentKey(t, s, "bob"))
 
 	tools, err := alice.ListTools(ctx, nil)
 	if err != nil {
@@ -96,12 +108,48 @@ func TestMCPOverHTTPPerUser(t *testing.T) {
 	}
 }
 
-// A page alice visits can't drive her agent endpoint with her login cookie.
+// /mcp needs the user's agent key: a login (Remote-User), someone else's
+// key, a key with another user's name on it or a revoked key get nothing.
+func TestMCPNeedsTheAgentKey(t *testing.T) {
+	s := newServer(t, t.TempDir(), 5)
+	alice := agentKey(t, s, "alice")
+	bob := agentKey(t, s, "bob")
+	_, aliceSecret, _ := strings.Cut(alice, ":")
+	tn, _ := s.user("carol")
+	revoked, _ := tn.svc.NewAgentKey(context.Background())
+	tn.svc.RevokeAgentKey(context.Background())
+	for name, h := range map[string]map[string]string{
+		"logged in, no key":        {"Remote-User": "alice"},
+		"no secret":                {"Authorization": "Bearer " + alice, SecretHeader: ""},
+		"bob's name, alice's key":  {"Authorization": "Bearer bob:" + aliceSecret},
+		"bob's key, alice's login": {"Authorization": "Bearer " + bob + "x", "Remote-User": "alice"},
+		"revoked":                  {"Authorization": "Bearer " + revoked},
+		"unknown user":             {"Authorization": "Bearer dave:" + aliceSecret},
+	} {
+		r := httptest.NewRequest("POST", MCPPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		r.Header.Set(SecretHeader, secret)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		for k, v := range h {
+			r.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
+			t.Errorf("%s: %d, want 401/403", name, w.Code)
+		}
+	}
+	if got := s.Users(); slices.Contains(got, "dave") {
+		t.Error("an agent key opened a board for an unknown user")
+	}
+}
+
+// A page alice visits can't drive her agent endpoint from her browser.
 func TestMCPRefusesCrossSiteBrowsers(t *testing.T) {
 	s := newServer(t, t.TempDir(), 5)
 	r := httptest.NewRequest("POST", MCPPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	r.Header.Set(SecretHeader, secret)
-	r.Header.Set("Remote-User", "alice")
+	r.Header.Set("Authorization", "Bearer "+agentKey(t, s, "alice"))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json, text/event-stream")
 	r.Header.Set("Sec-Fetch-Site", "cross-site")

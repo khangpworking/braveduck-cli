@@ -19,6 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   openBtn.addEventListener("click", openDrawer);
+  document.getElementById("agentKeyNew").addEventListener("click", newAgentKey);
+  document.getElementById("agentKeyRevoke").addEventListener("click", revokeAgentKey);
   closeBtn.addEventListener("click", closeDrawer);
   overlay.addEventListener("click", closeDrawer);
 
