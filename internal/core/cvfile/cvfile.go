@@ -7,6 +7,7 @@ package cvfile
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -65,13 +66,14 @@ func Detect(name string, data []byte) (Kind, error) {
 }
 
 // Text extracts the CV's text, tidied: trimmed lines, at most one blank line
-// in a row. ErrNoText when there's (almost) none.
-func Text(k Kind, data []byte) (string, error) {
+// in a row. ErrNoText when there's (almost) none. PDFs are read in a child
+// process with memory and time limits (sandbox.go).
+func Text(ctx context.Context, k Kind, data []byte) (string, error) {
 	var raw string
 	var err error
 	switch k {
 	case PDF:
-		raw, err = pdfText(data)
+		raw, err = pdfTextSandboxed(ctx, data)
 	case DOCX:
 		raw, err = docxText(data)
 	case HTML:

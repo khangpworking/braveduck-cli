@@ -30,7 +30,7 @@ for u in alice bob; do
 	BRAVEDUCK_NEW_PASSWORD="$u-password-123" ./add-user.sh "$u" "$u" "$u@example.com" >/dev/null
 done
 {
-	printf '{\n\tlocal_certs\n}\n'
+	printf '{\n\tlocal_certs\n\tskip_install_trust\n}\n'
 	sed '/^{$/,/^}$/d' Caddyfile
 } >Caddyfile.test
 cat >compose.test.yaml <<'YAML'

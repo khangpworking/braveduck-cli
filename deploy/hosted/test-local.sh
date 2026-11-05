@@ -39,7 +39,7 @@ for s in proxy_secret session_secret storage_encryption_key jwt_secret; do
 done
 # Port 8443 instead of 443, certificates from Caddy's own local CA.
 {
-	printf '{\n\tlocal_certs\n\thttp_port 8081\n\thttps_port 8443\n\tadmin off\n}\n'
+	printf '{\n\tlocal_certs\n\tskip_install_trust\n\thttp_port 8081\n\thttps_port 8443\n\tadmin off\n}\n'
 	sed '/^{$/,/^}$/d' "$here/Caddyfile"
 } >Caddyfile
 sed -e "s#/config/#$work/config/#" \
@@ -66,12 +66,19 @@ pids="$pids $!"
 HOME=$work TYPESAFE_API_KEY="" ./braveduck serve --users "$work/users" --addr 127.0.0.1:8096 \
 	--proxy-secret-file secrets/proxy_secret --logout-url https://auth.braveduck.test:8443/logout >braveduck.log 2>&1 &
 pids="$pids $!"
-sleep 4
 
 # c is curl reaching both test domains on this machine (Caddy's local CA).
 c() { curl --resolve jobs.braveduck.test:8443:127.0.0.1 --resolve auth.braveduck.test:8443:127.0.0.1 -sk "$@"; }
 J=https://jobs.braveduck.test:8443
 A=https://auth.braveduck.test:8443
+# Wait until Caddy, Authelia and braveduck all answer (up to a minute).
+for _ in $(seq 1 60); do
+	if [ "$(c -o /dev/null -w '%{http_code}' "$J/")" = 302 ] && curl -s -o /dev/null http://127.0.0.1:8096/healthz; then
+		break
+	fi
+	sleep 1
+done
+
 fails=0
 check() { # check NAME WANT GOT
 	if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: want $2, got $3"; fails=$((fails + 1)); fi
@@ -98,7 +105,7 @@ check "alice sees her job" 1 "$(count alice "$ta")"
 check "bob doesn't see it" 0 "$(count bob "$tb")"
 check "bob can't pose as alice with Remote-User" bob "$(c -b bob.jar -H 'Remote-User: alice' -H "Authorization: Bearer $tb" "$J/api/setup" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hosted"]["user"])')"
 check "alice's token doesn't open bob's board" 401 "$(c -b bob.jar -H "Authorization: Bearer $ta" -o /dev/null -w '%{http_code}' "$J/api/jobs")"
-check "users' data dirs are private" 700 "$(stat -c %a users/alice)"
+check "users' data dirs are private" 700 "$(stat -c %a users/alice 2>/dev/null || true)"
 mcp() { # mcp AUTHORIZATION: what an AI agent gets listing its tools
 	c -H "Authorization: $1" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
 		-d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$J/mcp"

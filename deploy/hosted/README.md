@@ -25,8 +25,10 @@ braveduck doesn't handle logins itself; two well-known tools do:
   and `auth.hunt.example.com` (cookie domain `hunt.example.com`): the login
   cookie is sent to every name under that domain, so another site there could
   read it.
-- About 1 GB of memory for every two crawls running at once (see
-  `BRAVEDUCK_MAX_BROWSERS`).
+- Memory: each user's board takes about 3 MB while idle (measured: 50 users
+  ≈ 170 MB, 200 users ≈ 580 MB for braveduck), plus up to 2 GB for the
+  browser container while it renders pages (`BRAVEDUCK_MAX_BROWSERS` at
+  once). A 2-4 GB server is plenty for a few dozen people.
 
 ## Set up
 

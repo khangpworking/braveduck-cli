@@ -3,6 +3,7 @@ package cvfile
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -31,7 +32,7 @@ func read(t *testing.T, name string, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return Text(k, data)
+	return Text(context.Background(), k, data)
 }
 
 func TestTextFromEachFormat(t *testing.T) {
