@@ -81,6 +81,7 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
 | `BRAVEDUCK_MAX_USERS` | 50 | New people past this are told the server is full. |
 | `BRAVEDUCK_MAX_BROWSERS` | 2 | Crawls, page fetches and PDFs running at once, for everyone together. |
 | `TYPESAFE_API_KEY` | empty | Jev rates every user's new jobs with this key, so it pays for all of them. Empty: people rate with their own AI agents. |
+| `BRAVEDUCK_JEV_DAILY_LIMIT` | 50 | Jev calls (ratings and lead checks) per user per day on that key; 0 = no limit. Past it, rating waits for the next day. |
 
 ## What works differently on a shared server
 

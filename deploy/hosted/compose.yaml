@@ -58,6 +58,7 @@ services:
       - --proxy-secret-file=/run/secrets/proxy_secret
       - --max-users=${BRAVEDUCK_MAX_USERS:-50}
       - --max-browsers=${BRAVEDUCK_MAX_BROWSERS:-2}
+      - --jev-daily-limit=${BRAVEDUCK_JEV_DAILY_LIMIT:-50}
       - --logout-url=https://${AUTH_DOMAIN}/logout
     volumes:
       - braveduck_data:/data # one folder per user under /data/users

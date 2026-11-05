@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jev"
@@ -30,6 +31,41 @@ type jevAsker interface {
 
 // SetJev replaces the Jev client (tests).
 func (s *Service) SetJev(a jevAsker) { s.jev = a }
+
+// ErrJevLimit means today's Jev ratings are used up (a shared server's
+// budget per user); more are possible tomorrow.
+var ErrJevLimit = fmt.Errorf("%w: today's Jev ratings are used up on this server — more tomorrow, or rate with your own AI agent", ErrInvalid)
+
+// SetJevDailyLimit caps Jev calls per day for this service (on a shared
+// server the admin's key pays for every user); 0 means no cap.
+func (s *Service) SetJevDailyLimit(n int) { s.jevDaily = n }
+
+// JevDailyLimit is the cap SetJevDailyLimit set; 0 means none.
+func (s *Service) JevDailyLimit() int { return s.jevDaily }
+
+// jevCallsKey is the settings key of today's Jev call count ("date count").
+const jevCallsKey = "jev_calls"
+
+// takeJevCall counts one Jev call against today's limit, or returns
+// ErrJevLimit when none are left.
+func (s *Service) takeJevCall(ctx context.Context) error {
+	if s.jevDaily <= 0 {
+		return nil
+	}
+	s.jevMu.Lock()
+	defer s.jevMu.Unlock()
+	today := s.now().Format("2006-01-02")
+	used := 0
+	if v, ok, err := s.st.Setting(ctx, jevCallsKey); err != nil {
+		return err
+	} else if date, n, found := strings.Cut(v, " "); ok && found && date == today {
+		used, _ = strconv.Atoi(n)
+	}
+	if used >= s.jevDaily {
+		return ErrJevLimit
+	}
+	return s.st.SetSetting(ctx, jevCallsKey, fmt.Sprintf("%s %d", today, used+1))
+}
 
 // loadJevKey finds the API key; tests replace it so they can never reach the
 // real API with the user's key.
@@ -127,6 +163,9 @@ func (s *Service) JevRate(ctx context.Context, id int64) (jobs.Job, error) {
 	if err != nil {
 		return jobs.Job{}, err
 	}
+	if err := s.takeJevCall(ctx); err != nil {
+		return jobs.Job{}, err
+	}
 	ans, err := c.Ask(ctx, jevState(b), jevQuestions)
 	if err != nil {
 		return jobs.Job{}, err
@@ -168,8 +207,8 @@ func (s *Service) runJevRate(ctx context.Context) (CrawlResult, error) {
 	}
 	n, err := s.JevRateQueue(ctx, 20)
 	res.Found, res.Added = n, n
-	if errors.Is(err, ErrProfileEmpty) {
-		return res, nil // nothing to judge against yet; not a failure of Jev
+	if errors.Is(err, ErrProfileEmpty) || errors.Is(err, ErrJevLimit) {
+		return res, nil // nothing to judge against yet, or done for today; not a failure of Jev
 	}
 	return res, err
 }

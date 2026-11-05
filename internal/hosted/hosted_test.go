@@ -169,3 +169,20 @@ func TestOptionsAreChecked(t *testing.T) {
 		}
 	}
 }
+
+// Each user's board gets the server's Jev budget.
+func TestJevBudgetPerUser(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	s, err := New(context.Background(), Options{Dir: t.TempDir(), UserHeader: "Remote-User", Secret: secret, MaxUsers: 2, JevDaily: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	tn, err := s.user("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tn.svc.JevDailyLimit(); got != 7 {
+		t.Fatalf("alice's Jev limit = %d, want 7", got)
+	}
+}
