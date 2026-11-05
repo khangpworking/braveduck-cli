@@ -109,4 +109,10 @@ the compose network.
 official Caddy and Authelia release binaries (checksums verified), braveduck
 built from this checkout, and this folder's configuration. It checks logins,
 that users can't see or pose as each other, and that braveduck refuses
-requests that bypass Caddy. CI runs it on every change, and builds the image.
+requests that bypass Caddy.
+
+`./test-compose.sh` starts this folder's Docker Compose stack for real
+(images built, `setup.sh` and `add-user.sh` run, Caddy on its local CA instead
+of Let's Encrypt) and checks it from outside, including that braveduck can
+run Chromium in its container. It refuses to run in a folder that is already
+set up. CI runs both on every change.

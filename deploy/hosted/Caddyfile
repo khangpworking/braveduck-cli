@@ -9,13 +9,24 @@
 	email {$ACME_EMAIL}
 }
 
+# HTTPS only from the first visit on, no MIME sniffing, no referrers sent on.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+}
+
 # The login portal.
 {$AUTH_DOMAIN} {
+	import security_headers
 	reverse_proxy {$AUTH_UPSTREAM:authelia:9091}
 }
 
 # The board. `route` keeps the directives in the order written.
 {$BRAVEDUCK_DOMAIN} {
+	import security_headers
 	route {
 		# Only Authelia may name the user: drop whatever the browser sent.
 		request_header -Remote-User
