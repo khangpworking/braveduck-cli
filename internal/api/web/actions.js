@@ -97,15 +97,44 @@ async function renderSetup() {
   });
 }
 
-// On a shared server the agent reaches this board's MCP over HTTPS with the
-// user's own login (Basic auth, checked by the login service).
-function renderAgentConnect() {
+// On a shared server the agent reaches this board's MCP over HTTPS with a
+// key made here (shown once; the server keeps only its hash).
+async function renderAgentConnect() {
   const hosted = AppState.setup && AppState.setup.hosted;
   document.getElementById("askConnect").hidden = !hosted;
   if (!hosted) return;
-  const login = `${hosted.user}:YOUR_PASSWORD`.replace(/'/g, "");
-  document.getElementById("askConnectCmd").textContent =
-    `claude mcp add --transport http braveduck ${location.origin}/mcp \\\n  --header "Authorization: Basic $(printf '%s' '${login}' | base64)"`;
+  document.getElementById("askConnectCmd").hidden = true;
+  try {
+    const st = await APIClient.get("agent-key");
+    document.getElementById("agentKeyRevoke").hidden = !st.exists;
+    document.getElementById("agentKeyNew").textContent = st.exists ? "Make a new key (the old one stops working)" : "Make a key for your agent";
+  } catch {}
+}
+
+async function newAgentKey() {
+  let res;
+  try {
+    res = await APIClient.post("agent-key");
+  } catch (e) {
+    showToast(e.message, "error");
+    return;
+  }
+  const cmd = document.getElementById("askConnectCmd");
+  cmd.textContent = `claude mcp add --transport http braveduck ${location.origin}/mcp \\\n  --header "Authorization: Bearer ${res.key}"`;
+  cmd.hidden = false;
+  document.getElementById("askConnectText").textContent = "Run this once in a terminal. The key is shown only now — copy it:";
+  document.getElementById("agentKeyRevoke").hidden = false;
+}
+
+async function revokeAgentKey() {
+  try {
+    await APIClient.del("agent-key");
+  } catch (e) {
+    showToast(e.message, "error");
+    return;
+  }
+  showToast("The agent key is removed", "success");
+  renderAgentConnect();
 }
 
 // On a shared server: who is logged in, and the login service's log-out page.

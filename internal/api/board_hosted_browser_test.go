@@ -63,8 +63,17 @@ func TestBoardOnSharedServer(t *testing.T) {
 	}
 	page.MustEval(`id => askAI("cv", String(id))`, j.ID)
 	page.MustWait(`() => !document.getElementById("askConnect").hidden`)
+	page.MustElement("#agentKeyNew").MustEval(`() => this.click()`)
+	page.MustWait(`() => !document.getElementById("askConnectCmd").hidden`)
 	cmd := page.MustElement("#askConnectCmd").MustText()
-	if !strings.Contains(cmd, "claude mcp add --transport http braveduck "+ts.URL+"/mcp") || !strings.Contains(cmd, "alice<b>:YOUR_PASSWORD") {
+	if !strings.Contains(cmd, "claude mcp add --transport http braveduck "+ts.URL+"/mcp") {
 		t.Fatalf("connect command = %q", cmd)
 	}
+	_, key, ok := strings.Cut(cmd, "Authorization: Bearer ")
+	key = strings.TrimSuffix(strings.TrimSpace(key), `"`)
+	if !ok || !strings.HasPrefix(key, "alice<b>:") || !svc.CheckAgentKey(context.Background(), key) {
+		t.Fatalf("the key shown (%q) isn't the board's agent key", key)
+	}
+	page.MustElement("#agentKeyRevoke").MustEval(`() => this.click()`)
+	waitUntil(t, func() bool { return !svc.CheckAgentKey(context.Background(), key) }, "the key still works after Remove")
 }

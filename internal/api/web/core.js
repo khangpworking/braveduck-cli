@@ -183,6 +183,20 @@ const APIClient = {
     return out;
   },
 
+  async get(path) {
+    const res = await apiFetch(`${API_BASE}/${path}`);
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
+  },
+
+  async del(path) {
+    const res = await apiFetch(`${API_BASE}/${path}`, { method: "DELETE" });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
+  },
+
   async put(path, body) {
     const res = await apiFetch(`${API_BASE}/${path}`, {
       method: "PUT",

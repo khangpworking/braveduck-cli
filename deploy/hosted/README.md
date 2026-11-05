@@ -21,6 +21,10 @@ braveduck doesn't handle logins itself; two well-known tools do:
 - A domain with two names pointing (DNS A/AAAA records) at the server, for
   example `jobs.example.com` (the board) and `auth.example.com` (the login
   page). They must be siblings under one domain: the login cookie covers both.
+  **Put both under a domain nothing else uses**, e.g. `board.hunt.example.com`
+  and `auth.hunt.example.com` (cookie domain `hunt.example.com`): the login
+  cookie is sent to every name under that domain, so another site there could
+  read it.
 - About 1 GB of memory for every two crawls running at once (see
   `BRAVEDUCK_MAX_BROWSERS`).
 
@@ -44,10 +48,14 @@ board. The board shows who is logged in, with a **Log out** link.
 - **Add someone:** `./add-user.sh USERNAME 'Full Name' EMAIL`. No restart:
   Authelia notices the change. Their board is created the first time they log
   in.
-- **Remove someone:** delete their entry from `authelia/users_database.yml`.
-  Their board data stays in the `braveduck_data` volume under `users/USERNAME`
-  until you delete it.
-- **Reset a password:** delete the person's entry and add them again.
+- **Remove someone:** `./remove-user.sh USERNAME`. They can't log in any
+  more, and their board is archived as `users/.removed-USERNAME-<time>` in the
+  `braveduck_data` volume (delete it there when you no longer need it), so
+  someone added later under the same name starts with an empty board.
+- **Reset a password:** edit their `password:` line in
+  `authelia/users_database.yml` with a new hash from
+  `docker run --rm authelia/authelia:4.39 authelia crypto hash generate argon2`
+  (removing and re-adding them would archive their board).
 - **Two-factor:** set `BRAVEDUCK_POLICY=two_factor` in `.env` and restart
   Authelia (`docker compose up -d`). People then register an authenticator app
   or passkey; the one-time codes for that land in
@@ -82,6 +90,8 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
 | `BRAVEDUCK_MAX_USERS` | 50 | New people past this are told the server is full. |
 | `BRAVEDUCK_MAX_BROWSERS` | 2 | Crawls, page fetches and PDFs running at once, for everyone together. |
 | `TYPESAFE_API_KEY` | empty | Jev rates every user's new jobs with this key, so it pays for all of them. Empty: people rate with their own AI agents. |
+| `BRAVEDUCK_MAX_JOBS_PER_USER` | 5000 | Jobs each board holds; past it, adding asks to delete old ones. |
+| `BRAVEDUCK_MEM_LIMIT` | 2g | Memory for the braveduck container (all users' boards). |
 | `BRAVEDUCK_JEV_DAILY_LIMIT` | 50 | Jev calls (ratings and lead checks) per user per day on that key; 0 = no limit. Past it, rating waits for the next day. |
 
 ## What works differently on a shared server
@@ -90,17 +100,17 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
   that the person must see and use; on a server that window would open where
   nobody can see it. The board says so and offers neither. To apply through
   your accounts, run braveduck on your own computer.
-- **AI agents** connect over HTTPS to `https://BOARD_DOMAIN/mcp` with the
-  person's own login (HTTP Basic, checked by Authelia like the login page,
-  lock-out included). In Claude Code:
+- **AI agents** connect over HTTPS to `https://BOARD_DOMAIN/mcp` with a key
+  each person makes on their board (**Ask your AI → Make a key for your
+  agent**), never their password. The board shows the command once, e.g.:
 
   ```bash
   claude mcp add --transport http braveduck https://jobs.example.com/mcp \
-    --header "Authorization: Basic $(printf '%s' 'alice:HER_PASSWORD' | base64)"
+    --header "Authorization: Bearer alice:3f9c…"
   ```
 
-  The board's **Ask your AI** window shows this command with the right
-  address. Tools that read files on the machine braveduck runs on
+  Only the key's hash is stored; making a new key or **Remove the key**
+  stops the old one. Tools that read files on the machine braveduck runs on
   (`upload_cv`) or open windows there (`connect_platform`, `apply_job`) are
   left out; upload the CV on the board instead.
 - **Session keys** are a file in each user's folder, never the server's
@@ -123,7 +133,8 @@ containers if your provider doesn't.
 braveduck takes the user's name from the `Remote-User` header, which Authelia
 sets after checking the login cookie. Caddy first deletes any `Remote-User`
 the browser sent, then adds a secret (`secrets/proxy_secret`) that braveduck
-checks on every request. A request that reaches braveduck any other way,
+checks on every request, and keeps the login cookie to itself. `/mcp` skips
+Authelia: there braveduck checks the agent key, which names its user. A request that reaches braveduck any other way,
 without the secret, is refused. braveduck's port is never published outside
 the compose network.
 
@@ -132,8 +143,8 @@ the compose network.
 `./test-local.sh` runs the whole chain on one machine without Docker: the
 official Caddy and Authelia release binaries (checksums verified), braveduck
 built from this checkout, and this folder's configuration. It checks logins,
-that users can't see or pose as each other, and that braveduck refuses
-requests that bypass Caddy.
+that users can't see or pose as each other, agent keys, and that braveduck
+refuses requests that bypass Caddy.
 
 `./test-compose.sh` starts this folder's Docker Compose stack for real
 (images built, `setup.sh` and `add-user.sh` run, Caddy on its local CA instead

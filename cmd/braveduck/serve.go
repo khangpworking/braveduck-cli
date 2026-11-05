@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/api"
@@ -33,6 +34,12 @@ func cmdServe(ctx context.Context, st *store.Store, svc *service.Service, args [
 	// Ctrl-C triggers a graceful shutdown.
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
+
+	// The board trusts whoever can load it (the page carries the API token),
+	// so it only listens on this machine. Several people: serve --users.
+	if host, _, err := net.SplitHostPort(*addr); err != nil || !isLoopbackListen(host) {
+		return fmt.Errorf("--addr %s: the board only listens on this machine (127.0.0.1 or localhost); to serve several people, see `serve --users` and deploy/hosted", *addr)
+	}
 
 	// Bind first so we can report the real URL (and fail fast on a busy port).
 	ln, err := net.Listen("tcp", *addr)
@@ -75,6 +82,15 @@ func cmdServe(ctx context.Context, st *store.Store, svc *service.Service, args [
 		return err
 	}
 	return nil
+}
+
+// isLoopbackListen reports whether a listen host is this machine only.
+func isLoopbackListen(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // openBrowser best-effort launches the OS default browser; failures are silent

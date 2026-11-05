@@ -13,10 +13,11 @@
 // braveduck over it: a service with its scheduler, and the same board and
 // API as on a laptop, with its own per-run token. Users never share data.
 //
-// /mcp is that user's MCP server over Streamable HTTP, for their AI agent
-// (which logs in to the proxy with the user's own credentials). It refuses
-// cross-site browser requests, so a page the user visits can't drive it with
-// their login cookie.
+// /mcp is that user's MCP server over Streamable HTTP, for their AI agent.
+// The proxy doesn't log agents in (that would put the user's password in
+// the agent's config); the agent sends the key the user made on their board
+// ("<user>:<random>"), which says whose MCP server it is. It also refuses
+// cross-site browser requests.
 package hosted
 
 import (
@@ -27,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -147,6 +149,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "braveduck only answers through its login proxy")
 		return
 	}
+	if r.URL.Path == MCPPath {
+		s.serveAgent(w, r)
+		return
+	}
 	name := strings.ToLower(strings.TrimSpace(r.Header.Get(s.opts.UserHeader)))
 	if name == "" {
 		writeErr(w, http.StatusUnauthorized, "not logged in")
@@ -162,7 +168,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, err.Error())
 		return
 	case err != nil:
-		writeErr(w, http.StatusInternalServerError, "can't open your board: "+err.Error())
+		log.Printf("hosted: open %s's board: %v", name, err) // paths stay in the server's log
+		writeErr(w, http.StatusInternalServerError, "can't open your board right now — tell the admin")
 		return
 	}
 
@@ -173,11 +180,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2.Host = "localhost"
 	r2.Header.Del(SecretHeader)
 	r2.Header.Del(s.opts.UserHeader)
-	if r2.URL.Path == MCPPath {
-		t.mcp.ServeHTTP(w, r2)
+	t.handler.ServeHTTP(w, r2)
+}
+
+// serveAgent answers an AI agent at /mcp, for the user whose agent key it
+// sends. Keys only exist for users with a board, so no board is created here.
+func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request) {
+	key, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	name, _, _ := strings.Cut(key, ":")
+	var t *tenant
+	if validUser.MatchString(name) {
+		s.mu.Lock()
+		t = s.users[name]
+		s.mu.Unlock()
+	}
+	if t == nil || !t.svc.CheckAgentKey(r.Context(), key) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="braveduck"`)
+		writeErr(w, http.StatusUnauthorized, "this needs your agent key: make one on your board (Ask your AI)")
 		return
 	}
-	t.handler.ServeHTTP(w, r2)
+	r2 := r.Clone(browser.WithOwner(r.Context(), name))
+	r2.Host = "localhost"
+	r2.Header.Del(SecretHeader)
+	r2.Header.Del(s.opts.UserHeader)
+	r2.Header.Del("Authorization")
+	t.mcp.ServeHTTP(w, r2)
 }
 
 var errFull = errors.New("this braveduck server has no room for another user — ask its admin")

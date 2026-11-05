@@ -24,25 +24,45 @@
 	reverse_proxy {$AUTH_UPSTREAM:authelia:9091}
 }
 
+# Only Authelia may name the user: drop whatever the client sent.
+(drop_identity) {
+	request_header -Remote-User
+	request_header -Remote-Groups
+	request_header -Remote-Email
+	request_header -Remote-Name
+	request_header -X-Braveduck-Proxy-Secret
+}
+
+# To braveduck: the secret proves the request came through here; the login
+# cookie stays behind (braveduck doesn't need it).
+(to_braveduck) {
+	reverse_proxy {$BRAVEDUCK_UPSTREAM:braveduck:8080} {
+		header_up X-Braveduck-Proxy-Secret {file.{$SECRETS_DIR:/run/secrets}/proxy_secret}
+		header_up -Cookie
+	}
+}
+
 # The board. `route` keeps the directives in the order written.
 {$BRAVEDUCK_DOMAIN} {
 	import security_headers
-	route {
-		# Only Authelia may name the user: drop whatever the browser sent.
-		request_header -Remote-User
-		request_header -Remote-Groups
-		request_header -Remote-Email
-		request_header -Remote-Name
-		request_header -X-Braveduck-Proxy-Secret
 
-		forward_auth {$AUTH_UPSTREAM:authelia:9091} {
-			uri /api/authz/forward-auth
-			copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+	# AI agents: braveduck checks the agent key made on the user's board, so
+	# no password ever goes into an agent's config.
+	handle /mcp {
+		route {
+			import drop_identity
+			import to_braveduck
 		}
+	}
 
-		# The secret proves to braveduck that the request came through here.
-		reverse_proxy {$BRAVEDUCK_UPSTREAM:braveduck:8080} {
-			header_up X-Braveduck-Proxy-Secret {file.{$SECRETS_DIR:/run/secrets}/proxy_secret}
+	handle {
+		route {
+			import drop_identity
+			forward_auth {$AUTH_UPSTREAM:authelia:9091} {
+				uri /api/authz/forward-auth
+				copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+			}
+			import to_braveduck
 		}
 	}
 }

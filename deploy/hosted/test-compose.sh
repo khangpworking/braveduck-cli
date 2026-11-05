@@ -83,6 +83,18 @@ check "the browser container holds no users' data" no "$(compose exec -T browser
 check "Authelia leaves authelia/ owned by the admin" "$(id -u)" "$(stat -c %u authelia/users_database.yml)"
 check "alice's board lives in her own private folder" 700 "$(compose exec -T braveduck sh -c 'test -s /data/users/alice/braveduck.db && stat -c %a /data/users/alice')"
 
+# Removing someone archives their board: the same name added later starts empty.
+c -b bob.jar -H "Authorization: Bearer $tb" -H 'Content-Type: application/json' -d '{"content":"Data Analyst at MoMo\nHồ Chí Minh"}' -o /dev/null "$J/api/jobs"
+./remove-user.sh bob >/dev/null
+compose up -d --wait --wait-timeout 120 >/dev/null 2>&1
+check "a removed user can't log in" 401 "$(login bob)"
+check "their board is archived" yes "$(compose exec -T braveduck sh -c 'ls -d /data/users/.removed-bob-* >/dev/null 2>&1 && test ! -e /data/users/bob' && echo yes || echo no)"
+BRAVEDUCK_NEW_PASSWORD=bob-password-123 ./add-user.sh bob bob bob@example.com >/dev/null
+sleep 2
+check "a new bob logs in" 200 "$(login bob)"
+tb2=$(token bob)
+check "and starts with an empty board" 0 "$(c -b bob.jar -H "Authorization: Bearer $tb2" "$J/api/jobs" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+
 if [ "$fails" -ne 0 ]; then
 	echo "== $fails check(s) failed; logs:"
 	compose logs --tail 20 caddy authelia braveduck
