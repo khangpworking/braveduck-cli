@@ -99,6 +99,13 @@ check "bob doesn't see it" 0 "$(count bob "$tb")"
 check "bob can't pose as alice with Remote-User" bob "$(c -b bob.jar -H 'Remote-User: alice' -H "Authorization: Bearer $tb" "$J/api/setup" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hosted"]["user"])')"
 check "alice's token doesn't open bob's board" 401 "$(c -b bob.jar -H "Authorization: Bearer $ta" -o /dev/null -w '%{http_code}' "$J/api/jobs")"
 check "users' data dirs are private" 700 "$(stat -c %a users/alice)"
+mcp() { # mcp CREDENTIALS: list the tools an AI agent sees, logging in with HTTP Basic
+	c -u "$1" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+		-d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$J/mcp"
+}
+check "alice's AI agent reaches her MCP with her login" yes "$(mcp alice:alice-password-123 | python3 -c 'import json,sys; n=[t["name"] for t in json.load(sys.stdin)["result"]["tools"]]; print("yes" if "submit_rating" in n else "no")')"
+check "the agent isn't offered upload_cv (it reads server files)" no "$(mcp alice:alice-password-123 | python3 -c 'import json,sys; n=[t["name"] for t in json.load(sys.stdin)["result"]["tools"]]; print("yes" if "upload_cv" in n else "no")')"
+check "an agent with a wrong password is refused" 401 "$(c -o /dev/null -w '%{http_code}' -u alice:wrong -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{}' "$J/mcp")"
 c -b alice.jar -c alice.jar -o /dev/null "$A/logout"
 check "after logging out the board is closed" 401 "$(c -b alice.jar -o /dev/null -w '%{http_code}' "$J/api/setup")"
 

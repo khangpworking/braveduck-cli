@@ -20,6 +20,7 @@ async function askAI(kind, id, model) {
     return;
   }
   askState = { kind, id, req };
+  renderAgentConnect();
   const titles = { rate: "Rate this job with your AI", cv: "Tailor your CV with your AI", draft: "Draft the email with your AI" };
   document.getElementById("askTitle").textContent = titles[kind];
   document.getElementById("askPrompt").textContent = req.prompt;
@@ -94,6 +95,17 @@ async function renderSetup() {
   card.querySelectorAll("button[data-setup]").forEach(btn => {
     btn.addEventListener("click", () => SETUP_STEPS.find(s => s.key === btn.dataset.setup).open());
   });
+}
+
+// On a shared server the agent reaches this board's MCP over HTTPS with the
+// user's own login (Basic auth, checked by the login service).
+function renderAgentConnect() {
+  const hosted = AppState.setup && AppState.setup.hosted;
+  document.getElementById("askConnect").hidden = !hosted;
+  if (!hosted) return;
+  const login = `${hosted.user}:YOUR_PASSWORD`.replace(/'/g, "");
+  document.getElementById("askConnectCmd").textContent =
+    `claude mcp add --transport http braveduck ${location.origin}/mcp \\\n  --header "Authorization: Basic $(printf '%s' '${login}' | base64)"`;
 }
 
 // On a shared server: who is logged in, and the login service's log-out page.

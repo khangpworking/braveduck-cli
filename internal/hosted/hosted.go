@@ -12,6 +12,11 @@
 // profile, CVs, backups and the session key) and a complete single-user
 // braveduck over it: a service with its scheduler, and the same board and
 // API as on a laptop, with its own per-run token. Users never share data.
+//
+// /mcp is that user's MCP server over Streamable HTTP, for their AI agent
+// (which logs in to the proxy with the user's own credentials). It refuses
+// cross-site browser requests, so a page the user visits can't drive it with
+// their login cookie.
 package hosted
 
 import (
@@ -32,13 +37,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/khangpworking/braveduck-cli/internal/api"
+	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 // SecretHeader carries the secret shared with the proxy.
 const SecretHeader = "X-Braveduck-Proxy-Secret"
+
+// MCPPath is where each user's MCP server answers.
+const MCPPath = "/mcp"
 
 // Options configures a Server.
 type Options struct {
@@ -67,6 +78,7 @@ type tenant struct {
 	st      *store.Store
 	svc     *service.Service
 	handler http.Handler
+	mcp     http.Handler
 	stopped chan struct{} // closed when the scheduler has returned
 }
 
@@ -159,6 +171,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2.Host = "localhost"
 	r2.Header.Del(SecretHeader)
 	r2.Header.Del(s.opts.UserHeader)
+	if r2.URL.Path == MCPPath {
+		t.mcp.ServeHTTP(w, r2)
+		return
+	}
 	t.handler.ServeHTTP(w, r2)
 }
 
@@ -206,7 +222,17 @@ func (s *Server) open(name string) (*tenant, error) {
 		st.Close()
 		return nil, err
 	}
-	t := &tenant{st: st, svc: svc, handler: api.Handler(st, svc, hex.EncodeToString(tok)), stopped: make(chan struct{})}
+	srv := mcpserver.NewServer(svc)
+	// Stateless: braveduck's tools never call back to the client, and no
+	// sessions pile up in memory.
+	agent := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	t := &tenant{
+		st: st, svc: svc,
+		handler: api.Handler(st, svc, hex.EncodeToString(tok)),
+		mcp:     http.NewCrossOriginProtection().Handler(agent),
+		stopped: make(chan struct{}),
+	}
 	if s.opts.Tick <= 0 {
 		close(t.stopped)
 		return t, nil
