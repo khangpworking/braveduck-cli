@@ -33,7 +33,6 @@ done
 	printf '{\n\tlocal_certs\n}\n'
 	sed '/^{$/,/^}$/d' Caddyfile
 } >Caddyfile.test
-# The rod image's Chrome stands in for the CloakBrowser download (~217 MB).
 cat >compose.test.yaml <<'YAML'
 services:
   caddy:
@@ -41,9 +40,6 @@ services:
       - ./Caddyfile.test:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-  braveduck:
-    environment:
-      CLOAKBROWSER_BINARY_PATH: /usr/bin/chrome
 YAML
 
 echo "== starting"
@@ -80,8 +76,10 @@ check "bob can't pose as alice" bob "$(c -b bob.jar -H 'Remote-User: alice' -H "
 c -b alice.jar -H "Authorization: Bearer $ta" -H 'Content-Type: application/json' -X PUT \
 	-d '{"markdown":"# Alice\n\nGo developer with five years of building backend services."}' -o /dev/null "$J/api/jobs/$job/cv"
 pdf=$(c -b alice.jar -H "Authorization: Bearer $ta" "$J/api/jobs/$job/cv.pdf" | head -c 300 | tr -d '\0')
-check "braveduck runs Chromium in its container (CV as PDF)" "%PDF" "$(printf '%s' "$pdf" | head -c 4)"
+check "the browser service renders a CV as PDF" "%PDF" "$(printf '%s' "$pdf" | head -c 4)"
 case "$pdf" in %PDF*) ;; *) echo "     the server said: $pdf" ;; esac
+check "the browser container can't reach Authelia" no "$(compose exec -T browser sh -c 'getent hosts authelia >/dev/null' && echo yes || echo no)"
+check "the browser container holds no users' data" no "$(compose exec -T browser sh -c 'test -e /data/users' && echo yes || echo no)"
 check "Authelia leaves authelia/ owned by the admin" "$(id -u)" "$(stat -c %u authelia/users_database.yml)"
 check "alice's board lives in her own private folder" 700 "$(compose exec -T braveduck sh -c 'test -s /data/users/alice/braveduck.db && stat -c %a /data/users/alice')"
 
