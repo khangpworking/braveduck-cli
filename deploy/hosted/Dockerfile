@@ -13,6 +13,11 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/braveduck ./cmd/br
 # included) and dumb-init a headless Chromium needs. braveduck downloads its
 # CloakBrowser build into the data volume on first use.
 FROM ghcr.io/go-rod/rod:v0.116.2
+# Its Chrome lives under /root; move it where the braveduck user can run it
+# (set CLOAKBROWSER_BINARY_PATH=/usr/bin/chrome to use it instead of the
+# CloakBrowser download).
+RUN dir=$(dirname "$(readlink -f /usr/bin/chrome)") && mv "$dir" /opt/chromium && \
+    ln -sf /opt/chromium/chrome /usr/bin/chrome && chmod -R a+rX /opt/chromium
 RUN useradd --create-home --uid 10001 braveduck && mkdir -p /data && chown braveduck:braveduck /data
 COPY --from=build /out/braveduck /usr/local/bin/braveduck
 USER braveduck

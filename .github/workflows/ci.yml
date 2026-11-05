@@ -80,7 +80,14 @@ jobs:
           mkdir -p secrets && for s in proxy_secret session_secret storage_encryption_key jwt_secret; do echo x > secrets/$s; done
           printf 'AUTH_DOMAIN=auth.example.com\n' > .env
           docker compose config --quiet
-      - name: shared server image
-        run: docker build -f deploy/hosted/Dockerfile -t braveduck-hosted . && docker run --rm braveduck-hosted help | head -3
       - name: shared server chain (Caddy + Authelia + braveduck)
         run: deploy/hosted/test-local.sh
+
+  stack:
+    name: shared server stack (docker compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Builds the image and runs Caddy + Authelia + braveduck as deployed.
+      - name: docker compose up, then check it from outside
+        run: deploy/hosted/test-compose.sh

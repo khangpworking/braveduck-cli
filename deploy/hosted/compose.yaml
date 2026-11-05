@@ -43,6 +43,7 @@ services:
       context: ../..
       dockerfile: deploy/hosted/Dockerfile
     restart: unless-stopped
+    shm_size: 1gb # Chromium needs more shared memory than Docker's 64 MB default
     # Never published: only Caddy reaches it, on the compose network.
     expose:
       - "8080"
