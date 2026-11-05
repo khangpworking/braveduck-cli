@@ -203,3 +203,31 @@ func TestCorruptKeyFileIsAnError(t *testing.T) {
 		t.Fatal("corrupt key file accepted")
 	}
 }
+
+// OpenFile ignores the per-machine key sources, so two users' data dirs on
+// one server never share a key.
+func TestOpenFileKeyIsPerDir(t *testing.T) {
+	t.Setenv(PassphraseEnv, "shared by everyone")
+	k := &fakeKeyring{m: map[string]string{}}
+	useKeyring(t, k)
+	alice, bob := t.TempDir(), t.TempDir()
+	va, err := OpenFile(alice)
+	if err != nil || va.Source != SourceKeyFile {
+		t.Fatalf("source = %q (%v), want key file", va.Source, err)
+	}
+	vb, _ := OpenFile(bob)
+	if len(k.m) != 0 {
+		t.Fatal("OpenFile touched the OS keychain")
+	}
+	blob, _ := va.Seal("topcv", []byte("alice's cookies"))
+	if _, err := vb.Open("topcv", blob); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("bob opened alice's session: %v", err)
+	}
+	va2, _ := OpenFile(alice)
+	if got, err := va2.Open("topcv", blob); err != nil || string(got) != "alice's cookies" {
+		t.Fatalf("key not stable across opens: %q %v", got, err)
+	}
+	if fi, err := os.Stat(filepath.Join(alice, keyFileName)); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("key file mode = %v (%v), want 0600", fi.Mode().Perm(), err)
+	}
+}

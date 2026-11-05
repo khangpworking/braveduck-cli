@@ -158,10 +158,16 @@ func TestCrawlSchedules(t *testing.T) {
 func TestSchedulerRunsWhenDue(t *testing.T) {
 	s, fc := crawlSvc(t)
 	ctx := context.Background()
-	addTerms(t, s, "search_queries", "n8n")
 	clock := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return clock }
 
+	// No search terms yet: nothing to crawl, and nothing reported as failing.
+	s.runDue(ctx)
+	if v, err := s.st.CrawlStatus(ctx, clock, nil); err != nil || len(v.Sources) != 0 {
+		t.Fatalf("crawls reported before there were search terms: %+v %v", v.Sources, err)
+	}
+
+	addTerms(t, s, "search_queries", "n8n")
 	s.runDue(ctx) // never run → due
 	if fc.calls.Load() != 1 {
 		t.Fatalf("first tick: %d calls", fc.calls.Load())

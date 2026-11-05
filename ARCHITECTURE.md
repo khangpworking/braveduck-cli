@@ -42,6 +42,17 @@ tools (fb-watcher) report their runs with `braveduck crawl-report`.
 **The board** is plain HTML/CSS/JS with no build step, embedded with
 `go:embed`; every job field is treated as hostile text (`esc`, `safeUrl`).
 
+**Shared server** (`braveduck serve --users DIR`, `internal/hosted`): one
+complete single-user braveduck per user (store, service with its scheduler,
+the same board and API with its own per-run token) in `DIR/<user>/`. It
+does no logins: Caddy asks Authelia about each request and passes the user
+in `Remote-User`, which `internal/hosted` trusts only with the secret Caddy
+adds (`X-Braveduck-Proxy-Secret`). In that mode the service refuses the
+visible-window features (job-site login, assisted apply), seals sessions with
+a key file per user (never the OS keychain or a shared passphrase), and all
+users share a cap on running browsers. Setup and an end-to-end test of the
+chain: `deploy/hosted`.
+
 **Tests.** `go test ./...` (unit; CI adds `-race` and staticcheck) and
 `go test -tags browser` (real Chromium: the board, logins, PDFs). Specs live
 in `docs/` and `docs/specs/`.

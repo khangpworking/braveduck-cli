@@ -1,0 +1,37 @@
+# braveduck shared server: Caddy terminates HTTPS (certificates from Let's
+# Encrypt, automatic), asks Authelia about every request, and passes the
+# logged-in user on to braveduck.
+#
+# The domains come from .env (see setup.sh); the upstreams default to the
+# compose service names.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# The login portal.
+{$AUTH_DOMAIN} {
+	reverse_proxy {$AUTH_UPSTREAM:authelia:9091}
+}
+
+# The board. `route` keeps the directives in the order written.
+{$BRAVEDUCK_DOMAIN} {
+	route {
+		# Only Authelia may name the user: drop whatever the browser sent.
+		request_header -Remote-User
+		request_header -Remote-Groups
+		request_header -Remote-Email
+		request_header -Remote-Name
+		request_header -X-Braveduck-Proxy-Secret
+
+		forward_auth {$AUTH_UPSTREAM:authelia:9091} {
+			uri /api/authz/forward-auth
+			copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+		}
+
+		# The secret proves to braveduck that the request came through here.
+		reverse_proxy {$BRAVEDUCK_UPSTREAM:braveduck:8080} {
+			header_up X-Braveduck-Proxy-Secret {file.{$SECRETS_DIR:/run/secrets}/proxy_secret}
+		}
+	}
+}

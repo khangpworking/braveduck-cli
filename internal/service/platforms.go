@@ -68,7 +68,11 @@ func (s *Service) setup() (*platform.Registry, *vault.Vault, error) {
 	ps.once.Do(func() {
 		ps.reg, ps.err = platform.Load(filepath.Join(ps.dir, "platforms.json"))
 		if ps.err == nil {
-			ps.vault, ps.err = vault.Open(ps.dir)
+			if s.hosted != nil {
+				ps.vault, ps.err = vault.OpenFile(ps.dir)
+			} else {
+				ps.vault, ps.err = vault.Open(ps.dir)
+			}
 		}
 	})
 	return ps.reg, ps.vault, ps.err
@@ -132,6 +136,9 @@ type LoginHooks struct {
 // A re-login keeps the platform's fingerprint seed, so the account keeps
 // seeing one device.
 func (s *Service) Connect(ctx context.Context, id string, h LoginHooks) (PlatformStatus, error) {
+	if s.hosted != nil {
+		return PlatformStatus{}, ErrHosted
+	}
 	reg, v, err := s.setup()
 	if err != nil {
 		return PlatformStatus{}, err
@@ -200,6 +207,9 @@ func (s *Service) connect(ctx context.Context, p platform.Platform, v *vault.Vau
 // requests can't wait minutes for a human). The outcome lands in the activity
 // feed; Platforms shows "connecting" meanwhile.
 func (s *Service) StartConnect(id string) (PlatformStatus, error) {
+	if s.hosted != nil {
+		return PlatformStatus{}, ErrHosted
+	}
 	reg, v, err := s.setup()
 	if err != nil {
 		return PlatformStatus{}, err
