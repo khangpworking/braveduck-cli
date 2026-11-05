@@ -47,6 +47,7 @@ type Options struct {
 	Secret     string // shared with the proxy; at least 32 characters
 	MaxUsers   int    // data dirs the server will hold; new users past it are refused
 	LogoutURL  string // shown on the board; "" hides the link
+	JevDaily   int    // Jev calls per user per day (the admin's key pays); 0 = no cap
 
 	// Tick is how often each user's scheduler looks for due work (crawls,
 	// rating, sweeps, backups); 0 turns schedulers off (tests).
@@ -198,6 +199,7 @@ func (s *Server) open(name string) (*tenant, error) {
 	svc := service.New(st)
 	svc.SetDataDir(dir)
 	svc.SetHosted(service.HostedInfo{User: name, LogoutURL: s.opts.LogoutURL})
+	svc.SetJevDailyLimit(s.opts.JevDaily)
 
 	tok := make([]byte, 32)
 	if _, err := rand.Read(tok); err != nil {

@@ -92,6 +92,9 @@ func (s *Service) classifyLead(ctx context.Context, j jobs.Job) (LeadVerdict, er
 	if len(text) > maxJD {
 		text = text[:maxJD]
 	}
+	if err := s.takeJevCall(ctx); err != nil {
+		return LeadVerdict{}, err // the post is kept, as on any Jev error
+	}
 	ans, err := c.Ask(ctx, text, leadQuestion)
 	if err != nil {
 		return LeadVerdict{}, err

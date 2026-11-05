@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -46,6 +47,8 @@ type Service struct {
 	geo         geocoder       // see SetGeocoder
 	jev         jevAsker       // see SetJev
 	hosted      *HostedInfo    // see SetHosted
+	jevDaily    int            // see SetJevDailyLimit
+	jevMu       sync.Mutex     // makes checking and counting a Jev call one step
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.
