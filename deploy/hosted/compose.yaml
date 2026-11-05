@@ -51,6 +51,13 @@ services:
       # Optional: Jev rates every user's new jobs with this key, so it pays
       # for all of them. Leave empty to rate by AI agents only.
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      # Every browser (link fetches, CV PDFs) runs in the browser service.
+      BRAVEDUCK_BROWSER_SERVICE: ws://browser:7317
+    networks:
+      - default
+      - browser
+    depends_on:
+      - browser
     command:
       - serve
       - --users=/data/users
@@ -64,6 +71,34 @@ services:
       - braveduck_data:/data # one folder per user under /data/users
     secrets:
       - proxy_secret
+
+  # go-rod's browser service: Chromium renders other sites' pages here, in a
+  # container with no users' data and no secrets, on a network of its own
+  # (it can't reach Caddy or Authelia; braveduck refuses it without the
+  # proxy secret). Each browser is killed when braveduck disconnects.
+  browser:
+    image: ghcr.io/go-rod/rod:v0.116.2
+    restart: unless-stopped
+    environment:
+      HOME: /tmp
+    networks:
+      - browser
+    read_only: true
+    tmpfs:
+      # rod-manager runs its small watchdog binary ("leakless", which kills
+      # browsers if the manager dies) from /tmp, so this tmpfs needs exec.
+      - /tmp:exec,mode=1777,size=1g
+    shm_size: 1gb
+    mem_limit: 2g
+    pids_limit: 512
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  default:
+  browser:
 
 secrets:
   proxy_secret:
