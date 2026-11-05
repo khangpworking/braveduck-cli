@@ -266,6 +266,10 @@ const APIClient = {
     return readAPIJSON('/rating-config');
   },
 
+  async getStats() {
+    return readAPIJSON('/stats');
+  },
+
   async updateRatingConfig(config) {
     const res = await apiFetch(`${API_BASE}/rating-config`, {
       method: "PUT",
