@@ -119,6 +119,10 @@ const MaxLookupsPerPass = 20
 // Jobs with no address are marked so the board can say so.
 func (s *Service) UpdateDistances(ctx context.Context, maxLookups int) (DistanceResult, error) {
 	var res DistanceResult
+	if !s.distRunning.CompareAndSwap(false, true) {
+		return res, nil // a pass is already running; the next one gets the rest
+	}
+	defer s.distRunning.Store(false)
 	me, err := s.GetLocation(ctx)
 	if err != nil || !me.Set {
 		return res, err

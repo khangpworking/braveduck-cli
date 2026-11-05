@@ -40,16 +40,46 @@ func SetMaxBrowsers(n int) {
 	}
 }
 
-// acquire waits for a free browser slot; the returned func gives it back.
+type ownerKey struct{}
+
+// WithOwner marks ctx as one user's work. Browsers launched under it count
+// against that user: on a shared server each user runs at most one browser
+// at a time, so nobody can hold every slot.
+func WithOwner(ctx context.Context, owner string) context.Context {
+	return context.WithValue(ctx, ownerKey{}, owner)
+}
+
+// ownerTurns holds each owner's single browser turn (capacity-1 channels).
+var ownerTurns sync.Map
+
+// acquire waits for the owner's turn (if ctx has one) and a free browser
+// slot; the returned func gives both back.
 func acquire(ctx context.Context) (func(), error) {
+	var turn chan struct{}
+	if owner, _ := ctx.Value(ownerKey{}).(string); owner != "" {
+		v, _ := ownerTurns.LoadOrStore(owner, make(chan struct{}, 1))
+		turn = v.(chan struct{})
+		select {
+		case turn <- struct{}{}:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("browser: waiting for your other browser to finish: %w", ctx.Err())
+		}
+	}
+	endTurn := func() {
+		if turn != nil {
+			<-turn
+		}
+	}
 	if slots == nil {
-		return func() {}, nil
+		var once sync.Once
+		return func() { once.Do(endTurn) }, nil
 	}
 	select {
 	case slots <- struct{}{}:
 		var once sync.Once
-		return func() { once.Do(func() { <-slots }) }, nil
+		return func() { once.Do(func() { <-slots; endTurn() }) }, nil
 	case <-ctx.Done():
+		endTurn()
 		return nil, fmt.Errorf("browser: waiting for a free browser: %w", ctx.Err())
 	}
 }

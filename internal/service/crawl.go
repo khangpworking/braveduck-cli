@@ -122,7 +122,9 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 	if err != nil {
 		return CrawlResult{Source: source}, err
 	}
-	res, err := s.crawlOnce(ctx, c)
+	cctx, cancel := context.WithTimeout(ctx, maxCrawlTime)
+	res, err := s.crawlOnce(cctx, c)
+	cancel()
 	release()
 	if err != nil {
 		_ = s.ReportCrawl(ctx, source, false, err.Error())
@@ -136,6 +138,9 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 	}
 	return res, nil
 }
+
+// maxCrawlTime bounds one crawl, so no crawl keeps its site's turn for long.
+const maxCrawlTime = 15 * time.Minute
 
 // siteTurns lets one crawl of each job site run at a time across the whole
 // process: on a shared server every user's service crawls the same sites,

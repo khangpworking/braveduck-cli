@@ -87,6 +87,9 @@ func (s *Service) DraftBrief(ctx context.Context, id int64, notes string) (DocBr
 
 const maxCVChars = 100_000
 
+// maxCVVersions caps tailored CV versions per job (each is a file).
+const maxCVVersions = 30
+
 // SubmitCV stores a tailored CV (Markdown) for job id as a new version, in
 // <data dir>/cvs, private to the user.
 func (s *Service) SubmitCV(ctx context.Context, id int64, markdown string) (jobs.Job, error) {
@@ -110,6 +113,9 @@ func (s *Service) SubmitCV(ctx context.Context, id int64, markdown string) (jobs
 		return jobs.Job{}, err
 	}
 	version := j.CVVersion + 1
+	if version > maxCVVersions {
+		return jobs.Job{}, fmt.Errorf("%w: this job already has %d CV versions", ErrInvalid, maxCVVersions)
+	}
 	path := filepath.Join(dir, fmt.Sprintf("job-%d-v%d.md", id, version))
 	if err := os.WriteFile(path, []byte(markdown+"\n"), 0o600); err != nil {
 		return jobs.Job{}, err
