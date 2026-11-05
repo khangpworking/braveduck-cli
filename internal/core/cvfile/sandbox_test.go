@@ -45,6 +45,9 @@ func TestPDFBombIsRefused(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a 4 MB PDF that unpacks to 2 GB")
 	}
+	if raceEnabled {
+		t.Skip("race builds can't cap the child's address space")
+	}
 	data := bombPDF(2 << 30)
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
