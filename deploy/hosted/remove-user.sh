@@ -23,6 +23,10 @@ if ! grep -q "^  $user:\$" "$db"; then
 	exit 1
 fi
 
+# Archive the board first: if that fails, nothing has changed yet.
+stamp=$(date +%Y%m%d-%H%M%S)
+$COMPOSE exec -T braveduck sh -c "if [ -d '/data/users/$user' ]; then mv '/data/users/$user' '/data/users/.removed-$user-$stamp'; fi"
+
 # Drop the user's block: from "  USER:" up to the next user (two-space
 # indent) or the end of the file. Authelia notices the change.
 tmp=$(mktemp "$db.XXXXXX")
@@ -34,7 +38,5 @@ awk -v u="  $user:" '
 cat "$tmp" >"$db" # keep the file (and its owner) in place
 rm -f "$tmp"
 
-stamp=$(date +%Y%m%d-%H%M%S)
-$COMPOSE exec -T braveduck sh -c "if [ -d '/data/users/$user' ]; then mv '/data/users/$user' '/data/users/.removed-$user-$stamp'; fi"
 $COMPOSE restart braveduck >/dev/null
 echo "Removed $user: they can't log in, and their board is archived as users/.removed-$user-$stamp."

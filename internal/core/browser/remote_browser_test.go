@@ -5,9 +5,9 @@ package browser
 import (
 	"bytes"
 	"context"
-	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,19 +15,25 @@ import (
 	"github.com/go-rod/rod/lib/launcher"
 )
 
-// With BRAVEDUCK_BROWSER_SERVICE set, browsers run in go-rod's browser
-// service (here in-process; on a shared server its own container), and
-// windows are refused there.
+// With BRAVEDUCK_BROWSER_SERVICE set, browsers run in the browser service
+// (here in-process; on a shared server its own container) using its key;
+// without the key, or for a window, nothing starts.
 func TestBrowserService(t *testing.T) {
-	m := launcher.NewManager()
-	if bin := os.Getenv("CLOAKBROWSER_BINARY_PATH"); bin != "" {
-		// Stand in for the service's own Chromium, as its image provides.
-		m.Defaults = func(_ http.ResponseWriter, _ *http.Request) *launcher.Launcher { return launcher.New().Bin(bin) }
-		m.BeforeLaunch = func(*launcher.Launcher, http.ResponseWriter, *http.Request) {}
+	bin := os.Getenv("CLOAKBROWSER_BINARY_PATH")
+	if bin == "" {
+		found, ok := launcher.LookPath()
+		if !ok {
+			t.Skip("no Chromium found")
+		}
+		bin = found
 	}
-	svc := httptest.NewServer(m)
+	const key = "0123456789abcdef0123456789abcdef-browser"
+	svc := httptest.NewServer(Service(bin, key))
 	defer svc.Close()
+	keyFile := filepath.Join(t.TempDir(), "key")
+	os.WriteFile(keyFile, []byte(key+"\n"), 0o600)
 	t.Setenv(BrowserServiceEnv, "ws"+strings.TrimPrefix(svc.URL, "http"))
+	t.Setenv(BrowserKeyFileEnv, keyFile)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -40,5 +46,14 @@ func TestBrowserService(t *testing.T) {
 	}
 	if _, _, err := launch(ctx, launchOpts{Headless: false}); err == nil || !strings.Contains(err.Error(), "can't open") {
 		t.Fatalf("a window in the browser service: %v", err)
+	}
+
+	t.Setenv(BrowserKeyFileEnv, "")
+	_, err = RenderPDF(ctx, "<p>x</p>")
+	if err == nil {
+		t.Fatal("a browser started without the key")
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Fatalf("the error shows the key: %v", err)
 	}
 }

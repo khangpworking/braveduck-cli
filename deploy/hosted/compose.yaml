@@ -43,7 +43,6 @@ services:
       context: ../..
       dockerfile: deploy/hosted/Dockerfile
     restart: unless-stopped
-    shm_size: 1gb # Chromium needs more shared memory than Docker's 64 MB default
     mem_limit: ${BRAVEDUCK_MEM_LIMIT:-2g}
     pids_limit: 512
     # Never published: only Caddy reaches it, on the compose network.
@@ -55,6 +54,7 @@ services:
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       # Every browser (link fetches, CV PDFs) runs in the browser service.
       BRAVEDUCK_BROWSER_SERVICE: ws://browser:7317
+      BRAVEDUCK_BROWSER_KEY_FILE: /run/secrets/browser_secret
     networks:
       - default
       - browser
@@ -70,26 +70,40 @@ services:
       - --jev-daily-limit=${BRAVEDUCK_JEV_DAILY_LIMIT:-50}
       - --max-jobs-per-user=${BRAVEDUCK_MAX_JOBS_PER_USER:-5000}
       - --logout-url=https://${AUTH_DOMAIN}/logout
+      - --login-users-file=/authelia/users_database.yml
     volumes:
       - braveduck_data:/data # one folder per user under /data/users
+      # Read-only: an agent key stops working when its user is disabled or
+      # removed here, as their login does.
+      - ./authelia/users_database.yml:/authelia/users_database.yml:ro
     secrets:
       - proxy_secret
+      - browser_secret
 
-  # go-rod's browser service: Chromium renders other sites' pages here, in a
-  # container with no users' data and no secrets, on a network of its own
-  # (it can't reach Caddy or Authelia; braveduck refuses it without the
-  # proxy secret). Each browser is killed when braveduck disconnects.
+  # The browser service (go-rod's launcher manager, behind a key): Chromium
+  # renders other sites' pages here, in a container with no users' data and
+  # only its own key, on a network of its own (it can't reach Caddy or
+  # Authelia; braveduck refuses it without the proxy secret). Each browser
+  # is killed when braveduck disconnects, and pages can't start new ones.
   browser:
-    image: ghcr.io/go-rod/rod:v0.116.2
+    build:
+      context: ../..
+      dockerfile: deploy/hosted/Dockerfile
     restart: unless-stopped
+    command:
+      - browser-service
+      - --addr=:7317
+      - --key-file=/run/secrets/browser_secret
     environment:
       HOME: /tmp
+    secrets:
+      - browser_secret
     networks:
       - browser
     read_only: true
     tmpfs:
-      # rod-manager runs its small watchdog binary ("leakless", which kills
-      # browsers if the manager dies) from /tmp, so this tmpfs needs exec.
+      # go-rod runs its small watchdog binary ("leakless", which kills
+      # browsers if the service dies) from /tmp, so this tmpfs needs exec.
       - /tmp:exec,mode=1777,size=1g
     shm_size: 1gb
     mem_limit: 2g
@@ -106,6 +120,8 @@ networks:
 secrets:
   proxy_secret:
     file: ./secrets/proxy_secret
+  browser_secret:
+    file: ./secrets/browser_secret
   session_secret:
     file: ./secrets/session_secret
   storage_encryption_key:

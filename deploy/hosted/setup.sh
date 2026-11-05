@@ -4,8 +4,29 @@
 #   AUTH_DOMAIN   the login page, a sibling of it, e.g. auth.example.com
 #   EMAIL         for Let's Encrypt's certificate notices
 # Writes .env and random secrets; never overwrites existing ones.
+#
+# setup.sh --secrets — after an update: add any secrets this version needs.
 set -eu
 cd "$(dirname "$0")"
+
+# secrets makes any missing secret. The directory is private; the files are
+# readable inside the containers (compose mounts them as they are on disk).
+secrets() {
+	mkdir -p secrets
+	chmod 700 secrets
+	for name in proxy_secret browser_secret session_secret storage_encryption_key jwt_secret; do
+		if [ ! -s "secrets/$name" ]; then
+			od -An -N48 -tx1 /dev/urandom | tr -d ' \n' >"secrets/$name"
+			echo "made secrets/$name"
+		fi
+		chmod 644 "secrets/$name"
+	done
+}
+
+if [ "${1:-}" = --secrets ]; then
+	secrets
+	exit 0
+fi
 
 if [ $# -ne 3 ]; then
 	echo "usage: $0 BOARD_DOMAIN AUTH_DOMAIN EMAIL   (e.g. jobs.example.com auth.example.com you@example.com)" >&2
@@ -45,16 +66,7 @@ ENV
 
 chmod 600 .env # it may hold TYPESAFE_API_KEY
 
-# The secrets directory is private; the files are readable inside the
-# containers (compose mounts them as they are on disk).
-mkdir -p secrets
-chmod 700 secrets
-for name in proxy_secret session_secret storage_encryption_key jwt_secret; do
-	if [ ! -s "secrets/$name" ]; then
-		od -An -N48 -tx1 /dev/urandom | tr -d ' \n' >"secrets/$name"
-	fi
-	chmod 644 "secrets/$name"
-done
+secrets >/dev/null
 
 [ -e authelia/users_database.yml ] || printf 'users:\n' >authelia/users_database.yml
 chmod 700 authelia # password hashes, and one-time codes in notification.txt

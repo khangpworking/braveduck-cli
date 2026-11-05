@@ -142,6 +142,9 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 // maxCrawlTime bounds one crawl, so no crawl keeps its site's turn for long.
 const maxCrawlTime = 15 * time.Minute
 
+// HostedMinEveryMinutes is the shortest crawl interval on a shared server.
+const HostedMinEveryMinutes = 60
+
 // siteTurns lets one crawl of each job site run at a time across the whole
 // process: on a shared server every user's service crawls the same sites,
 // and the sites should see one polite crawler, not one per user.
@@ -297,6 +300,9 @@ func (s *Service) SetCrawlSchedule(ctx context.Context, source string, everyMinu
 	min := MinEveryMinutes
 	if isBuiltin {
 		min = MinBuiltinEveryMinutes
+		if s.hosted != nil {
+			min = HostedMinEveryMinutes // every user crawls the same sites, taking turns
+		}
 	}
 	if everyMinutes != 0 && (everyMinutes < min || everyMinutes > MaxEveryMinutes) {
 		return SourceSchedule{}, fmt.Errorf("%w: every %d min — use 0 (off) or %d to %d minutes", ErrInvalid, everyMinutes, min, MaxEveryMinutes)

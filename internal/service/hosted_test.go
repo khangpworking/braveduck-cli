@@ -36,3 +36,19 @@ func TestHostedRefusesWindowsAndReportsUser(t *testing.T) {
 		t.Fatalf("Setup = %+v, %v", st, err)
 	}
 }
+
+// On a shared server built-in crawls run at most hourly per user.
+func TestHostedCrawlInterval(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	if _, err := s.SetCrawlSchedule(ctx, "vietnamworks", 30); err != nil {
+		t.Fatalf("own computer, every 30 min: %v", err)
+	}
+	s.SetHosted(HostedInfo{User: "alice"})
+	if _, err := s.SetCrawlSchedule(ctx, "vietnamworks", 30); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("shared server, every 30 min: %v, want ErrInvalid", err)
+	}
+	if _, err := s.SetCrawlSchedule(ctx, "vietnamworks", HostedMinEveryMinutes); err != nil {
+		t.Fatalf("shared server, hourly: %v", err)
+	}
+}
