@@ -545,6 +545,13 @@ func (s *Store) ApplyAttempts(ctx context.Context, since time.Time) ([]time.Time
 	return out, rows.Err()
 }
 
+// CountJobs is how many jobs are on the board, in every lane.
+func (s *Store) CountJobs(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs").Scan(&n)
+	return n, err
+}
+
 // Setting returns a stored setting; ok is false if unset.
 func (s *Store) Setting(ctx context.Context, key string) (string, bool, error) {
 	var v string

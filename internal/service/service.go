@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -48,6 +49,8 @@ type Service struct {
 	jev         jevAsker       // see SetJev
 	hosted      *HostedInfo    // see SetHosted
 	jevDaily    int            // see SetJevDailyLimit
+	maxJobs     int            // see SetMaxJobs
+	distRunning atomic.Bool    // an UpdateDistances pass is running
 	jevMu       sync.Mutex     // makes checking and counting a Jev call one step
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
@@ -262,12 +265,25 @@ func (s *Service) save(ctx context.Context, j jobs.Job, leadCheck bool) (jobs.Jo
 		}
 	}
 
+	if s.maxJobs > 0 {
+		n, err := s.st.CountJobs(ctx)
+		if err != nil {
+			return jobs.Job{}, err
+		}
+		if n >= s.maxJobs {
+			return jobs.Job{}, fmt.Errorf("%w: the board is full (%d jobs) — delete some old ones first", ErrInvalid, s.maxJobs)
+		}
+	}
 	id, err := s.st.Add(ctx, j, s.now())
 	if err != nil {
 		return jobs.Job{}, err
 	}
 	return s.st.Get(ctx, id)
 }
+
+// SetMaxJobs caps the jobs on this board (a shared server's disk is
+// everyone's); 0 means no cap.
+func (s *Service) SetMaxJobs(n int) { s.maxJobs = n }
 
 // Patch names the board-editable fields to change; nil leaves a field as is.
 type Patch = store.JobPatch
@@ -412,10 +428,25 @@ func (s *Service) Keywords(ctx context.Context) (keyword.Sets, error) {
 
 // SetKeywords replaces the named keyword lists (lists not mentioned are left
 // alone) and returns every list afterwards.
+// Keyword list limits: every search term is one request per crawl, and a
+// crawl holds its site's turn (shared by every user on a shared server).
+const (
+	MaxTermsPerList = 200
+	MaxTermChars    = 100
+)
+
 func (s *Service) SetKeywords(ctx context.Context, sets keyword.Sets) (keyword.Sets, error) {
-	for key := range sets {
+	for key, terms := range sets {
 		if _, ok := keyword.ListByKey(key); !ok {
 			return nil, fmt.Errorf("%w: unknown keyword list %q (lists: %s)", ErrInvalid, key, strings.Join(keyword.Keys(), ", "))
+		}
+		if len(terms) > MaxTermsPerList {
+			return nil, fmt.Errorf("%w: %s has %d terms; at most %d", ErrInvalid, key, len(terms), MaxTermsPerList)
+		}
+		for _, t := range terms {
+			if len([]rune(t)) > MaxTermChars {
+				return nil, fmt.Errorf("%w: %q is over %d characters", ErrInvalid, t, MaxTermChars)
+			}
 		}
 	}
 	for key, want := range sets {

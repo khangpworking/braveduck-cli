@@ -40,6 +40,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/khangpworking/braveduck-cli/internal/api"
+	"github.com/khangpworking/braveduck-cli/internal/core/browser"
 	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -58,6 +59,7 @@ type Options struct {
 	Secret     string // shared with the proxy; at least 32 characters
 	MaxUsers   int    // data dirs the server will hold; new users past it are refused
 	LogoutURL  string // shown on the board; "" hides the link
+	MaxJobs    int    // jobs per user's board; 0 = no cap
 	JevDaily   int    // Jev calls per user per day (the admin's key pays); 0 = no cap
 
 	// Tick is how often each user's scheduler looks for due work (crawls,
@@ -167,7 +169,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The user's board is the single-user one: it only answers requests for
 	// localhost, which is true here (the proxy is the only way in), and it
 	// must never see the proxy's headers.
-	r2 := r.Clone(r.Context())
+	r2 := r.Clone(browser.WithOwner(r.Context(), name))
 	r2.Host = "localhost"
 	r2.Header.Del(SecretHeader)
 	r2.Header.Del(s.opts.UserHeader)
@@ -216,6 +218,7 @@ func (s *Server) open(name string) (*tenant, error) {
 	svc.SetDataDir(dir)
 	svc.SetHosted(service.HostedInfo{User: name, LogoutURL: s.opts.LogoutURL})
 	svc.SetJevDailyLimit(s.opts.JevDaily)
+	svc.SetMaxJobs(s.opts.MaxJobs)
 
 	tok := make([]byte, 32)
 	if _, err := rand.Read(tok); err != nil {
@@ -248,7 +251,7 @@ func (s *Server) open(name string) (*tenant, error) {
 				return
 			}
 		}
-		svc.RunScheduler(s.ctx, s.opts.Tick)
+		svc.RunScheduler(browser.WithOwner(s.ctx, name), s.opts.Tick)
 	}()
 	return t, nil
 }
