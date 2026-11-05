@@ -18,7 +18,7 @@ compose() { docker compose -f compose.yaml -f compose.test.yaml "$@"; }
 cleanup() {
 	compose down -v --remove-orphans >/dev/null 2>&1 || true
 	rm -f .env Caddyfile.test compose.test.yaml authelia/users_database.yml \
-		authelia/db.sqlite3 authelia/notification.txt secrets/*
+		authelia/db.sqlite3 authelia/notification.txt secrets/* 2>/dev/null || true
 	rmdir secrets 2>/dev/null || true
 	rm -f alice.jar bob.jar
 }
@@ -79,7 +79,10 @@ check "bob doesn't see it" 0 "$(c -b bob.jar -H "Authorization: Bearer $tb" "$J/
 check "bob can't pose as alice" bob "$(c -b bob.jar -H 'Remote-User: alice' -H "Authorization: Bearer $tb" "$J/api/setup" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hosted"]["user"])')"
 c -b alice.jar -H "Authorization: Bearer $ta" -H 'Content-Type: application/json' -X PUT \
 	-d '{"markdown":"# Alice\n\nGo developer with five years of building backend services."}' -o /dev/null "$J/api/jobs/$job/cv"
-check "braveduck runs Chromium in its container (CV as PDF)" "%PDF" "$(c -b alice.jar -H "Authorization: Bearer $ta" "$J/api/jobs/$job/cv.pdf" | head -c 4)"
+pdf=$(c -b alice.jar -H "Authorization: Bearer $ta" "$J/api/jobs/$job/cv.pdf" | head -c 300 | tr -d '\0')
+check "braveduck runs Chromium in its container (CV as PDF)" "%PDF" "$(printf '%s' "$pdf" | head -c 4)"
+case "$pdf" in %PDF*) ;; *) echo "     the server said: $pdf" ;; esac
+check "Authelia leaves authelia/ owned by the admin" "$(id -u)" "$(stat -c %u authelia/users_database.yml)"
 check "alice's board lives in her own private folder" 700 "$(compose exec -T braveduck sh -c 'test -s /data/users/alice/braveduck.db && stat -c %a /data/users/alice')"
 
 if [ "$fails" -ne 0 ]; then

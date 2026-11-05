@@ -35,6 +35,9 @@ BRAVEDUCK_POLICY=one_factor
 BRAVEDUCK_MAX_USERS=50
 BRAVEDUCK_MAX_BROWSERS=2
 # TYPESAFE_API_KEY=   # optional, see compose.yaml
+# Authelia runs as you, so authelia/ stays yours (add-user.sh writes to it).
+PUID=$(id -u)
+PGID=$(id -g)
 ENV
 
 # The secrets directory is private; the files are readable inside the
