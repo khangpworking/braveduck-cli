@@ -77,6 +77,7 @@ async function renderSetup() {
   const st = await res.json();
   const hadCV = AppState.setup && AppState.setup.cv;
   AppState.setup = st;
+  renderHostedUser(st.hosted);
   // The Apply buttons depend on having a CV: re-render only when that changes
   // (not on every first load, which raced tests holding card elements).
   if (Boolean(st.cv) !== Boolean(hadCV)) renderBoard();
@@ -93,6 +94,14 @@ async function renderSetup() {
   card.querySelectorAll("button[data-setup]").forEach(btn => {
     btn.addEventListener("click", () => SETUP_STEPS.find(s => s.key === btn.dataset.setup).open());
   });
+}
+
+// On a shared server: who is logged in, and the login service's log-out page.
+function renderHostedUser(hosted) {
+  const el = document.getElementById("hostedUser");
+  el.hidden = !hosted;
+  if (!hosted) return;
+  el.innerHTML = `${esc(hosted.user)}${hosted.logout_url ? `<a href="${safeUrl(hosted.logout_url)}">Log out</a>` : ""}`;
 }
 
 async function openProfile() {

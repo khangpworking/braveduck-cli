@@ -45,6 +45,7 @@ type Service struct {
 	crawl       *crawlState    // see SetCrawlers
 	geo         geocoder       // see SetGeocoder
 	jev         jevAsker       // see SetJev
+	hosted      *HostedInfo    // see SetHosted
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they
 	// never touch the network.

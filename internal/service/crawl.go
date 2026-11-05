@@ -30,7 +30,7 @@ const (
 )
 
 // ErrNoQueries means there is nothing to search for yet.
-var ErrNoQueries = errors.New("no search queries yet — add some: braveduck keywords add search_queries \"ai automation\" \"n8n\"")
+var ErrNoQueries = errors.New("no search terms yet — add some under Settings → Search terms & filters, or: braveduck keywords add search_queries \"ai automation\" \"n8n\"")
 
 // ErrCrawlRunning means that source is already being crawled.
 var ErrCrawlRunning = errors.New("that source is already being crawled")
@@ -336,8 +336,17 @@ func (s *Service) runDue(ctx context.Context) {
 			}
 		}
 	}
+	// Crawlers have nothing to search for until the user adds search terms;
+	// Get started asks for them, so don't flag every crawl as failing.
+	noTerms := false
+	if sets, err := s.st.AllKeywords(ctx); err == nil {
+		noTerms = len(sets["search_queries"]) == 0
+	}
 	for _, sc := range scheds {
 		if !sc.Builtin || sc.EveryMinutes == 0 {
+			continue
+		}
+		if noTerms && sc.Source != TopCVSyncSource && sc.Source != JevRateSource {
 			continue
 		}
 		if sc.Source == TopCVSyncSource && !s.platformConnected(ctx, "topcv") {

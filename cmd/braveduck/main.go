@@ -79,6 +79,8 @@ Crawlers (search queries come from: braveduck keywords add search_queries ...)
 
 Web board
   serve      run the local web board + JSON API   (--addr, --no-open)
+  serve --users DIR   a shared server: one board per user, behind a login
+             proxy (see deploy/hosted)  (--proxy-secret-file, --max-users)
 
 AI agents
   mcp        MCP server on stdio, for Claude Code / Codex / agy
@@ -133,6 +135,10 @@ func run(args []string) error {
 		return nil
 	case "doctor":
 		return cmdDoctor(dbPath)
+	case "serve":
+		if isHostedServe(rest) { // one database per user, not --db's
+			return cmdServeHosted(context.Background(), rest)
+		}
 	}
 
 	// Everything below needs the store.

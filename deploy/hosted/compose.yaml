@@ -1,0 +1,79 @@
+# braveduck shared server: Caddy (HTTPS) → Authelia (logins) → braveduck.
+# Set up once with ./setup.sh, add people with ./add-user.sh, then:
+#   docker compose up -d --build
+name: braveduck
+
+services:
+  caddy:
+    image: caddy:2.11
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    secrets:
+      - proxy_secret
+    depends_on:
+      - authelia
+      - braveduck
+
+  authelia:
+    image: authelia/authelia:4.39
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      X_AUTHELIA_CONFIG_FILTERS: template
+      AUTHELIA_SESSION_SECRET_FILE: /run/secrets/session_secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /run/secrets/storage_encryption_key
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: /run/secrets/jwt_secret
+    volumes:
+      - ./authelia:/config # configuration.yml, users_database.yml, its database
+    secrets:
+      - session_secret
+      - storage_encryption_key
+      - jwt_secret
+
+  braveduck:
+    build:
+      context: ../..
+      dockerfile: deploy/hosted/Dockerfile
+    restart: unless-stopped
+    # Never published: only Caddy reaches it, on the compose network.
+    expose:
+      - "8080"
+    environment:
+      # Optional: Jev rates every user's new jobs with this key, so it pays
+      # for all of them. Leave empty to rate by AI agents only.
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+    command:
+      - serve
+      - --users=/data/users
+      - --addr=0.0.0.0:8080
+      - --proxy-secret-file=/run/secrets/proxy_secret
+      - --max-users=${BRAVEDUCK_MAX_USERS:-50}
+      - --max-browsers=${BRAVEDUCK_MAX_BROWSERS:-2}
+      - --logout-url=https://${AUTH_DOMAIN}/logout
+    volumes:
+      - braveduck_data:/data # one folder per user under /data/users
+    secrets:
+      - proxy_secret
+
+secrets:
+  proxy_secret:
+    file: ./secrets/proxy_secret
+  session_secret:
+    file: ./secrets/session_secret
+  storage_encryption_key:
+    file: ./secrets/storage_encryption_key
+  jwt_secret:
+    file: ./secrets/jwt_secret
+
+volumes:
+  caddy_data:
+  caddy_config:
+  braveduck_data:

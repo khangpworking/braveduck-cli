@@ -56,7 +56,7 @@ jobs:
         run: go test -tags browser -count=1 -timeout 5m ./internal/core/browser/ ./internal/service/ ./internal/api/
 
   build:
-    name: cross-build
+    name: cross-build + shared server
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,3 +70,17 @@ jobs:
             echo "== $target"
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build -trimpath -o /dev/null ./cmd/braveduck
           done
+      # The shared server (deploy/hosted): its scripts, its compose file, the
+      # image, and the whole chain with real Caddy and Authelia.
+      - name: shared server scripts
+        run: shellcheck deploy/hosted/*.sh
+      - name: shared server compose file
+        working-directory: deploy/hosted
+        run: |
+          mkdir -p secrets && for s in proxy_secret session_secret storage_encryption_key jwt_secret; do echo x > secrets/$s; done
+          printf 'AUTH_DOMAIN=auth.example.com\n' > .env
+          docker compose config --quiet
+      - name: shared server image
+        run: docker build -f deploy/hosted/Dockerfile -t braveduck-hosted . && docker run --rm braveduck-hosted help | head -3
+      - name: shared server chain (Caddy + Authelia + braveduck)
+        run: deploy/hosted/test-local.sh

@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"sync"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -26,11 +27,51 @@ type launchOpts struct {
 // NewSeed returns a fingerprint seed in CloakBrowser's range.
 func NewSeed() string { return strconv.Itoa(10000 + rand.Intn(90000)) }
 
+// slots caps how many browsers run at once; nil means no cap.
+var slots chan struct{}
+
+// SetMaxBrowsers caps the browsers running at once across the process (a
+// shared server runs every user's crawls and fetches); 0 removes the cap.
+// Call it at start-up, before any launch.
+func SetMaxBrowsers(n int) {
+	slots = nil
+	if n > 0 {
+		slots = make(chan struct{}, n)
+	}
+}
+
+// acquire waits for a free browser slot; the returned func gives it back.
+func acquire(ctx context.Context) (func(), error) {
+	if slots == nil {
+		return func() {}, nil
+	}
+	select {
+	case slots <- struct{}{}:
+		var once sync.Once
+		return func() { once.Do(func() { <-slots }) }, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("browser: waiting for a free browser: %w", ctx.Err())
+	}
+}
+
 // launch starts the provisioned CloakBrowser Chromium with its stealth flags —
 // fingerprint seed, spoofed platform, Vietnam locale/timezone — minus the two
 // Chromium defaults that leak automation, and connects to it. The returned
 // cleanup closes the browser and removes its temp profile.
 func launch(ctx context.Context, o launchOpts) (*rod.Browser, func(), error) {
+	release, err := acquire(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	b, cleanup, err := launchBrowser(ctx, o)
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return b, func() { cleanup(); release() }, nil
+}
+
+func launchBrowser(ctx context.Context, o launchOpts) (*rod.Browser, func(), error) {
 	bin, err := EnsureBinary(ctx)
 	if err != nil {
 		return nil, nil, err
