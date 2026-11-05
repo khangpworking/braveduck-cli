@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
 
 permissions:
   contents: read
@@ -56,17 +58,15 @@ jobs:
   build:
     name: cross-build
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: build ${{ matrix.target }}
+      # One job for every target: billing rounds each job up to a minute.
+      - name: build linux, macOS and Windows binaries
         run: |
-          export GOOS=${TARGET%/*} GOARCH=${TARGET#*/} CGO_ENABLED=0
-          go build -trimpath -o /dev/null ./cmd/braveduck
-        env:
-          TARGET: ${{ matrix.target }}
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            echo "== $target"
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build -trimpath -o /dev/null ./cmd/braveduck
+          done
