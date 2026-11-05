@@ -34,7 +34,7 @@ Reuse the same JSON structs the REST handlers marshal.
 ### Wraps existing, working code — build all of these now
 | tool | maps to | notes |
 |------|---------|-------|
-| `list_jobs` | `GET /api/jobs` | optional `status`, `platform` filters |
+| `list_jobs` | `GET /api/jobs` | optional `status`, `platform` filters; `query` searches title/company/location/skills/salary/notes (accents optional) |
 | `get_job` | `GET /api/jobs/{id}` | |
 | `upload_cv` | `POST /api/cv` | upload the CV file at a path the user names (.pdf/.docx/.md/.html): kept for applying, text into the profile's About me; `replace` to overwrite (ask first) |
 | `update_profile` | `PUT /api/profile` | replace the profile text (what the user told the agent) |

@@ -299,3 +299,16 @@ func TestGetSetupTool(t *testing.T) {
 		t.Fatalf("after set_keywords = %+v", st)
 	}
 }
+
+func TestListJobsQueryTool(t *testing.T) {
+	cs := connect(t)
+	call(t, cs, "add_job", map[string]any{"title": "Kỹ Sư AI", "company": "Sao Mai"}, nil)
+	call(t, cs, "add_job", map[string]any{"title": "Data Analyst", "company": "MoMo"}, nil)
+	var out struct {
+		Jobs []jobs.Job `json:"jobs"`
+	}
+	call(t, cs, "list_jobs", map[string]any{"query": "ky su"}, &out)
+	if len(out.Jobs) != 1 || out.Jobs[0].Title != "Kỹ Sư AI" {
+		t.Fatalf("list_jobs query = %+v", out.Jobs)
+	}
+}

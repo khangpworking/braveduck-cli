@@ -205,3 +205,45 @@ func IsAppliedClearable(raw string, now time.Time) bool {
 	a := AppliedStateOf(raw, now)
 	return a.OK && a.State == ClockExpired
 }
+
+// Clock is a job's expiry clock, ready to show: the posting's deadline for an
+// open job, or the silence since applying for an applied one. ClosesIn is the
+// days until the sweep moves it to Closed (≤0: due), once it's counting down.
+type Clock struct {
+	Kind     string `json:"kind"`                // "deadline" or "applied"
+	State    string `json:"state"`               // deadline: ok/warning/expired; applied: silent/countdown/expired
+	Days     int    `json:"days"`                // deadline: days left (negative once past); applied: days since sent
+	Date     string `json:"date"`                // the deadline or the day it was sent
+	ClosesIn *int   `json:"closes_in,omitempty"` // see above
+}
+
+// ClockOf returns j's clock, or nil when it has none (no deadline, or a stage
+// the sweep never closes).
+func ClockOf(j Job, now time.Time) *Clock {
+	p := ParseExpiry(j.ExpiresAt)
+	switch {
+	case (j.Status == "saved" || j.Status == "waiting") && p.Kind == KindDeadline:
+		e := ExpiryStateOf(j.ExpiresAt, now)
+		if !e.HasDays {
+			return nil
+		}
+		c := &Clock{Kind: "deadline", State: string(e.State), Days: e.DaysLeft, Date: p.Date}
+		if e.DaysLeft < 0 {
+			n := ClearGraceDays + e.DaysLeft
+			c.ClosesIn = &n
+		}
+		return c
+	case j.Status == "applied" && p.Kind == KindApplied:
+		a := AppliedStateOf(j.ExpiresAt, now)
+		if !a.OK {
+			return nil
+		}
+		c := &Clock{Kind: "applied", State: string(a.State), Days: a.DaysSince, Date: p.Date}
+		if a.State != ClockSilent {
+			n := a.DaysToDelete
+			c.ClosesIn = &n
+		}
+		return c
+	}
+	return nil
+}

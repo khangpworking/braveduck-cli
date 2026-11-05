@@ -146,10 +146,11 @@ func cmdList(ctx context.Context, svc *service.Service, args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	status := fs.String("status", "", "filter by lane")
 	source := fs.String("source", "", "filter by discovery source")
+	search := fs.String("search", "", "only jobs containing every word (accents optional)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	list, err := svc.ListJobs(ctx, service.ListFilter{Status: *status, Source: *source})
+	list, err := svc.ListJobs(ctx, service.ListFilter{Status: *status, Source: *source, Query: *search})
 	if err != nil {
 		return err
 	}
