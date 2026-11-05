@@ -167,6 +167,7 @@ type idIn struct {
 type listIn struct {
 	Status string `json:"status,omitempty" jsonschema:"only jobs in this lane: saved, waiting, applied, interview, offer or closed"`
 	Source string `json:"source,omitempty" jsonschema:"only jobs from this discovery source, e.g. topcv, vietnamworks, paste"`
+	Query  string `json:"query,omitempty" jsonschema:"only jobs whose title, company, location, skills, salary or notes contain every word (accents optional, e.g. ky su ai)"`
 }
 
 // Object wrappers: structured tool output is an object in every MCP client.
@@ -294,7 +295,7 @@ type verdictIn struct {
 type tools struct{ svc *service.Service }
 
 func (t tools) listJobs(ctx context.Context, in listIn) (jobsOut, error) {
-	list, err := t.svc.ListJobs(ctx, service.ListFilter{Status: in.Status, Source: in.Source})
+	list, err := t.svc.ListJobs(ctx, service.ListFilter{Status: in.Status, Source: in.Source, Query: in.Query})
 	return jobsOut{list}, err
 }
 

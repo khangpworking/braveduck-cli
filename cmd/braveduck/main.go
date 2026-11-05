@@ -35,7 +35,7 @@ Jobs
   export [--json] [--out file]   every job as CSV (or full JSON records)
   backup [file]   copy the database now (default: ~/.braveduck/backups/, where
              the running board also keeps a daily copy for a week)
-  list       list jobs            (--status, --source)
+  list       list jobs            (--status, --source, --search "ky su ai")
   show <id>  job detail
   edit <id>  change details  (--title, --company, --salary, --location, --notes)
   status <id> <stage>   move a job to a lane (saved/waiting/applied/interview/offer/closed)

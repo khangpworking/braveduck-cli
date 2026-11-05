@@ -12,6 +12,7 @@ async function refreshAppState() {
     const ratingConfig = await APIClient.getRatingConfig();
     const crawlStatus = await APIClient.getCrawlStatus();
     const activity = await APIClient.getActivity();
+    const stats = await APIClient.getStats();
     let platforms = AppState.platforms || [];
     try { platforms = await APIClient.getPlatforms(); } catch {}
     // Requests can finish out of order, or the user can begin editing after
@@ -23,7 +24,7 @@ async function refreshAppState() {
       return;
     }
     refreshPending = false;
-    Object.assign(AppState, { location, jobs, ratingConfig, crawlStatus, activity, platforms });
+    Object.assign(AppState, { location, jobs, ratingConfig, crawlStatus, activity, platforms, stats });
     renderAll();
     renderSetup();
     notifyNewMatches(AppState.jobs);
@@ -158,53 +159,17 @@ async function renderToday() {
 }
 
 function renderMoraleWidget() {
-  // Moral Widget Logic:
-  // Resolved = Interview / Offer (wins), or Applied / Closed that is aged past 14 days (misses).
-  // Freshly-applied or Saved are not counted in morale calculation.
-  let wins = 0;
-  let misses = 0;
-  let pending = 0;
-  
-  const now = new Date();
-
-  AppState.jobs.forEach(j => {
-    if (j.status === "Interview" || j.status === "Offer") {
-      wins++;
-    } else if (j.status === "Applied" || j.status === "Closed") {
-      const savedDate = new Date(j.saved_at);
-      const diffDays = (now - savedDate) / (1000 * 60 * 60 * 24);
-      if (diffDays > 14 && j.apply_state === "sent") {
-        misses++;
-      } else {
-        pending++;
-      }
-    } else if (j.status === "Waiting to apply") {
-      pending++;
-    }
-  });
-
-  const totalResolved = wins + misses;
-  const rateEl = document.getElementById("moraleRate");
-  const sublineEl = document.getElementById("moraleSubline");
-  const msgEl = document.getElementById("moraleMessage");
-
-  sublineEl.innerText = `${wins} interview${wins === 1 ? "" : "s"} from ${totalResolved} answered application${totalResolved === 1 ? "" : "s"} · ${pending} waiting`;
-
-  if (totalResolved < 3) {
-    rateEl.innerText = "—";
-    msgEl.innerText = "Your interview rate shows once 3 applications have an answer.";
-  } else {
-    const rate = Math.round((wins / totalResolved) * 100);
-    rateEl.innerText = `${rate}%`;
-    
-    if (rate < 20) {
-      msgEl.innerText = "Keep going, consistency is key! (Hãy kiên trì, sự đều đặn là chìa khóa!)";
-    } else if (rate <= 40) {
-      msgEl.innerText = "You're getting solid traction. Keep pushing. (Bạn đang có đà tiến triển tốt. Hãy tiếp tục cố gắng.)";
-    } else {
-      msgEl.innerText = "You're a superstar! Excellent interview conversion. (Bạn là một ngôi sao! Tỷ lệ chuyển đổi phỏng vấn xuất sắc.)";
-    }
-  }
+  // The interview rate and its message come from the server (service.Stats:
+  // jobs.SuccessRateOf / MoraleMessage), the same ones `get_stats` gives an
+  // agent. Resolved = an interview or offer, a closed job, or an application
+  // past the response window; the rate shows once 3 have resolved.
+  const st = AppState.stats;
+  if (!st) return;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  document.getElementById("moraleSubline").innerText =
+    `${plural(st.interviews, "interview")} from ${plural(st.resolved, "answered application")} · ${st.pending} waiting`;
+  document.getElementById("moraleRate").innerText = st.resolved >= 3 ? `${Math.round(st.interview_rate * 100)}%` : "—";
+  document.getElementById("moraleMessage").innerText = st.morale || "";
 }
 
 function renderCrawlStatus() {
