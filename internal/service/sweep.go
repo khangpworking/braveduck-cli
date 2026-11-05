@@ -73,10 +73,16 @@ func sweepNote(j jobs.Job, now time.Time) string {
 	return ""
 }
 
-// sweepIfDue runs SweepExpired when sweepEvery has passed since the last one.
+// keepEvents is how much activity history is kept (the feed shows the
+// latest few; older lines are trimmed with each sweep).
+const keepEvents = 5000
+
+// sweepIfDue runs SweepExpired when sweepEvery has passed since the last one,
+// and trims the activity feed to keepEvents.
 func (s *Service) sweepIfDue(ctx context.Context, last *time.Time) {
 	if now := s.now(); now.Sub(*last) >= sweepEvery {
 		*last = now
 		_, _ = s.SweepExpired(ctx)
+		_, _ = s.st.PruneEvents(ctx, keepEvents)
 	}
 }

@@ -283,42 +283,33 @@ function renderJobCard(job, container) {
   // Age and expiry badge calculation
   const ageStr = timeAgo(job.saved_at);
   let expiryHtml = "";
-  // Expiry badges follow the hourly sweep (service.SweepExpired): Saved or
-  // Waiting jobs move to Closed 7 days after the posting closes; Applied jobs
-  // 27 days after applying with no answer. Kept or pinned cards stay put.
-  const DAY = 1000 * 60 * 60 * 24;
-  // Whole calendar days from today to a YYYY-MM-DD date, in local time (the
-  // sweep counts the same way).
-  const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
-  const calendarDays = iso => Math.round((new Date(`${iso}T00:00:00`) - startOfToday) / DAY);
-  const notApplied = job.status === "Saved" || job.status === "Waiting to apply";
+  // Expiry badges show the job's clock from the server (jobs.ClockOf, the
+  // same rules as the hourly sweep): an open job's deadline, or the silence
+  // since applying. Kept or pinned cards never move, so they get no countdown.
   const toClosed = (days, why) =>
     `<span class="expiry-badge red" title="${esc(why)} Keep 🛟 or pin it to stop that.">⛔ to Closed in ${days > 0 ? days : 0}d</span>`;
-  if (notApplied && job.expires_at) {
-    const deadline = new Date(`${job.expires_at}T00:00:00`);
-    const daysLeft = calendarDays(job.expires_at);
+  const clock = job.clock;
+  if (clock && clock.kind === "deadline") {
     if (job.keep) {
       expiryHtml = `<span class="expiry-badge grey">🛟 kept</span>`;
     } else if (job.pinned) {
-      expiryHtml = daysLeft < 0 ? `<span class="expiry-badge red">⛔ closed</span>` : `<span class="expiry-badge amber">📅 deadline</span>`;
-    } else if (daysLeft < 0) {
-      expiryHtml = toClosed(7 + daysLeft, "The posting has closed: this card moves to Closed 7 days after its deadline.");
-    } else if (daysLeft <= 10) {
-      expiryHtml = `<span class="expiry-badge amber">⚠ ${daysLeft}d left</span>`;
+      expiryHtml = clock.state === "expired" ? `<span class="expiry-badge red">⛔ closed</span>` : `<span class="expiry-badge amber">📅 deadline</span>`;
+    } else if (clock.state === "expired") {
+      expiryHtml = toClosed(clock.closes_in, "The posting has closed: this card moves to Closed 7 days after its deadline.");
+    } else if (clock.state === "warning") {
+      expiryHtml = `<span class="expiry-badge amber">⚠ ${clock.days}d left</span>`;
     } else {
-      expiryHtml = `<span class="expiry-badge grey">${deadline.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })}</span>`;
+      expiryHtml = `<span class="expiry-badge grey">${new Date(`${clock.date}T00:00:00`).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })}</span>`;
     }
-  } else if (job.status === "Applied" && job.applied_on) {
-    // Silence clock, from the day the application was sent.
-    const daysApplied = -calendarDays(job.applied_on);
+  } else if (clock && clock.kind === "applied") {
     if (job.keep) {
       expiryHtml = `<span class="expiry-badge grey">🛟 kept</span>`;
     } else if (job.pinned) {
-      expiryHtml = daysApplied >= 20 ? `<span class="expiry-badge grey">⛔ no reply</span>` : `<span class="expiry-badge grey">📮 ${daysApplied}d</span>`;
-    } else if (daysApplied >= 20) {
-      expiryHtml = toClosed(27 - daysApplied, "No answer yet: this card moves to Closed 27 days after applying.");
+      expiryHtml = clock.state === "silent" ? `<span class="expiry-badge grey">📮 ${clock.days}d</span>` : `<span class="expiry-badge grey">⛔ no reply</span>`;
+    } else if (clock.state !== "silent") {
+      expiryHtml = toClosed(clock.closes_in, "No answer yet: this card moves to Closed 27 days after applying.");
     } else {
-      expiryHtml = `<span class="expiry-badge grey">📮 ${daysApplied}d</span>`;
+      expiryHtml = `<span class="expiry-badge grey">📮 ${clock.days}d</span>`;
     }
   }
 
