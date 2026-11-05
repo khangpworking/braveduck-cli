@@ -2,11 +2,13 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/go-rod/rod"
@@ -71,31 +73,21 @@ func launch(ctx context.Context, o launchOpts) (*rod.Browser, func(), error) {
 	return b, func() { cleanup(); release() }, nil
 }
 
+// BrowserServiceEnv names a go-rod browser service (rod-manager, e.g.
+// ws://browser:7317) to run every browser in instead of locally. A shared
+// server uses it so the browser, which renders other sites' pages, runs in
+// a container of its own: no users' data, no secrets, its own network.
+const BrowserServiceEnv = "BRAVEDUCK_BROWSER_SERVICE"
+
 func launchBrowser(ctx context.Context, o launchOpts) (*rod.Browser, func(), error) {
+	if svc := strings.TrimSpace(os.Getenv(BrowserServiceEnv)); svc != "" {
+		return launchRemote(ctx, svc, o)
+	}
 	bin, err := EnsureBinary(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	fpPlatform := "windows"
-	if runtime.GOOS == "darwin" {
-		fpPlatform = "macos"
-	}
-	seed := o.Seed
-	if seed == "" {
-		seed = NewSeed()
-	}
-
-	l := launcher.New().
-		Bin(bin).
-		Context(ctx).
-		Headless(o.Headless).
-		Set(flags.Flag("no-sandbox")).
-		Set(flags.Flag("fingerprint"), seed).
-		Set(flags.Flag("fingerprint-platform"), fpPlatform).
-		Set(flags.Flag("lang"), "vi-VN").
-		Set(flags.Flag("fingerprint-timezone"), "Asia/Ho_Chi_Minh").
-		Delete(flags.Flag("enable-automation")).
-		Delete(flags.Flag("enable-unsafe-swiftshader"))
+	l := withFlags(launcher.New().Bin(bin).Context(ctx).Headless(o.Headless), o.Seed)
 	if o.UserDataDir != "" {
 		l = l.UserDataDir(o.UserDataDir)
 	}
@@ -117,6 +109,48 @@ func launchBrowser(ctx context.Context, o launchOpts) (*rod.Browser, func(), err
 		return nil, nil, fmt.Errorf("browser: connect: %w", err)
 	}
 	return b, func() { _ = b.Close(); l.Cleanup() }, nil
+}
+
+// withFlags adds CloakBrowser's flags — fingerprint seed (a fresh one if
+// seed is ""), spoofed platform, Vietnam locale/timezone — minus the two
+// Chromium defaults that leak automation.
+func withFlags(l *launcher.Launcher, seed string) *launcher.Launcher {
+	fpPlatform := "windows"
+	if runtime.GOOS == "darwin" {
+		fpPlatform = "macos"
+	}
+	if seed == "" {
+		seed = NewSeed()
+	}
+	return l.Set(flags.Flag("no-sandbox")).
+		Set(flags.Flag("fingerprint"), seed).
+		Set(flags.Flag("fingerprint-platform"), fpPlatform).
+		Set(flags.Flag("lang"), "vi-VN").
+		Set(flags.Flag("fingerprint-timezone"), "Asia/Ho_Chi_Minh").
+		Delete(flags.Flag("enable-automation")).
+		Delete(flags.Flag("enable-unsafe-swiftshader"))
+}
+
+// launchRemote starts a headless browser in the browser service and
+// connects to it; the service kills it when the connection closes.
+func launchRemote(ctx context.Context, svc string, o launchOpts) (*rod.Browser, func(), error) {
+	if !o.Headless {
+		return nil, nil, errors.New("browser: a window can't open in the browser service")
+	}
+	l, err := launcher.NewManaged(svc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("browser: the browser service at %s: %w", svc, err)
+	}
+	l = withFlags(l.Context(ctx).Headless(true).Leakless(true), o.Seed)
+	client, err := l.Client()
+	if err != nil {
+		return nil, nil, fmt.Errorf("browser: the browser service at %s: %w", svc, err)
+	}
+	b := rod.New().Client(client).Context(ctx)
+	if err := b.Connect(); err != nil {
+		return nil, nil, fmt.Errorf("browser: connect to the browser service: %w", err)
+	}
+	return b, func() { _ = b.Close() }, nil
 }
 
 // LibsHint explains the most common launch failure on minimal Linux (WSL,
