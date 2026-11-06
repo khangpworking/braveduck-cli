@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -109,5 +110,38 @@ func TestBoardRateWithEmptyProfileOpensProfileForm(t *testing.T) {
 	}
 	if page.MustEval(`() => document.getElementById("askModalOverlay").classList.contains("open")`).Bool() {
 		t.Fatal("an empty profile opened the copy-a-prompt window")
+	}
+}
+
+// The rating window still opens when the Jev status can't be read; the Jev
+// notice and opt-out are hidden instead.
+func TestBoardRatingOpensWhenJevStatusFails(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := service.New(st)
+	svc.SetDataDir(t.TempDir())
+	h := Handler(st, svc, testToken)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/jev" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error":"database is locked"}`))
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
+	defer ts.Close()
+
+	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
+	page.MustElement(".column")
+	openModal(t, page, "ratingBtn", "ratingModalOverlay")
+	if !page.MustEval(`() => document.getElementById("jevBlock").hidden`).Bool() {
+		t.Fatal("Jev block shown although its status failed to load")
+	}
+	if text := page.MustElement("#ratingModalOverlay").MustText(); !strings.Contains(text, "Each job gets a grade") {
+		t.Fatalf("rating window = %q", text)
 	}
 }

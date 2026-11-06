@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
       config.models.filter(m => m !== config.default_model).join(", ");
     document.getElementById("ratingConfigError").style.display = "none";
     document.getElementById("ratingAdvanced").open = false;
-    showJev(await APIClient.getJev());
+    showJev(await APIClient.getJev().catch(() => ({ available: false, opt_out: false })));
     ratingModal.classList.add("open");
   });
 

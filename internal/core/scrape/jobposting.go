@@ -208,21 +208,33 @@ var detailLabelRE = regexp.MustCompile(`(?i)^(mức lương|lương|salary|thu n
 // "$1,500", "Up to 2000 USD").
 var payLineRE = regexp.MustCompile(`(?i)^(up to|upto|từ|tới|đến)?\s*(\$\s*\d|\d[\d.,]*\s*(-|–|~|đến|to)?\s*[\d.,]*\s*(triệu|tr|million|usd|vnd|đ|\$)(\s|$|/|,|\.|\)))`)
 
-// isPlaceLine reports whether every part of a line is a place ("Hà Nội",
-// "Quận 1, TP. Hồ Chí Minh", "Ho Chi Minh City, Vietnam").
+// isPlaceLine reports whether a line is a place: every part is a place ("Hà
+// Nội", "Quận 1, TP. Hồ Chí Minh"), or it is a comma list ending in one
+// ("Cầu Giấy, Hà Nội", "Tầng 5, 123 Lê Lợi, Quận 1"). A " - " name such as
+// "VNG - Hồ Chí Minh" is still a company.
 func isPlaceLine(line string) bool {
+	lower := strings.ToLower(line)
+	if i := strings.LastIndex(lower, ","); i >= 0 && isPlace(lower[i+1:]) {
+		return true
+	}
 	found := false
-	for _, part := range placeSepRE.Split(strings.ToLower(line), -1) {
-		part = strings.TrimSpace(placePrefixRE.ReplaceAllString(strings.TrimSpace(part), ""))
-		if part == "" {
+	for _, part := range placeSepRE.Split(lower, -1) {
+		if strings.TrimSpace(part) == "" {
 			continue
 		}
-		if !places[part] && !districtRE.MatchString(part) {
+		if !isPlace(part) {
 			return false
 		}
 		found = true
 	}
 	return found
+}
+
+// isPlace reports whether one lower-cased part names a city, province,
+// country or district.
+func isPlace(part string) bool {
+	part = strings.TrimSpace(placePrefixRE.ReplaceAllString(strings.TrimSpace(part), ""))
+	return places[part] || districtRE.MatchString(part)
 }
 
 var (
@@ -234,6 +246,9 @@ var (
 		"ho chi minh city": true, "hcm": true, "hcmc": true, "sài gòn": true, "saigon": true,
 		"đà nẵng": true, "da nang": true, "danang": true, "hải phòng": true, "hai phong": true,
 		"cần thơ": true, "can tho": true, "việt nam": true, "vietnam": true, "viet nam": true,
+		"bình dương": true, "binh duong": true, "đồng nai": true, "dong nai": true,
+		"bắc ninh": true, "bac ninh": true, "long an": true, "hưng yên": true, "hung yen": true,
+		"khánh hòa": true, "khanh hoa": true, "nha trang": true, "huế": true, "hue": true,
 	}
 )
 
