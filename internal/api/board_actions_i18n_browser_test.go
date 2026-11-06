@@ -143,7 +143,7 @@ func TestAddingAndProfileVietnamese(t *testing.T) {
 	page.MustElement("#cvFileInput").MustSetFiles(good)
 	toast("Đã thêm CV. Hồ sơ của bạn đã được cập nhật.")
 	page.MustWait(`() => document.getElementById("cvStatus").textContent.includes("đã thêm") && document.getElementById("cvChooseBtn").textContent === "Thay CV khác"`)
-	says("#cvModalOverlay .modal", []string{"Tải về", "Vừa xong"}, []string{"Download", "Replace it", "just now"})
+	says("#cvModalOverlay .modal", []string{"Tải về", "vừa xong"}, []string{"Download", "Replace it", "just now"})
 	page.MustEval(`() => document.querySelector("#cvModalOverlay .modal-close-btn").click()`)
 
 	// The profile form: the offered choices show translated and save unchanged.
