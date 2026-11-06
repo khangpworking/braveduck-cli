@@ -231,6 +231,9 @@ type RatingRequest struct {
 func (s *Service) RequestRating(ctx context.Context, id int64, model string) (RatingRequest, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {
+		// A Jev key lets a normal user rate without an agent, unless they
+		// already picked a different rater.
+		s.autoEnableJev(ctx)
 		cfg, err := s.RatingConfig(ctx)
 		if err != nil {
 			return RatingRequest{}, err

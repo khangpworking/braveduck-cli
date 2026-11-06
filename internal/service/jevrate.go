@@ -195,11 +195,31 @@ func (s *Service) jevIsDefault(ctx context.Context) bool {
 	return err == nil && IsJevModel(c.DefaultModel)
 }
 
+// autoEnableJev makes Jev the rater on a board that has a Jev key and where the
+// owner has never picked a rater. A board the user configured is left alone.
+// It reports whether Jev is the default rater afterwards.
+func (s *Service) autoEnableJev(ctx context.Context) bool {
+	if s.jevIsDefault(ctx) {
+		return true
+	}
+	chosen, err := s.st.RatingConfigChosen(ctx)
+	if err != nil || chosen {
+		return false
+	}
+	if s.jev == nil {
+		if _, _, err := loadJevKey(); err != nil {
+			return false
+		}
+	}
+	_, err = s.EnableJev(ctx)
+	return err == nil
+}
+
 // runJevRate is the scheduled task: rate new jobs when Jev owns the badge, a
 // key exists and the profile is filled in; otherwise it quietly does nothing.
 func (s *Service) runJevRate(ctx context.Context) (CrawlResult, error) {
 	res := CrawlResult{Source: JevRateSource}
-	if !s.jevIsDefault(ctx) {
+	if !s.autoEnableJev(ctx) {
 		return res, nil
 	}
 	if _, err := s.jevClient(); err != nil {

@@ -491,7 +491,12 @@ func reply(w http.ResponseWriter, code int, v any, err error) {
 	case errors.Is(err, service.ErrInvalid):
 		writeErr(w, http.StatusBadRequest, err)
 	case errors.Is(err, service.ErrProfileEmpty):
-		writeErr(w, http.StatusConflict, err) // a precondition: fill in the profile first
+		// The board can't edit a file path; send people to the profile form.
+		// CLI and MCP still get the detailed service error with the path.
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Answer a few questions first",
+			"code":  "profile_empty",
+		})
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
 	}

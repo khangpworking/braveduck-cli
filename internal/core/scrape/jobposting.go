@@ -168,6 +168,7 @@ var companyRE = regexp.MustCompile(`(?i)(^|\s)(công ty|cty|tập đoàn|company
 
 // pastedCompany finds the employer: the first phrase after the title that looks
 // like a company name, else (multi-line pastes) the second line, as before.
+// Salary, location, skill and requirement lines are never an employer.
 func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 	for i, seg := range segs {
 		if i > 0 && companyRE.MatchString(seg) && len(seg) <= 120 {
@@ -183,7 +184,7 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 			lines = append(lines, l)
 		}
 	}
-	if len(lines) > 1 {
+	if len(lines) > 1 && !nonCompanyRE.MatchString(lines[1]) {
 		return truncate(lines[1], 120)
 	}
 	return ""
@@ -191,6 +192,11 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 
 // labelRE strips a leading "Label:" ("Mức lương:", "Company:") from a phrase.
 var labelRE = regexp.MustCompile(`^[^:]{1,20}:\s*`)
+
+// nonCompanyRE spots a pasted line that is pay, place, requirements or perks
+// instead of an employer. The second line of a JD is often one of these, so it
+// must never become the company.
+var nonCompanyRE = regexp.MustCompile(`(?i)(^|\s)(lương|salary|thu nhập|compensation|thỏa thuận|negotiable|gross|net|triệu|million|vnd|usd|địa điểm|địa chỉ|location|nơi làm việc|workplace|hybrid|remote|onsite|on-site|yêu cầu|requirements?|qualifications?|kỹ năng|skills?|kinh nghiệm|experience|mô tả|description|quyền lợi|benefits?|phúc lợi|hạn nộp|deadline|liên hệ|contact|email|hà nội|hồ chí minh|hcm|đà nẵng|việt nam|hanoi|ho chi minh|da nang|vietnam|quận|district|tỉnh|city)(\s|$|:|,|\.)`)
 
 // FetchJobPosting fetches a listing and extracts its JobPosting. It tries plain
 // HTTP first (cheap, no browser); if that finds no JobPosting AND an external
@@ -443,11 +449,13 @@ func deadlineDate(s string) string {
 var salaryRE = regexp.MustCompile(`(?i)(salary|lương|\$|usd|vnd|triệu|million)`)
 
 // pastedSalary returns the first short phrase that mentions pay, minus any
-// "Mức lương:" style label.
+// "Mức lương:" style label (with or without a colon).
 func pastedSalary(segs []string) string {
 	for _, seg := range segs {
 		if salaryRE.MatchString(seg) && len(seg) < 80 {
-			if v := strings.TrimSpace(labelRE.ReplaceAllString(seg, "")); v != "" {
+			v := strings.TrimSpace(labelRE.ReplaceAllString(seg, ""))
+			v = strings.TrimSpace(salaryLabelRE.ReplaceAllString(v, ""))
+			if v != "" {
 				return truncate(v, 80)
 			}
 			return truncate(seg, 80)
@@ -455,6 +463,9 @@ func pastedSalary(segs []string) string {
 	}
 	return ""
 }
+
+// salaryLabelRE drops a bare pay label such as "Lương " or "Salary -".
+var salaryLabelRE = regexp.MustCompile(`(?i)^(mức\s+)?(lương|salary|thu nhập|pay)\s*[:\-]?\s*`)
 
 func stripTags(s string) string { return tagRE.ReplaceAllString(s, " ") }
 

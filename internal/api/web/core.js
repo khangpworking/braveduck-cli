@@ -178,7 +178,11 @@ const APIClient = {
       body: JSON.stringify(body || {})
     });
     const out = await res.json();
-    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      const err = new Error(out.error || `HTTP ${res.status}`);
+      err.code = out.code;
+      throw err;
+    }
     return out;
   },
 
