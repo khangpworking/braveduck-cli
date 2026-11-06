@@ -380,9 +380,9 @@ async function renderFBGroups() {
   document.getElementById("fbGroupsList").innerHTML = groups.map(g => {
     const [label, color] = FB_GROUP_STATUS[g.visibility] || [g.visibility, "var(--muted)"];
     return `<li style="display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--hairline);">
-      <span><a href="${safeUrl(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.name || g.url)}</a>
-        <span style="display:block; font-size:12px; color:${color};">${esc(label)}${g.note ? " — " + esc(g.note) : ""}</span></span>
-      <button class="btn-secondary btn-sm" onclick="unfollowFBGroup(${jsArg(g.key)})">Unfollow</button></li>`;
+      <span style="min-width:0; overflow-wrap:anywhere;"><a href="${safeUrl(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.name || g.url)}</a>
+        <span style="display:block; font-size:12px; color:${color};">${esc(t(label))}${g.note ? " — " + esc(g.note) : ""}</span></span>
+      <button class="btn-secondary btn-sm" onclick="unfollowFBGroup(${jsArg(g.key)})">${esc(t("Unfollow"))}</button></li>`;
   }).join("");
 }
 
@@ -390,7 +390,7 @@ async function unfollowFBGroup(key) {
   try {
     await APIClient.del(`facebook-groups/${encodeURIComponent(key)}`);
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
   renderFBGroups();

@@ -27,13 +27,15 @@ function tagsField(label, hint, list, suggestions, onChange) {
   // A key press on a button that goes away (detail 0: not a mouse or tap)
   // moves on to the input, so keyboard users don't lose their place.
   const refocus = e => { if (e.detail === 0) input.focus(); };
+  // What's saved stays as written; only a suggestion we offered is translated.
+  const shown = v => (suggestions || []).includes(v) ? t(v) : v;
   const render = () => {
     const typing = document.activeElement === input; // re-adding the input drops its focus
-    box.replaceChildren(...list.map((v, i) => el("span", { class: "pf-tag" }, v,
-      el("button", { type: "button", class: "pf-tag-x", "aria-label": t("Remove {term}", {term: v}), onclick: e => { list.splice(i, 1); render(); refocus(e); } }, "×"))), input);
+    box.replaceChildren(...list.map((v, i) => el("span", { class: "pf-tag" }, shown(v),
+      el("button", { type: "button", class: "pf-tag-x", "aria-label": t("Remove {term}", {term: shown(v)}), onclick: e => { list.splice(i, 1); render(); refocus(e); } }, "×"))), input);
     if (typing) input.focus();
     sugg.replaceChildren(...(suggestions || []).filter(s => !list.some(v => v.toLowerCase() === s.toLowerCase()))
-      .map(s => el("button", { type: "button", class: "pf-suggestion", onclick: e => { list.push(s); render(); refocus(e); } }, "+ " + s)));
+      .map(s => el("button", { type: "button", class: "pf-suggestion", onclick: e => { list.push(s); render(); refocus(e); } }, "+ " + t(s))));
     if (onChange) onChange();
   };
   const add = () => {
@@ -56,10 +58,11 @@ function tagsField(label, hint, list, suggestions, onChange) {
 // choiceField: buttons that toggle (several may be on).
 function choiceField(label, list, options) {
   const row = el("div", { class: "pf-choices", role: "group", "aria-label": label });
+  const offered = options; // the saved value stays English; only these are translated
   const render = () => row.replaceChildren(...options.map(o => {
     const on = list.includes(o);
     return el("button", { type: "button", class: "pf-choice" + (on ? " on" : ""), "aria-pressed": String(on),
-      onclick: () => { on ? list.splice(list.indexOf(o), 1) : list.push(o); render(); } }, o);
+      onclick: () => { on ? list.splice(list.indexOf(o), 1) : list.push(o); render(); } }, offered.includes(o) ? t(o) : o);
   }));
   // Values the form doesn't offer stay as written (and still show).
   options = options.concat(list.filter(v => !options.includes(v)));
@@ -84,27 +87,27 @@ function areaField(label, obj, key, hint, rows) {
 // moneyField: amount, currency, period and gross/net. A figure written in a
 // way these fields can't show is kept as text until a new amount replaces it.
 function moneyField(label, m, opts) {
-  const fmt = n => n ? Number(n).toLocaleString("en-US") : "";
-  const amount = el("input", { type: "text", inputmode: "numeric", class: "text-input pf-amount", value: fmt(m.amount), placeholder: "e.g. 20,000,000", "aria-label": label + " amount" });
+  const fmt = n => n ? Number(n).toLocaleString(I18N.lang) : "";
+  const amount = el("input", { type: "text", inputmode: "numeric", class: "text-input pf-amount", value: fmt(m.amount), placeholder: t("e.g. 20,000,000"), "aria-label": t("{label} amount", { label }) });
   amount.addEventListener("input", () => {
     const n = parseInt(amount.value.replace(/[^\d]/g, ""), 10) || 0;
     m.amount = n;
     if (n) m.text = "";
     amount.value = fmt(n);
   });
-  const select = (key, choices, labelText) => {
-    const s = el("select", { class: "text-input pf-select", "aria-label": label + " " + labelText },
-      ...choices.map(([v, t]) => el("option", { value: v, selected: (m[key] || "") === v }, t)));
+  const select = (key, choices, ariaLabel) => {
+    const s = el("select", { class: "text-input pf-select", "aria-label": ariaLabel },
+      ...choices.map(([v, text]) => el("option", { value: v, selected: (m[key] || "") === v }, text)));
     s.addEventListener("change", () => { m[key] = s.value; });
     return s;
   };
   if (!m.currency) m.currency = "VND";
   if (!m.period) m.period = "month";
   const row = el("div", { class: "pf-money" }, amount,
-    select("currency", opts.currencies.map(c => [c, c]), "currency"),
-    select("period", opts.periods.map(p => [p, "per " + p]), "period"),
-    select("basis", [["", "gross or net?"], ["gross", "gross (before tax)"], ["net", "net (take-home)"]], "gross or net"));
-  const was = m.text ? el("div", { class: "pf-hint" }, `You wrote: "${m.text}". Fill in an amount to replace it.`) : null;
+    select("currency", opts.currencies.map(c => [c, c]), t("{label} currency", { label })),
+    select("period", opts.periods.map(p => [p, t("per " + p)]), t("{label} period", { label })),
+    select("basis", [["", t("gross or net?")], ["gross", t("gross (before tax)")], ["net", t("net (take-home)")]], t("{label} gross or net", { label })));
+  const was = m.text ? el("div", { class: "pf-hint" }, t("You wrote: \"{text}\". Fill in an amount to replace it.", { text: m.text })) : null;
   return el("div", { class: "pf-field" }, el("label", { class: "pf-label" }, label), row, was);
 }
 
@@ -117,35 +120,35 @@ function renderProfileForm() {
   // Fields the form doesn't show (target pay, schedule, …) stay in the
   // profile: they go back to the server unchanged.
   const locationLink = el("div", { class: "pf-field pf-hint" },
-    "📍 Where you live and how far you'll travel to work: ",
+    t("📍 Where you live and how far you'll travel to work: "),
     el("button", { type: "button", class: "btn-link", onclick: () => {
       document.getElementById("profileModalOverlay").classList.remove("open");
       document.getElementById("locationBtn").click();
-    } }, "set your location →"));
+    } }, t("set your location →")));
   document.getElementById("profileFormBody").replaceChildren(
-    pfSection("1. What job do you want?",
-      tagsField("Job titles", "The roles you'd apply for, e.g. Business Analyst, Kế toán.", f.roles, []),
-      choiceField("Level", f.seniority, o.seniority),
-      choiceField("Type of job", f.job_types, o.job_types),
-      choiceField("Work mode", f.work_modes, o.work_modes),
+    pfSection(t("1. What job do you want?"),
+      tagsField(t("Job titles"), t("The roles you'd apply for, e.g. Business Analyst, Kế toán."), f.roles, []),
+      choiceField(t("Level"), f.seniority, o.seniority),
+      choiceField(t("Type of job"), f.job_types, o.job_types),
+      choiceField(t("Work mode"), f.work_modes, o.work_modes),
       locationLink),
-    pfSection("2. Pay",
-      moneyField("The least you'd accept", f.min_pay, o)),
-    pfSection("3. Deal-breakers",
-      tagsField("A job is a \"no\" if…", "Saturday work and unstated pay are also flagged on job cards. Anything you add here guides the rating.", f.deal_breakers, o.deal_breakers)),
-    pfSection("4. About you",
-      areaField("Your experience and skills", f, "about_me", "Filled in from your CV when you upload one. Edit freely.", 6)),
-    el("details", { class: "pf-more" }, el("summary", {}, "More (optional)"),
-      tagsField("Industries you like", "", f.industries_want, []),
-      tagsField("Industries to avoid", "", f.industries_avoid, []),
-      tagsField("Languages you can work in", "", f.languages, o.languages),
-      areaField("Anything else the rater should know", f, "notes", "", 3)));
+    pfSection(t("2. Pay"),
+      moneyField(t("The least you'd accept"), f.min_pay, o)),
+    pfSection(t("3. Deal-breakers"),
+      tagsField(t("A job is a \"no\" if…"), t("Saturday work and unstated pay are also flagged on job cards. Anything you add here guides the rating."), f.deal_breakers, o.deal_breakers)),
+    pfSection(t("4. About you"),
+      areaField(t("Your experience and skills"), f, "about_me", t("Filled in from your CV when you upload one. Edit freely."), 6)),
+    el("details", { class: "pf-more" }, el("summary", {}, t("More (optional)")),
+      tagsField(t("Industries you like"), "", f.industries_want, []),
+      tagsField(t("Industries to avoid"), "", f.industries_avoid, []),
+      tagsField(t("Languages you can work in"), "", f.languages, o.languages),
+      areaField(t("Anything else the rater should know"), f, "notes", "", 3)));
 }
 
 function showProfileMode(form) {
   document.getElementById("profileFormBody").hidden = !form;
   document.getElementById("profileTextBody").hidden = form;
-  document.getElementById("profileModeBtn").textContent = form ? "Edit as text instead" : "Back to the form";
+  document.getElementById("profileModeBtn").textContent = t(form ? "Edit as text instead" : "Back to the form");
 }
 
 async function openProfile() {
@@ -158,7 +161,7 @@ async function openProfile() {
     document.getElementById("profileText").value = p.text || "";
     renderProfileStatus(p);
   } catch (e) {
-    status.innerText = `Couldn't load your profile: ${e.message}`;
+    status.innerText = t("Couldn't load your profile: {error}", { error: t(e.message) });
     return;
   }
   renderProfileForm();
@@ -166,8 +169,8 @@ async function openProfile() {
 
 function renderProfileStatus(p) {
   document.getElementById("profileStatus").textContent = p.filled
-    ? "✓ Filled in — jobs can be rated against it."
-    : "Not filled in yet, so jobs can't be rated. Start with the job titles you want.";
+    ? t("✓ Filled in — jobs can be rated against it.")
+    : t("Not filled in yet, so jobs can't be rated. Start with the job titles you want.");
 }
 
 async function toggleProfileMode() {
@@ -188,7 +191,7 @@ async function saveProfile(quiet) {
   const btn = document.getElementById("saveProfileBtn");
   const formMode = !document.getElementById("profileFormBody").hidden;
   btn.disabled = true;
-  btn.textContent = "Saving…";
+  btn.textContent = t("Saving…");
   try {
     if (formMode && profileForm) {
       // Keep a tag the user typed without pressing Enter.
@@ -201,14 +204,14 @@ async function saveProfile(quiet) {
     const p = await APIClient.get("profile");
     document.getElementById("profileText").value = p.text || "";
     renderProfileStatus(p);
-    if (quiet !== true) showToast("Profile saved", "success");
+    if (quiet !== true) showToast(t("Profile saved"), "success");
     renderSetup();
     return true;
   } catch (e) {
-    showToast(`Couldn't save: ${e.message}`, "error");
+    showToast(t("Couldn't save: {error}", { error: t(e.message) }), "error");
     return false;
   } finally {
     btn.disabled = false;
-    btn.textContent = "Save";
+    btn.textContent = t("Save");
   }
 }

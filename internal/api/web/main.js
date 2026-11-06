@@ -40,13 +40,13 @@ document.addEventListener("DOMContentLoaded", () => {
   extractBtn.addEventListener("click", async () => {
     const content = pasteTextarea.value;
     if (!content.trim()) {
-      showToast("Paste a link or the job text first", "info");
+      showToast(t("Paste a link or the job text first"), "info");
       pasteTextarea.focus();
       return;
     }
     try {
       extractBtn.disabled = true;
-      extractBtn.innerText = "Adding…";
+      extractBtn.innerText = t("Adding…");
       
       const newJob = await APIClient.addJob(content);
       if (newJob.group) { // a Facebook group's link: following it
@@ -56,8 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
         extractResultBanner.style.color = "#166534";
         extractResultBanner.style.border = "1px solid #bbf7d0";
         extractResultBanner.innerHTML = newJob.added
-          ? `📘 <strong>Following this Facebook group.</strong><br>braveduck checks whether it's public; if it is, job posts that match your search terms come to your board by themselves.`
-          : `📘 You already follow this group.`;
+          ? `📘 <strong>${esc(t("Following this Facebook group."))}</strong><br>${esc(t("braveduck checks whether it's public; if it is, job posts that match your search terms come to your board by themselves."))}`
+          : `📘 ${esc(t("You already follow this group."))}`;
         extractResultBanner.style.display = "block";
         pasteTextarea.value = "";
         renderFBGroups();
@@ -68,12 +68,12 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.backgroundColor = "#dcfce7";
       extractResultBanner.style.color = "#166534";
       extractResultBanner.style.border = "1px solid #bbf7d0";
-      extractResultBanner.innerHTML = `✅ <strong>Job added</strong><br>${esc(newJob.title)}` +
-        (newJob.company ? ` at ${esc(newJob.company)}` : "");
+      extractResultBanner.innerHTML = `✅ <strong>${esc(t("Job added"))}</strong><br>` +
+        esc(newJob.company ? t("{title} at {company}", { title: newJob.title, company: newJob.company }) : newJob.title);
       extractResultBanner.style.display = "block";
       pasteTextarea.value = "";
       
-      showToast("Job added to Saved queue!", "success");
+      showToast(t("Job added to Saved queue!"), "success");
       refreshAppState();
     } catch (err) {
       extractResultBanner.className = "error";
@@ -83,17 +83,17 @@ document.addEventListener("DOMContentLoaded", () => {
       
       if (err.duplicates) {
         const matches = err.duplicates.map(d =>
-          `<li>#${esc(String(d.id))} ${esc(d.title)} <em>(${esc(d.status)})</em> ` +
-          `<button class="btn-secondary btn-sm" onclick="showJobCard('${esc(String(d.id))}')">Show</button></li>`).join("");
-        extractResultBanner.innerHTML = `⚠️ <strong>Not added: this job is already on the board.</strong>` +
+          `<li>#${esc(String(d.id))} ${esc(d.title)} <em>(${esc(t(d.status))})</em> ` +
+          `<button class="btn-secondary btn-sm" onclick="showJobCard('${esc(String(d.id))}')">${esc(t("Show"))}</button></li>`).join("");
+        extractResultBanner.innerHTML = `⚠️ <strong>${esc(t("Not added: this job is already on the board."))}</strong>` +
           `<ul style="margin: 6px 0 0; padding-left: 18px;">${matches}</ul>`;
       } else {
-        extractResultBanner.innerText = `❌ Couldn't add this job: ${err.message}`;
+        extractResultBanner.innerText = t("❌ Couldn't add this job: {error}", { error: t(err.message) });
       }
       extractResultBanner.style.display = "block";
     } finally {
       extractBtn.disabled = false;
-      extractBtn.innerText = "Add";
+      extractBtn.innerText = t("Add");
     }
   });
 
@@ -140,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showJev(await APIClient.setJevOptOut(jevOptOut.checked));
     } catch (e) {
       jevOptOut.checked = !jevOptOut.checked;
-      showToast(e.message, "error");
+      showToast(t(e.message), "error");
     }
   });
 
