@@ -90,7 +90,8 @@ type CrawlStatusView struct {
 // counts every job saved today, source-tagged or not.
 //
 // A source is healthy when its last run succeeded within StaleAfter, or twice
-// its interval if that's longer. The interval is its stored schedule, else
+// its interval if that's longer; a source switched off (every 0 minutes) is
+// healthy unless its last run failed. The interval is its stored schedule, else
 // defaultEvery[name] (a built-in on its default schedule), in minutes. Rows
 // from before crawl-report existed (no last_success_at) fall back to "last
 // succeeded today".
@@ -157,6 +158,10 @@ func (s *Store) CrawlStatus(ctx context.Context, now time.Time, defaultEvery map
 		if successAt != "" {
 			t, err := time.Parse(time.RFC3339, successAt)
 			healthy = err == nil && lastOK == 1 && now.Sub(t) <= stale
+		}
+		if stored.Valid && stored.Int64 == 0 {
+			// Switched off: not running is expected, only a failed last run counts.
+			healthy = lastOK == 1
 		}
 		sources = append(sources, CrawlSource{
 			Name:      name,
