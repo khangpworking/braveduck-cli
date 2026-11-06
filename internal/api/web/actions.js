@@ -123,10 +123,10 @@ async function renderAgentConnect() {
   try {
     const st = await APIClient.get("agent-key");
     document.getElementById("agentKeyRevoke").hidden = !st.exists;
-    document.getElementById("agentKeyNew").textContent = st.exists ? "Make a new key (the old one stops working)" : "Make a key for your agent";
+    document.getElementById("agentKeyNew").textContent = st.exists ? t("Make a new key (the old one stops working)") : t("Make a key for your agent");
     document.getElementById("agentConnectText").textContent = st.exists
-      ? "Your agent has a key. Make a new one if you lost it."
-      : "Make a key, then run the command it shows once in a terminal.";
+      ? t("Your agent has a key. Make a new one if you lost it.")
+      : t("Make a key, then run the command it shows once in a terminal.");
   } catch {}
 }
 
@@ -135,13 +135,13 @@ async function newAgentKey() {
   try {
     res = await APIClient.post("agent-key");
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
   const cmd = document.getElementById("agentConnectCmd");
   cmd.textContent = `claude mcp add --transport http braveduck ${location.origin}/mcp \\\n  --header "Authorization: Bearer ${res.key}"`;
   cmd.hidden = false;
-  document.getElementById("agentConnectText").textContent = "Run this once in a terminal. The key is shown only now — copy it:";
+  document.getElementById("agentConnectText").textContent = t("Run this once in a terminal. The key is shown only now — copy it:");
   document.getElementById("agentKeyRevoke").hidden = false;
 }
 
@@ -149,10 +149,10 @@ async function revokeAgentKey() {
   try {
     await APIClient.del("agent-key");
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
-  showToast("The agent key is removed", "success");
+  showToast(t("The agent key is removed"), "success");
   renderAgentConnect();
 }
 
