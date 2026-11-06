@@ -20,16 +20,19 @@ board. The user is a single person managing their own search.
 ### 2.1 Header bar
 - **Page title** ("braveduck").
 - **Stat pills** — live counts: total `saved`, `applied`, `interview`, `offer`.
-  Purpose: at-a-glance funnel size.
+  Purpose: at-a-glance funnel size. Not on a phone: each lane header has its count.
+- **🔔 button** — opens recent activity (2.6).
 - **+ Add Job button** — toggles a drawer holding the paste form (2.4).
 
 ### 2.2 Today (with the interview-rate line)
+- One short line, "Today · N new jobs · M to look at", that opens to show the rest.
 - **Today** lists what to act on now, each item opening its card:
   - *best matches to apply for* — Saved/Waiting jobs rated A or B, best first (top 3);
   - *deadlines this week* — open jobs whose posting closes within 7 days;
   - *follow up* — jobs still in Applied ≥ 7 days after their applied date.
   With nothing to act on it says so.
-- Underneath, the **interview rate** = interviews landed ÷ CVs that have had time
+- Underneath, once at least one application has been answered, the
+  **interview rate** = interviews landed ÷ CVs that have had time
   to answer, with `N interviews from M answered applications · K waiting`.
 - A **tiered encouragement message** whose tone escalates with the rate (below
   3 answered applications it says it's too early). The rate, counts and message
@@ -42,8 +45,9 @@ board. The user is a single person managing their own search.
 - Purpose: motivational feedback loop, not a hard KPI.
 
 ### 2.3 Crawl status strip
-- **"📥 N new jobs found · date"** headline with **per-source chips** (TopCV 3,
-  LinkedIn 2, …). Purpose: did today's crawl actually bring anything in.
+- **Per-source chips** (TopCV 3, CareerLink 2, …) inside the opened Today line;
+  the new-job count is on the line itself. Purpose: did today's crawl actually
+  bring anything in.
 - **Unhealthy-crawler chips** — only crawlers that did NOT run today appear, each
   showing last-success date (or "never run") and a **Retry** button that
   re-triggers that crawler. A healthy crawler shows nothing (silence = fine).
@@ -58,13 +62,8 @@ board. The user is a single person managing their own search.
 - Drawer auto-opens when there's a result to show.
 
 ### 2.5 Board toolbar
-- **Platform filter** — checkboxes (All + one per crawl source) that show/hide
-  cards by source. Pure client-side visibility filter, persisted to
-  localStorage. All real crawl sources always appear (even at 0 cards) so an
-  empty source reads as "wired up, nothing today"; paste/other appear only when
-  present. NOT a crawler on/off switch.
-- **Search box** — filters cards by title, company, location, skills, salary
-  and notes as you type (accents optional); `/` focuses it, Esc clears it.
+- **Search box** — filters cards by title, company, location, skills, salary,
+  notes and source as you type (accents optional); `/` focuses it, Esc clears it.
 - **Keyboard:** `n` opens Add Job, `?` lists the shortcuts, Esc closes the open
   window or drawer (not while writing in a text area).
 - **📄 My CV** and **👤 Profile** — upload the base CV; edit the profile jobs are
@@ -77,10 +76,10 @@ board. The user is a single person managing their own search.
   summary; matches already rated when it's switched on don't notify).
   Arrow keys move through it, Esc closes it.
 
-### 2.6 System activity log (bottom)
-- A rolling feed of backend events (rater pokes, apply successes/failures) with
-  timestamps and ✅/❌/🔄 icons. Auto-refreshes every 30s. Purpose: transparency
-  into what the automation is doing.
+### 2.6 Recent activity (🔔 button)
+- The latest backend events (rater pokes, apply successes/failures) with
+  timestamps and ✅/❌/🔄 icons, hidden until the 🔔 button opens them. Purpose:
+  transparency into what the automation is doing.
 
 ---
 
@@ -88,7 +87,9 @@ board. The user is a single person managing their own search.
 
 ### 3.1 Stages (columns), left→right
 `Saved → Waiting to apply → Applied → Interview → Offer → Closed`
-- Each column shows a **live count**. Cards are **drag-and-drop** between columns
+- Each column shows a **live count**. A long lane shows 10 cards and a **Show N
+  more** button; Saved puts the best rated first as soon as anything is rated.
+  Empty lanes shrink to a strip (desktop) or a short row (phone). Cards are **drag-and-drop** between columns
   to change status; moving also triggers stage-driven automation (see 5).
 - On mobile, columns collapse to accordions (tap header to expand).
 - On a desktop, a column **folds** to a narrow strip (name and count) so all
@@ -97,9 +98,9 @@ board. The user is a single person managing their own search.
   accepts dropped cards, and "Show" on a job unfolds its column.
 
 ### 3.2 Saved column extras
-- **Sort control** — "Most recent" or "Highest score".
-- **Pinned jobs** sort to the top with a **"N more" divider** separating them
-  from the rest. Pinning only exists in Saved.
+- **Sort control** — "Best rated first" or "Newest first", once a job is rated.
+- **Pinned jobs** sort to the top, with a 📌 on the card. Pinning only exists in
+  Saved.
 
 ---
 
@@ -119,46 +120,49 @@ Every element and its purpose:
   date, which braveduck can't look up yet.)
 - **Job title** — links to the original posting in a new tab.
 - **Score badge** — the default AI rater's verdict: letter grade (A–F) + numeric
-  score, color-coded. States: `scoring…`, `score failed`, `stuck · retry`
-  (clickable to re-score after 5 min hung), or the final grade.
-- **Compare badges** — challenger models' grades (when A/B rating is on), each
-  labeled with the model; shows `…` while pending, `✕` on failure.
+  score, color-coded. States: `rating…`, `Rating failed`, `Rating stuck`
+  (clickable to re-score after 5 min hung), or the final grade. Nothing until
+  a job has been rated.
 - **Company name**.
 - **Salary chip** (💰) — shown only when a concrete figure exists (negotiable pay
   is instead flagged as a dealbreaker).
-- **Company intel badges** (mainly on pinned cards):
+- **At most one warning pill**: a clock about to close the card, else a
+  dealbreaker (with `+N`, and the others in its tooltip), else a near deadline.
+- **In-progress badges** and the **"did you submit it?"** question, when there
+  are any.
+- **Footer row**: **move-to-stage dropdown** (alternative to drag for changing
+  status), **Open ↗** (the posting) and **Details ▾**.
+- **Green left border** when an application email has been sent; a 📌 and a
+  mustard border when pinned.
+
+### 4.2 Open card (Details ▾, or a click anywhere on the card)
+- **Facts** — every warning, expiry badge (see 7), sent markers, 📨 follow-up,
+  company intel, platform status, age and source:
   - masothue cell: 📅 founding date (linked to tax-registry page), or 🏢 Unknown,
     or 🏢 … while looking up.
   - distance cell: ✅/🟡/🔴 + km from home (≤8 ideal, 8–10 ok, >10 too far), or
     📍 … while looking up, 📍 unknown / 📍 no address when it can't be placed.
     No badge until the user has set their location (nothing to measure from).
-- **Footer row**:
-  - age ("today" / "Nd") + platform source label + ✉ marker if email-apply.
-  - **Expiry badge** (see 7).
-  - **Auto-apply progress** (⏳ CV / email / sending) while automation runs.
-  - **Apply-state badge** (🕒 queued, ✍ filling…, ✕ failed·retry, ↗ apply
-    yourself, ⏳ cooldown m:ss) — the live status of the automated apply engine.
-  - **Sent markers** (✓ sent / ✓ replied) and **📨 follow-up** when a follow-up
-    email went out.
-  - **Platform status badges** — TopCV recruiter status (👁 seen, 📋 reviewing,
-    🤔 considering, ✅ suitable, ❌ rejected) and VNW (👁 seen).
-  - **📌 pin marker**, **CV link** (labeled CV / CV v2…), **▾ expand toggle**.
-- **Quick actions** (top): View ↗ (open posting), Pin/Unpin (Saved only), Delete.
-- **Move-to-stage dropdown** — alternative to drag for changing status.
-- **Green left border** when an application email has been sent.
-
-### 4.2 Expanded detail panel (▾ toggles it)
-- **AI assessment** — the default model's reasoning as bullet points.
-- **Other models** — each challenger's grade + reasoning, plus an
-  **"+ Ask another model…" dropdown + Ask button** to score this one card with
-  any additional model on demand.
-- **Skills** — extracted skill tags.
-- **Summary** — AI-generated JD summary (bulleted) or raw summary.
-- **Full JD** — collapsible, only for pasted jobs.
-- **Notes** — freeform notes on the job.
-- **Apply block** (see 5.2).
-- **CV controls** — download CV + Re-draft (Waiting/Applied lanes only; CV
-  drafting is lane-driven, not a button). Re-score button when scoring failed.
+  - TopCV recruiter status (👁 seen, 📋 reviewing, 🤔 considering, ✅ suitable,
+    ❌ rejected) and VNW (👁 seen).
+- **Why this rating** — the default rater's first three points, with no model id.
+- **One main action for the stage** — Saved/Waiting: Apply on the site if you're
+  logged in, else Send from my mail app if a draft is ready, else Open the job
+  (or "I applied" with no link). Applied: Got an interview. Interview: Got an
+  offer. Offer: Close this job. Closed: Back to Saved.
+- **More** — everything else, stays open across refreshes:
+  - **Keep** switch (no moving to Closed by itself), **I applied**, **Pin**
+    (Saved only), **Delete**.
+  - **Notes** — freeform notes on the job.
+  - **CV for this job** — download CV + ask your AI to tailor or improve it.
+  - **Apply block** (see 5.2).
+  - **Rating** — any further points, and Rate / Rate again.
+  - **Other AI ratings** (when A/B rating is on) — each challenger's grade +
+    reasoning, labeled with the model, plus a dropdown + Ask button to score
+    this one card with any additional model on demand.
+  - **Skills** — extracted skill tags.
+  - **Summary** — AI-generated JD summary (bulleted) or raw summary.
+  - **Edit details** — title, company, salary, location.
 
 ---
 

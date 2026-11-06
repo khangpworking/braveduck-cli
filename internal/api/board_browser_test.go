@@ -81,7 +81,7 @@ func TestBoardControlsFitNarrowViewports(t *testing.T) {
 			// scrolled into view (only vertical scrolling is fine).
 			if problem := page.MustEval(`() => {
 				const width = document.documentElement.clientWidth;
-				for (const el of document.querySelectorAll('.top-nav button, .stat-pill, .toolbar button, .filter-cb')) {
+				for (const el of document.querySelectorAll('.top-nav button, .stat-pill, .toolbar button')) {
 					const r = el.getBoundingClientRect();
 					if (r.left < 0 || r.right > width || r.top < 0)
 						return el.textContent.trim() + ' outside viewport: ' + JSON.stringify(r);
@@ -381,7 +381,7 @@ func TestKeywordsAndSources(t *testing.T) {
 	// The store applies the source's schedule to health. The warning must
 	// not claim a fixed one-hour window for this two-hourly crawler.
 	warning := page.MustElement("#unhealthyContainer .unhealthy").MustText()
-	if !strings.Contains(warning, "no recent successful run") || !strings.Contains(warning, "last report: 5h") {
+	if !strings.Contains(warning, "hasn't checked for jobs lately") || !strings.Contains(warning, "last try: 5h") {
 		t.Fatalf("stale crawler warning = %q", warning)
 	}
 	openModal(t, page, "keywordsBtn", "keywordsModalOverlay")
@@ -448,8 +448,8 @@ func TestEditDetailsOnBoard(t *testing.T) {
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
 	page.MustElement(".card")
-	page.MustEval(`() => toggleCardDetail("1")`)
-	page.MustElement("#detail-1 details summary").MustClick()
+	openCardMore(page, 1)
+	page.MustElement("#detail-1 .edit-details summary").MustEval(`() => this.click()`)
 	in := page.MustElement("#edit-company-1")
 	if v := in.MustProperty("value").Str(); v != `x" onfocus="window.__pwned=1` {
 		t.Fatalf("input value = %q (escaping broken?)", v)
@@ -599,8 +599,8 @@ func TestBoardRefresh(t *testing.T) {
 				return
 			}
 			if scenario == "editing" {
-				page.MustEval(`() => toggleCardDetail("1")`)
-				page.MustElement("#detail-1 details summary").MustClick()
+				openCardMore(page, 1)
+				page.MustElement("#detail-1 .edit-details summary").MustEval(`() => this.click()`)
 			}
 			holdNext.Store(true)
 			page.MustEval(`() => { window.heldRefresh = refreshAppState(); }`)
@@ -677,7 +677,7 @@ func TestBoardRating(t *testing.T) {
 			defer ts.Close()
 			page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
 			page.MustElement(".card")
-			page.MustEval(`() => toggleCardDetail("1")`)
+			openCardMore(page, 1)
 			if scenario == "saved_challenger" {
 				if text := page.MustElement("#detail-1").MustText(); !strings.Contains(text, "rival-one: F 2") || !strings.Contains(text, "Missing core skills") {
 					t.Fatalf("saved challenger missing: %s", text)
@@ -685,7 +685,7 @@ func TestBoardRating(t *testing.T) {
 				if page.MustEval(`() => !!window.__pwned || !!document.querySelector('#detail-1 img')`).Bool() {
 					t.Fatal("challenger reasoning interpreted as HTML")
 				}
-				if badge := page.MustElement(".card-actions-group > div:first-child > .score-badge:last-child").MustText(); !strings.Contains(badge, "A") || !strings.Contains(badge, "4.7") {
+				if badge := page.MustElement(".card-actions-group .score-badge").MustText(); !strings.Contains(badge, "A") || !strings.Contains(badge, "4.7") {
 					t.Fatalf("challenger replaced default badge: %q", badge)
 				}
 				return
@@ -759,7 +759,7 @@ func TestAskAICVAndDraft(t *testing.T) {
 
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
 	page.MustElement(".card")
-	page.MustEval(`() => toggleCardDetail("1")`)
+	openCardMore(page, 1)
 	page.MustElementR("button", "Ask your AI to tailor it").MustClick()
 	page.MustElement("#askModalOverlay.open") // the request is fetched before the window opens
 	if p := page.MustElement("#askPrompt").MustText(); !strings.Contains(p, "tailor my CV for job #1") {
@@ -789,6 +789,17 @@ func TestAskAICVAndDraft(t *testing.T) {
 	if v := page.MustElement("#draftSubject-1").MustProperty("value").Str(); v != "Go Engineer application" {
 		t.Fatalf("draft subject on the card = %q", v)
 	}
+	// With a draft ready, sending it is the card's one main action.
+	if got := page.MustElement("#detail-1 .card-primary").MustText(); got != "Send from my mail app" {
+		t.Fatalf("main action with a draft = %q", got)
+	}
+}
+
+// openCardMore opens a card and its More section, where everything but the
+// card's one main action lives.
+func openCardMore(page *rod.Page, id int64) {
+	page.MustEval(`id => toggleCardDetail(String(id))`, id)
+	page.MustElement(fmt.Sprintf("#detail-%d .card-more > summary", id)).MustEval(`() => this.click()`)
 }
 
 // clickID clicks a static control by id with a DOM click. rod's MustClick
@@ -850,7 +861,9 @@ func TestLocationWindow(t *testing.T) {
 	page := b.MustPage("")
 	proto.EmulationSetGeolocationOverride{Latitude: ptrF(10.7725), Longitude: ptrF(106.6980), Accuracy: ptrF(50)}.Call(page)
 	page.MustNavigate(ts.URL).MustWaitLoad()
-	if txt := page.MustElement(".card .card-meta").MustText(); strings.Contains(txt, "km") {
+	page.MustElement(".card")
+	page.MustEval(`id => toggleCardDetail(String(id))`, j.ID)
+	if txt := page.MustElement(".card .card-facts").MustText(); strings.Contains(txt, "km") {
 		t.Fatalf("before a location is set, card shows a distance badge: %q", txt)
 	}
 
@@ -886,7 +899,7 @@ func TestLocationWindow(t *testing.T) {
 	waitUntil(t, func() bool { jj, _ := svc.GetJob(ctx, j.ID); return jj.HasDistance }, "distance not computed")
 	page.MustEval(`() => refreshAppState()`)
 	waitUntil(t, func() bool {
-		return strings.Contains(page.MustElement(".card .card-meta").MustText(), "✅ 3.")
+		return strings.Contains(page.MustElement(".card .card-facts").MustText(), "✅ 3.")
 	}, "card doesn't show the distance badge")
 
 	// Address search goes through braveduck's API (fake geocoder here).
@@ -954,7 +967,6 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			switch scenario {
 			case "filtered":
-				page.MustElement(`input[name="platform-filter"][value="paste"]`).MustEval(`() => this.click()`)
 				page.MustElement("#jobSearch").MustInput("not a matching title")
 			case "mobile collapsed":
 				setViewportWidth(page, 390)
@@ -987,8 +999,8 @@ func TestBoardWarnsOnDuplicatePaste(t *testing.T) {
 			if page.MustEval(`() => document.getElementById("addJobDrawer").classList.contains("open")`).Bool() {
 				t.Fatal("Add drawer still open after Show")
 			}
-			if scenario == "filtered" && !page.MustEval(`() => document.getElementById('jobSearch').value === '' && document.querySelector('input[name="platform-filter"][value="All"]').checked`).Bool() {
-				t.Fatal("Show left the filter controls out of sync with the revealed card")
+			if scenario == "filtered" && !page.MustEval(`() => document.getElementById('jobSearch').value === ''`).Bool() {
+				t.Fatal("Show left the search box out of sync with the revealed card")
 			}
 		})
 		if t.Failed() {
@@ -1109,7 +1121,13 @@ func TestBoardGetStarted(t *testing.T) {
 	if v := page.MustElement("#profileText").MustProperty("value").Str(); !strings.Contains(v, "Marketing AI, AI automation") {
 		t.Fatalf("text editor = %.200q", v)
 	}
-	page.MustElement(`#setupSteps li.done`)
+	// Finished steps are gone: only search terms are left.
+	if got := page.MustElement("#setupSteps").MustText(); strings.Contains(got, "Say what you're looking for") || strings.Contains(got, "Upload your CV") || !strings.Contains(got, "Add search terms") {
+		t.Fatalf("steps left = %q", got)
+	}
+	if got := page.MustElement("#setupLeft").MustText(); got != "1 step left" {
+		t.Fatalf("steps left label = %q", got)
+	}
 
 	// The last needed step (search terms, here added over the API) hides the card.
 	svc.SetKeywords(ctx, map[string][]string{"search_queries": {"n8n"}})
@@ -1208,6 +1226,11 @@ func TestBoardToday(t *testing.T) {
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
 	page.MustElement(".card")
+	page.MustWait(`() => document.getElementById("todaySummary").textContent.includes("to look at")`)
+	if page.MustEval(`() => document.querySelector("#todayWidget details").open`).Bool() {
+		t.Fatal("Today is open on arrival; it should be one short line")
+	}
+	page.MustElement("#todayWidget summary").MustEval(`() => this.click()`)
 	today := page.MustElement("#todayList").MustText()
 	for _, want := range []string{"Great match", "A · 4.6", "Closes soon", "closes in 2 days", "Waiting for an answer", "applied 10 days ago"} {
 		if !strings.Contains(today, want) {
@@ -1337,6 +1360,18 @@ func TestBoardExpiryBadges(t *testing.T) {
 			return b ? b.textContent.trim() : "";
 		}`, title).Str()
 	}
+	// A closed card only warns; the plain count waits inside the open card.
+	for title, want := range map[string]string{
+		"Posting closed": "⛔ to Closed in 4d",
+		"No reply":       "⛔ to Closed in 5d",
+		"Just applied":   "",
+		"Interviewing":   "",
+	} {
+		if got := badge(title); got != want {
+			t.Errorf("%s: badge %q, want %q", title, got, want)
+		}
+	}
+	page.MustEval(`() => { AppState.jobs.forEach(j => AppState.expandedCards.add(j.id)); renderBoard(); }`)
 	for title, want := range map[string]string{
 		"Posting closed": "⛔ to Closed in 4d",
 		"No reply":       "⛔ to Closed in 5d",
@@ -1344,7 +1379,7 @@ func TestBoardExpiryBadges(t *testing.T) {
 		"Interviewing":   "",
 	} {
 		if got := badge(title); got != want {
-			t.Errorf("%s: badge %q, want %q", title, got, want)
+			t.Errorf("open %s: badge %q, want %q", title, got, want)
 		}
 	}
 	if page.MustEval(`() => document.body.innerText.includes("delete in")`).Bool() {
@@ -1352,8 +1387,8 @@ func TestBoardExpiryBadges(t *testing.T) {
 	}
 }
 
-// Background tasks (Jev rating, TopCV sync) get no source chip and no filter
-// checkbox: they don't find jobs.
+// Background tasks (Jev rating, TopCV sync) get no source chip: they don't
+// find jobs. Job sources go by their proper names.
 func TestBoardHidesTaskSources(t *testing.T) {
 	t.Setenv("BRAVEDUCK_PASSPHRASE", "")
 	st, err := store.Open(":memory:")
@@ -1374,14 +1409,12 @@ func TestBoardHidesTaskSources(t *testing.T) {
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
 	page.MustElement(".card")
+	page.MustElement("#todayWidget summary").MustEval(`() => this.click()`)
+	page.MustElementR("#crawlChips .chip", "CareerLink")
 	chips := page.MustElement("#crawlChips").MustText()
-	filters := page.MustElement("#platformFilters").MustText()
-	if !strings.Contains(chips, "careerlink") || !strings.Contains(filters, "careerlink") {
-		t.Fatalf("job source missing: chips %q, filters %q", chips, filters)
-	}
-	for _, task := range []string{service.TopCVSyncSource, service.JevRateSource} {
-		if strings.Contains(chips, task) || strings.Contains(filters, task) {
-			t.Errorf("task %q shown as a source: chips %q, filters %q", task, chips, filters)
+	for _, task := range []string{service.TopCVSyncSource, service.JevRateSource, "TopCV updates", "Rating"} {
+		if strings.Contains(chips, task) {
+			t.Errorf("task %q shown as a source: chips %q", task, chips)
 		}
 	}
 }
@@ -1486,7 +1519,7 @@ func TestBoardButtonsHaveNames(t *testing.T) {
 	page.MustElement(".card")
 	page.MustEval(`id => toggleCardDetail(String(id))`, j.ID)
 	page.MustElement(fmt.Sprintf("#detail-%d", j.ID))
-	unnamed := page.MustEval(`() => [...document.querySelectorAll("button, a.icon-btn-sm")]
+	unnamed := page.MustEval(`() => [...document.querySelectorAll("button, a.card-link")]
 		.map(b => ({ name: (b.getAttribute("aria-label") || b.textContent || "").trim(), html: b.outerHTML.slice(0, 120) }))
 		.filter(b => !/\p{L}/u.test(b.name))
 		.map(b => b.html)`).Arr()

@@ -20,51 +20,39 @@
     </div>
     <div class="nav-right">
       <span class="nav-user" id="hostedUser" hidden></span>
+      <button class="btn-secondary activity-btn" id="activityBtn" title="Recent activity" aria-label="Recent activity" aria-expanded="false" aria-controls="activityPanel">🔔</button>
       <button class="btn-primary" id="openDrawerBtn">+ Add Job</button>
     </div>
   </header>
 
   <main class="dashboard">
-    <!-- Get started: shown until the steps ratings and crawls need are done -->
-    <section class="widget soft-card setup-card" id="setupCard" hidden>
-      <h3 class="widget-title">Get started</h3>
-      <p class="setup-intro">Three steps and braveduck starts finding and rating jobs for you.</p>
+    <!-- Get started: only the steps still to do -->
+    <section class="soft-card setup-card" id="setupCard" hidden>
+      <h3 class="widget-title">Get started <span class="setup-left" id="setupLeft"></span></h3>
       <ol class="setup-steps" id="setupSteps"></ol>
     </section>
 
-    <!-- Top Widgets Row -->
-    <section class="widgets-row">
-      <!-- Today: what to act on now, plus the interview-rate line -->
-      <div class="widget soft-card today-widget" id="todayWidget">
-        <h3 class="widget-title">Today</h3>
-        <div id="todayList" class="today-list"></div>
-        <div class="today-stats" id="moraleWidget">
-          <span class="today-rate" id="moraleRate">—</span>
-          <span id="moraleSubline"></span>
-          <div class="morale-message" id="moraleMessage"></div>
+    <!-- Today: one short line; what to act on opens under it -->
+    <section class="today-strip" id="todayWidget" aria-label="Today">
+      <details class="today-details soft-card">
+        <summary><strong>Today</strong> <span id="todaySummary"></span></summary>
+        <div class="today-panel">
+          <div id="todayList" class="today-list"></div>
+          <div class="chips" id="crawlChips"></div>
+          <div class="today-stats" id="moraleWidget" hidden>
+            <span class="today-rate" id="moraleRate">—</span>
+            <span id="moraleSubline"></span>
+            <div class="morale-message" id="moraleMessage"></div>
+          </div>
         </div>
-      </div>
-      
-      <!-- Crawl Status Widget -->
-      <div class="widget soft-card" id="crawlWidget">
-        <h3 class="widget-title" id="crawlHeadline">📥 Crawl Status</h3>
-        <div class="chips" id="crawlChips">
-          <!-- Active source chips injected here -->
-        </div>
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 8px;" id="unhealthyContainer">
-          <!-- Unhealthy source chips and Retry buttons -->
-        </div>
-        <!-- Retry transient flash -->
-        <div id="retryFlash" style="font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 6px; display: none;"></div>
-      </div>
+      </details>
+      <div class="today-warnings" id="unhealthyContainer" hidden></div>
+      <div class="today-flash" id="retryFlash" hidden></div>
     </section>
 
     <!-- Toolbar Filters -->
     <section class="toolbar">
       <input type="search" id="jobSearch" class="text-input search-input" placeholder="Search jobs  ( / )" aria-label="Search jobs" autocomplete="off">
-      <div class="filters" id="platformFilters">
-        <!-- Checkboxes injected by JS dynamically -->
-      </div>
       <div class="toolbar-actions">
         <button class="btn-secondary btn-sm" id="myCVBtn">📄 My CV</button>
         <button class="btn-secondary btn-sm" id="profileBtn">👤 Profile</button>
@@ -361,23 +349,24 @@
   <!-- Toast Alerts Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- System Log Bar (Bottom) -->
-  <footer class="system-log">
-    <div class="log-label">System Activity</div>
-    <div class="log-feed" id="logFeed">
-      <!-- Events auto-refreshed every 30s -->
+  <!-- Recent activity: opened with the 🔔 button -->
+  <section class="activity-panel" id="activityPanel" aria-label="Recent activity" hidden>
+    <div class="activity-header">
+      <h3 class="widget-title">Recent activity</h3>
+      <button class="btn-close" id="activityCloseBtn" aria-label="Close recent activity">×</button>
     </div>
-  </footer>
+    <ul class="log-feed" id="logFeed"></ul>
+  </section>
 
   <!-- Scripts -->
   <!-- The board's script, in order: one global scope (classic scripts, no build step). -->
   <script src="core.js"></script>  <!-- API client, HTML safety, field adapters, app state -->
   <script src="panels.js"></script>  <!-- settings windows: logins, location, sources -->
-  <script src="widgets.js"></script>  <!-- refreshing state; header, Today, crawl panel, filters, notifications -->
+  <script src="widgets.js"></script>  <!-- refreshing state; header, Today, notifications -->
   <script src="board.js"></script>  <!-- the kanban board, cards and card details -->
   <script src="actions.js"></script>  <!-- card actions: ask your AI, setup, profile, CV, email, apply, drag and drop -->
   <script src="profile.js"></script>  <!-- the profile form -->
-  <script src="live.js"></script>  <!-- live updates, toasts, the activity strip, time helpers -->
+  <script src="live.js"></script>  <!-- live updates, toasts, recent activity, time helpers -->
   <script src="main.js"></script>  <!-- start-up: wires every button and window -->
 </body>
 </html>

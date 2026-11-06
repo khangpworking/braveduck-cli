@@ -44,7 +44,6 @@ function renderAll() {
   renderToday();
   renderMoraleWidget();
   renderCrawlStatus();
-  renderPlatformFilters();
   renderBoard();
   renderActivityLog();
 }
@@ -135,8 +134,23 @@ function notifyNewMatches(jobs) {
 }
 
 // --- Today -------------------------------------------------------------------
-// What to act on now, from GET /api/today (the same list `braveduck today`
-// and MCP get_today give).
+// One short line; what to act on now, from GET /api/today (the same list
+// `braveduck today` and MCP get_today give), opens under it.
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// Job sources by their proper names. Anything else shows as it was written.
+const SOURCE_NAMES = {
+  vietnamworks: "VietnamWorks", careerlink: "CareerLink", topcv: "TopCV", joboko: "JobOKO", facebook: "Facebook",
+  paste: "Added by you", "topcv-sync": "TopCV updates", "jev-rate": "Rating"
+};
+
+function sourceName(source) {
+  const key = String(source).toLowerCase();
+  return Object.hasOwn(SOURCE_NAMES, key) ? SOURCE_NAMES[key] : source;
+}
+
+let todayCount = 0;
+
 async function renderToday() {
   const list = document.getElementById("todayList");
   let groups = [];
@@ -144,8 +158,10 @@ async function renderToday() {
     const res = await apiFetch(`${API_BASE}/today`);
     if (res.ok) groups = await res.json();
   } catch {}
+  todayCount = groups.reduce((n, g) => n + g.items.length, 0);
+  renderTodaySummary();
   if (!groups.length) {
-    list.innerHTML = `<div class="today-empty">Nothing needs you today. New jobs are found and rated in the background.</div>`;
+    list.innerHTML = `<div class="today-empty">Nothing needs you today.</div>`;
     return;
   }
   list.innerHTML = groups.map(g => `
@@ -158,117 +174,80 @@ async function renderToday() {
   list.querySelectorAll("button[data-job]").forEach(btn => btn.addEventListener("click", () => showJobCard(btn.dataset.job)));
 }
 
+function renderTodaySummary() {
+  const fresh = AppState.crawlStatus ? Number(AppState.crawlStatus.newJobsToday) : 0;
+  const parts = [];
+  if (fresh > 0) parts.push(plural(fresh, "new job"));
+  if (todayCount > 0) parts.push(`${todayCount} to look at`);
+  document.getElementById("todaySummary").textContent = parts.join(" · ") || "Nothing needs you";
+}
+
 function renderMoraleWidget() {
   // The interview rate and its message come from the server (service.Stats:
   // jobs.SuccessRateOf / MoraleMessage), the same ones `get_stats` gives an
   // agent. Resolved = an interview or offer, a closed job, or an application
-  // past the response window; the rate shows once 3 have resolved.
+  // past the response window; the rate shows once 3 have resolved. Before
+  // anything has resolved there is nothing to say.
   const st = AppState.stats;
   if (!st) return;
-  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  document.getElementById("moraleWidget").hidden = st.resolved < 1;
   document.getElementById("moraleSubline").innerText =
     `${plural(st.interviews, "interview")} from ${plural(st.resolved, "answered application")} · ${st.pending} waiting`;
-  document.getElementById("moraleRate").innerText = st.resolved >= 3 ? `${Math.round(st.interview_rate * 100)}%` : "—";
+  const rate = document.getElementById("moraleRate");
+  rate.innerText = st.resolved >= 3 ? `${Math.round(st.interview_rate * 100)}%` : "—";
+  rate.hidden = st.resolved < 3;
   document.getElementById("moraleMessage").innerText = st.morale || "";
 }
 
 function renderCrawlStatus() {
   const status = AppState.crawlStatus;
   if (!status) return;
-
-  const headline = document.getElementById("crawlHeadline");
-  headline.innerHTML = `📥 <strong>${esc(status.newJobsToday)} new jobs</strong> found · ${esc(status.date)}`;
+  renderTodaySummary();
 
   // Render per-source chips
   const chipsContainer = document.getElementById("crawlChips");
-  // Background tasks (rating, status sync) find no jobs: no chip, and no
-  // filter below, but a failing one still shows in the warnings.
+  // Background tasks (rating, status sync) find no jobs: no chip, but a
+  // failing one still shows in the warnings.
   chipsContainer.innerHTML = status.sources.filter(s => !s.task)
-    .map(s => `<span class="chip">${esc(s.name)} <strong style="color:var(--ink)">${esc(s.count)}</strong></span>`)
+    .map(s => `<span class="chip">${esc(sourceName(s.name))} <strong style="color:var(--ink)">${esc(s.count)}</strong></span>`)
     .join("");
 
-  // Render unhealthy sources
+  // Render unhealthy sources: the one thing here that shouldn't wait for a click.
   const unhealthyContainer = document.getElementById("unhealthyContainer");
   const unhealthySources = status.sources.filter(s => !s.healthy);
-
-  if (unhealthySources.length === 0) {
-    unhealthyContainer.innerHTML = "";
-    unhealthyContainer.style.display = "none";
-  } else {
-    unhealthyContainer.style.display = "flex";
-    unhealthyContainer.innerHTML = unhealthySources
-      .map(s => `
-        <div class="chip unhealthy" style="justify-content: space-between; display: flex; width: 100%;">
-          <span>⚠️ ${esc(s.name)} — ${s.lastError ? esc(s.lastError) : "no recent successful run"} (last report: ${esc(timeAgo(s.lastRun) || "never")})</span>
-          <button class="btn-text" onclick="triggerCrawlerRetry(${jsArg(s.name)})" style="color: #991b1b; text-decoration: underline;">Retry ⟳</button>
+  unhealthyContainer.hidden = unhealthySources.length === 0;
+  unhealthyContainer.innerHTML = unhealthySources
+    .map(s => {
+      const problem = s.task ? "isn't working" : s.lastError ? "couldn't check for jobs" : "hasn't checked for jobs lately";
+      return `
+        <div class="chip unhealthy" ${s.lastError ? `title="${esc(s.lastError)}"` : ""}>
+          <span>⚠️ ${esc(sourceName(s.name))} ${problem} (last try: ${esc(timeAgo(s.lastRun) || "never")})</span>
+          <button class="btn-text" onclick="triggerCrawlerRetry(${jsArg(s.name)})">Try again</button>
         </div>
-      `)
-      .join("");
-  }
+      `;
+    })
+    .join("");
 }
 
-async function triggerCrawlerRetry(sourceName) {
+async function triggerCrawlerRetry(source) {
   const flash = document.getElementById("retryFlash");
-  flash.style.display = "block";
-  flash.innerText = `⟳ Restarting ${sourceName} crawler...`;
-
-  showToast(`Restarting crawler ${sourceName}...`, "info");
+  flash.hidden = false;
+  flash.innerText = `⟳ Checking ${sourceName(source)} again…`;
 
   let result;
   try {
-    result = await APIClient.retryCrawl(sourceName);
+    result = await APIClient.retryCrawl(source);
   } catch (e) {
     result = { ok: false, message: String(e) };
   }
 
-  flash.style.display = "none";
+  flash.hidden = true;
   // The real backend returns {ok:false, message} until crawlers are wired in;
   // surface that truth rather than a canned success.
   if (result && result.ok === false) {
-    showToast(result.message || `Couldn't retry ${sourceName}`, "error");
+    showToast(result.message || `Couldn't check ${sourceName(source)}`, "error");
   } else {
-    showToast(result.message || `${sourceName} crawled`, "success");
+    showToast(result.message || `${sourceName(source)} checked`, "success");
   }
   refreshAppState();
-}
-
-function renderPlatformFilters() {
-  // Collect all unique discovery platforms + "All"
-  const platforms = new Set(["All"]);
-  // Crawl sources always appear
-  if (AppState.crawlStatus && AppState.crawlStatus.sources) {
-    AppState.crawlStatus.sources.filter(s => !s.task).forEach(s => platforms.add(s.name));
-  }
-  // Other platforms from jobs
-  AppState.jobs.forEach(j => {
-    if (j.discovery_source) platforms.add(j.discovery_source);
-  });
-
-  const container = document.getElementById("platformFilters");
-  container.innerHTML = Array.from(platforms)
-    .map(p => `
-      <label class="filter-cb">
-        <input type="checkbox" name="platform-filter" value="${esc(p)}" ${AppState.filters.platform === p ? "checked" : ""} onchange="updatePlatformFilter(this)">
-        ${esc(p)}
-      </label>
-    `)
-    .join("");
-}
-
-function updatePlatformFilter(checkbox) {
-  const name = checkbox.value;
-  if (checkbox.checked) {
-    AppState.filters.platform = name;
-    // Uncheck other checkboxes
-    document.querySelectorAll('input[name="platform-filter"]').forEach(cb => {
-      if (cb.value !== name) cb.checked = false;
-    });
-  } else {
-    // If unchecked, default back to All
-    AppState.filters.platform = "All";
-    document.querySelectorAll('input[name="platform-filter"]').forEach(cb => {
-      if (cb.value === "All") cb.checked = true;
-    });
-  }
-  renderBoard();
 }

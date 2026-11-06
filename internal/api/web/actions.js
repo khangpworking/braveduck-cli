@@ -15,7 +15,7 @@ async function askAI(kind, id, model) {
     // A Jev challenger leaves the canonical badge unchanged; report the
     // actual model verdict returned by this request.
     const verdict = req.job.ratings?.[req.model];
-    showToast(`Rated ${verdict?.letter ?? req.job.score_letter} ${Number(verdict?.score ?? req.job.score).toFixed(1)} (${req.model})`, "success");
+    showToast(`Rated ${verdict?.letter ?? req.job.score_letter} ${Number(verdict?.score ?? req.job.score).toFixed(1)}`, "success");
     refreshAppState();
     return;
   }
@@ -68,7 +68,7 @@ async function saveAskPaste() {
 const SETUP_STEPS = [
   { key: "cv", title: "Upload your CV", hint: "Its text becomes the \"About me\" part of your profile.", action: "Upload CV", open: () => document.getElementById("myCVBtn").click() },
   { key: "wants", title: "Say what you're looking for", hint: "The jobs you want, your minimum pay, where you can work, your deal-breakers.", action: "Answer a few questions", open: () => openProfile() },
-  { key: "search_queries", title: "Add search terms", hint: "What the crawlers search job sites for, e.g. \"n8n\".", action: "Add terms", open: () => document.getElementById("keywordsBtn").click() },
+  { key: "search_queries", title: "Add search terms", hint: "What to look for on job sites, e.g. \"n8n\".", action: "Add terms", open: () => document.getElementById("keywordsBtn").click() },
 ];
 
 async function renderSetup() {
@@ -86,11 +86,13 @@ async function renderSetup() {
   const done = { cv: st.cv || st.about_me, wants: st.wants, search_queries: st.search_queries > 0 };
   card.hidden = st.done;
   if (st.done) return;
-  document.getElementById("setupSteps").innerHTML = SETUP_STEPS.map((step, i) => `
-    <li class="setup-step${done[step.key] ? " done" : ""}">
-      <span class="setup-step-title">${done[step.key] ? "✓" : `${i + 1}.`} ${esc(step.title)}</span>
-      <span class="setup-step-hint">${esc(step.hint)}</span>
-      ${done[step.key] ? "" : `<button class="btn-secondary btn-sm" data-setup="${esc(step.key)}">${esc(step.action)}</button>`}
+  // Only what's left: a finished step has nothing to say.
+  const left = SETUP_STEPS.filter(step => !done[step.key]);
+  document.getElementById("setupLeft").textContent = `${left.length} ${left.length === 1 ? "step" : "steps"} left`;
+  document.getElementById("setupSteps").innerHTML = left.map((step, i) => `
+    <li class="setup-step">
+      <span class="setup-step-title">${i + 1}. ${esc(step.title)}</span>
+      <button class="${i === 0 ? "btn-primary" : "btn-secondary"} btn-sm" data-setup="${esc(step.key)}" title="${esc(step.hint)}">${esc(step.action)}</button>
     </li>`).join("");
   card.querySelectorAll("button[data-setup]").forEach(btn => {
     btn.addEventListener("click", () => SETUP_STEPS.find(s => s.key === btn.dataset.setup).open());
@@ -321,7 +323,7 @@ function applyButton(job, tailored) {
   const open = job.status === "Saved" || job.status === "Waiting to apply";
   if (!site || !open || job.topcv_status || job.apply_state === "filling" || job.apply_state === "confirm") return "";
   if (!tailored && !(AppState.setup && AppState.setup.cv)) return "";
-  return `<button class="btn-primary btn-sm" onclick="applyOnSite('${job.id}')" title="Opens the job in a window with your ${esc(site.name)} login. You submit it there.">Apply on ${esc(site.name)}</button>`;
+  return `<button class="btn-primary card-primary" onclick="applyOnSite('${job.id}')" title="Opens the job in a window with your ${esc(site.name)} login. You submit it there.">Apply on ${esc(site.name)}</button>`;
 }
 
 // Assisted apply: you approve by clicking, and you submit on the site yourself.

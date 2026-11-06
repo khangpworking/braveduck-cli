@@ -37,6 +37,7 @@ func TestBoardMoraleFromServer(t *testing.T) {
 	page.MustNavigate(ts.URL).MustWaitLoad()
 	page.MustElement(".card")
 	page.MustWait(`() => document.getElementById("moraleRate").textContent !== "—"`)
+	page.MustElement("#todayWidget summary").MustEval(`() => this.click()`)
 	if got := page.MustElement("#moraleRate").MustText(); got != "33%" {
 		t.Fatalf("rate = %q, want 33%% (1 interview of 3 resolved)", got)
 	}
