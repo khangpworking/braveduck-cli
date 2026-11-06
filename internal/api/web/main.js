@@ -159,12 +159,12 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } catch (e) {
       // The server validates (1-3 models, no blanks or duplicates); show why.
-      errorBox.textContent = e.message;
+      errorBox.textContent = t(e.message);
       errorBox.style.display = "block";
       return;
     }
     ratingModal.classList.remove("open");
-    showToast("Rating config updated!", "success");
+    showToast(t("Rating config updated!"), "success");
     refreshAppState();
   });
 
