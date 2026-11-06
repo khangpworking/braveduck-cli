@@ -28,7 +28,7 @@
   <main class="dashboard">
     <!-- Get started: only the steps still to do -->
     <section class="soft-card setup-card" id="setupCard" hidden>
-      <h3 class="widget-title">Get started <span class="setup-left" id="setupLeft"></span></h3>
+      <h3 class="widget-title"><span data-i18n>Get started</span> <span class="setup-left" id="setupLeft"></span></h3>
       <ol class="setup-steps" id="setupSteps"></ol>
     </section>
 
@@ -85,23 +85,23 @@
 
   <!-- Add-Job Drawer (Paste Form) -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
-  <div class="drawer" id="addJobDrawer" role="dialog" aria-modal="true" aria-label="Add job">
+  <div class="drawer" id="addJobDrawer" role="dialog" aria-modal="true" aria-label="Add job" data-i18n-aria-label>
     <div class="drawer-header">
-      <h2 class="drawer-title">Add Job</h2>
-      <button class="btn-close" aria-label="Close" id="closeDrawerBtn">×</button>
+      <h2 class="drawer-title" data-i18n>Add Job</h2>
+      <button class="btn-close" aria-label="Close" data-i18n-aria-label id="closeDrawerBtn">×</button>
     </div>
     <div class="drawer-body">
       <!-- Result banner -->
       <div id="extractResultBanner" style="display: none; padding: 12px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; margin-bottom: 12px;"></div>
       
-      <p style="font-size: 14px; color: var(--body); margin: 0 0 var(--spacing-sm) 0;">
+      <p style="font-size: 14px; color: var(--body); margin: 0 0 var(--spacing-sm) 0;" data-i18n>
         Paste a job link, a Facebook group link, or the job text
       </p>
-      <textarea id="pasteJDTextarea" class="textarea-input" style="height: 160px; margin-bottom: var(--spacing-md);" placeholder="Paste here"></textarea>
-      <button id="extractAddBtn" class="btn-primary" style="width: 100%;">Add</button>
+      <textarea id="pasteJDTextarea" class="textarea-input" style="height: 160px; margin-bottom: var(--spacing-md);" placeholder="Paste here" data-i18n-placeholder></textarea>
+      <button id="extractAddBtn" class="btn-primary" style="width: 100%;" data-i18n>Add</button>
 
       <div id="fbGroupsBlock" hidden style="margin-top: 16px;">
-        <h4 style="margin: 0 0 6px 0; font-size: 13px;">📘 Facebook groups you follow</h4>
+        <h4 style="margin: 0 0 6px 0; font-size: 13px;" data-i18n>📘 Facebook groups you follow</h4>
         <ul id="fbGroupsList" style="list-style: none; margin: 0; padding: 0; font-size: 13px;"></ul>
       </div>
     </div>
@@ -155,31 +155,31 @@
   </div>
 
   <div class="modal-overlay" id="askModalOverlay">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Ask your AI">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Ask your AI" data-i18n-aria-label>
       <div class="modal-header">
         <h3 class="modal-title" id="askTitle">Ask your AI</h3>
-        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
+        <button class="btn-close modal-close-btn" aria-label="Close" data-i18n-aria-label>×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px 0;">
+        <p id="askIntro" style="font-size: 13px; color: var(--muted); margin: 0 0 8px 0;">
           braveduck doesn't run an AI itself. In <strong>Claude Code</strong> (with braveduck connected), paste this:
         </p>
         <div id="askConnect" hidden style="font-size: 12px; color: var(--muted); margin: 0 0 8px 0;">
-          First time? Connect your AI agent to this board once:
-          <button class="btn-secondary btn-sm" id="askConnectOpen">🤖 Connect your AI agent</button>
+          <span data-i18n>First time? Connect your AI agent to this board once:</span>
+          <button class="btn-secondary btn-sm" id="askConnectOpen" data-i18n>🤖 Connect your AI agent</button>
         </div>
         <pre id="askPrompt" style="white-space: pre-wrap; background: var(--hairline); padding: 8px; border-radius: 6px; font-size: 12px; margin: 0 0 6px 0;"></pre>
         <div style="display:flex; gap:6px; margin-bottom: 12px;">
-          <button class="btn-primary btn-sm" onclick="copyText(askState.req.prompt)">Copy request</button>
-          <button class="btn-secondary btn-sm" onclick="copyText(askState.req.brief)">Copy full brief (for any AI chat)</button>
+          <button class="btn-primary btn-sm" onclick="copyText(askState.req.prompt)" data-i18n>Copy request</button>
+          <button class="btn-secondary btn-sm" onclick="copyText(askState.req.brief)" data-i18n>Copy full brief (for any AI chat)</button>
         </div>
         <div id="askPasteBlock">
           <textarea id="askPaste" class="textarea-input" style="height: 120px; font-size: 12px;"></textarea>
-          <button class="btn-secondary btn-sm" style="margin-top:6px;" onclick="saveAskPaste()">Save what my AI wrote</button>
+          <button class="btn-secondary btn-sm" style="margin-top:6px;" onclick="saveAskPaste()" data-i18n>Save what my AI wrote</button>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+        <button class="btn-secondary btn-sm modal-close-btn" data-i18n>Close</button>
       </div>
     </div>
   </div>
@@ -203,48 +203,48 @@
   </div>
 
   <div class="modal-overlay" id="profileModalOverlay">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Your profile">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Your profile" data-i18n-aria-label>
       <div class="modal-header">
-        <h3 class="modal-title">Your profile</h3>
-        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
+        <h3 class="modal-title" data-i18n>Your profile</h3>
+        <button class="btn-close modal-close-btn" aria-label="Close" data-i18n-aria-label>×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-sm) 0;">
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-sm) 0;" data-i18n>
           Every job is rated against this. Fill in what applies to you, in any language — skip anything you're unsure about.
         </p>
         <div id="profileStatus" style="font-size: 13px; margin-bottom: var(--spacing-sm);"></div>
         <div id="profileFormBody" class="profile-form"></div>
         <div id="profileTextBody" hidden>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 6px 0;">The whole profile as text (Markdown). Lines inside <code>&lt;!-- --&gt;</code> are hints and are ignored.</p>
-          <textarea id="profileText" class="textarea-input profile-editor" spellcheck="false" aria-label="Profile (Markdown)"></textarea>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 6px 0;" data-i18n>The whole profile as text (Markdown). Lines inside &lt;!-- --&gt; are hints and are ignored.</p>
+          <textarea id="profileText" class="textarea-input profile-editor" spellcheck="false" aria-label="Profile (Markdown)" data-i18n-aria-label></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-link btn-sm" id="profileModeBtn" style="margin-right:auto;">Edit as text instead</button>
-        <button class="btn-secondary btn-sm modal-close-btn">Close</button>
-        <button class="btn-primary btn-sm" id="saveProfileBtn">Save</button>
+        <button class="btn-link btn-sm" id="profileModeBtn" style="margin-right:auto;" data-i18n>Edit as text instead</button>
+        <button class="btn-secondary btn-sm modal-close-btn" data-i18n>Close</button>
+        <button class="btn-primary btn-sm" id="saveProfileBtn" data-i18n>Save</button>
       </div>
     </div>
   </div>
 
   <div class="modal-overlay" id="cvModalOverlay">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="My CV">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="My CV" data-i18n-aria-label>
       <div class="modal-header">
-        <h3 class="modal-title">My CV</h3>
-        <button class="btn-close modal-close-btn" aria-label="Close">×</button>
+        <h3 class="modal-title" data-i18n>My CV</h3>
+        <button class="btn-close modal-close-btn" aria-label="Close" data-i18n-aria-label>×</button>
       </div>
       <div class="modal-body">
         <div id="cvStatus" class="cv-status"></div>
         <div id="cvDrop" class="cv-drop">
           <input type="file" id="cvFileInput" accept=".pdf,.docx,.md,.markdown,.html,.htm" hidden>
-          <button class="btn-primary btn-sm" id="cvChooseBtn">Choose file</button>
-          <span class="cv-drop-text">or drop it here</span>
-          <div class="pf-hint" style="margin: 6px 0 0;">PDF or Word, up to 5 MB.</div>
+          <button class="btn-primary btn-sm" id="cvChooseBtn" data-i18n>Choose file</button>
+          <span class="cv-drop-text" data-i18n>or drop it here</span>
+          <div class="pf-hint" style="margin: 6px 0 0;" data-i18n>PDF or Word, up to 5 MB.</div>
         </div>
         <div id="cvResult" class="cv-error" role="alert" hidden></div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+        <button class="btn-secondary btn-sm modal-close-btn" data-i18n>Close</button>
       </div>
     </div>
   </div>
@@ -351,6 +351,7 @@
   <script src="i18n-vi-core.js"></script>
   <script src="i18n-vi-board.js"></script>
   <script src="i18n-vi-settings.js"></script>
+  <script src="i18n-vi-actions.js"></script>
   <script src="core.js"></script>  <!-- API client, HTML safety, field adapters, app state -->
   <script src="panels.js"></script>  <!-- settings windows: logins, location, search terms, sources -->
   <script src="widgets.js"></script>  <!-- refreshing state; header, Today, notifications -->

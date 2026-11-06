@@ -5,45 +5,47 @@ async function askAI(kind, id, model) {
   const notesEl = document.getElementById(`draftNotes-${id}`);
   let req;
   try {
-    if (kind === "rate") showToast("Rating…", "info");
+    if (kind === "rate") showToast(t("Rating…"), "info");
     req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : kind === "rate" ? { model } : {});
   } catch (e) {
     if (e.code === "profile_empty") {
-      showToast(e.message, "info");
+      showToast(t(e.message), "info");
       openProfile();
       return;
     }
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
   if (req.rated) {
     // A Jev challenger leaves the canonical badge unchanged; report the
     // actual model verdict returned by this request.
     const verdict = req.job.ratings?.[req.model];
-    showToast(`Rated ${verdict?.letter ?? req.job.score_letter} ${Number(verdict?.score ?? req.job.score).toFixed(1)}`, "success");
+    const score = Number(verdict?.score ?? req.job.score).toLocaleString(I18N.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    showToast(t("Rated {letter} {score}", { letter: verdict?.letter ?? req.job.score_letter, score }), "success");
     refreshAppState();
     return;
   }
   askState = { kind, id, req };
   renderAskConnect();
   const titles = { rate: "Rate this job with your AI", cv: "Tailor your CV with your AI", draft: "Draft the email with your AI" };
-  document.getElementById("askTitle").textContent = titles[kind];
+  document.getElementById("askTitle").textContent = t(titles[kind]);
+  document.getElementById("askIntro").innerHTML = t("braveduck doesn't run an AI itself. In <strong>Claude Code</strong> (with braveduck connected), paste this:");
   document.getElementById("askPrompt").textContent = req.prompt;
   const paste = document.getElementById("askPasteBlock");
   paste.style.display = kind === "rate" ? "none" : "block";
   document.getElementById("askPaste").value = "";
   document.getElementById("askPaste").placeholder = kind === "cv"
-    ? "…or paste the CV your AI wrote (Markdown) here"
-    : "…or paste the email here: first line \"Subject: …\", then a blank line, then the body";
+    ? t("…or paste the CV your AI wrote (Markdown) here")
+    : t("…or paste the email here: first line \"Subject: …\", then a blank line, then the body");
   document.getElementById("askModalOverlay").classList.add("open");
 }
 
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    showToast("Copied.", "success");
+    showToast(t("Copied."), "success");
   } catch {
-    showToast("Couldn't copy — select the text and copy it yourself.", "error");
+    showToast(t("Couldn't copy — select the text and copy it yourself."), "error");
   }
 }
 
@@ -61,10 +63,10 @@ async function saveAskPaste() {
         : { subject: "", body: text });
     }
     document.getElementById("askModalOverlay").classList.remove("open");
-    showToast(askState.kind === "cv" ? "CV saved." : "Draft saved for review.", "success");
+    showToast(t(askState.kind === "cv" ? "CV saved." : "Draft saved for review."), "success");
     refreshAppState();
   } catch (e) {
-    showToast(`Couldn't save: ${e.message}`, "error");
+    showToast(t("Couldn't save: {error}", { error: t(e.message) }), "error");
   }
 }
 
@@ -93,11 +95,11 @@ async function renderSetup() {
   if (st.done) return;
   // Only what's left: a finished step has nothing to say.
   const left = SETUP_STEPS.filter(step => !done[step.key]);
-  document.getElementById("setupLeft").textContent = `${left.length} ${left.length === 1 ? "step" : "steps"} left`;
+  document.getElementById("setupLeft").textContent = t(left.length === 1 ? "{n} step left" : "{n} steps left", { n: left.length });
   document.getElementById("setupSteps").innerHTML = left.map((step, i) => `
     <li class="setup-step">
-      <span class="setup-step-title">${i + 1}. ${esc(step.title)}</span>
-      <button class="${i === 0 ? "btn-primary" : "btn-secondary"} btn-sm" data-setup="${esc(step.key)}" title="${esc(step.hint)}">${esc(step.action)}</button>
+      <span class="setup-step-title">${i + 1}. ${esc(t(step.title))}</span>
+      <button class="${i === 0 ? "btn-primary" : "btn-secondary"} btn-sm" data-setup="${esc(step.key)}" title="${esc(t(step.hint))}">${esc(t(step.action))}</button>
     </li>`).join("");
   card.querySelectorAll("button[data-setup]").forEach(btn => {
     btn.addEventListener("click", () => SETUP_STEPS.find(s => s.key === btn.dataset.setup).open());
@@ -162,7 +164,7 @@ function renderHostedUser(hosted) {
   el.hidden = !hosted;
   document.getElementById("agentBtn").hidden = !hosted;
   if (!hosted) return;
-  el.innerHTML = `${esc(hosted.user)}${hosted.logout_url ? `<a href="${safeUrl(hosted.logout_url)}">Log out</a>` : ""}`;
+  el.innerHTML = `${esc(hosted.user)}${hosted.logout_url ? `<a href="${safeUrl(hosted.logout_url)}">${esc(t("Log out"))}</a>` : ""}`;
 }
 
 
@@ -174,17 +176,17 @@ async function renderMyCV() {
   const res = await apiFetch(`${API_BASE}/cv`);
   const out = await res.json().catch(() => ({}));
   if (!res.ok) {
-    status.textContent = `Couldn't load your CV: ${out.error || res.status}`;
+    status.textContent = t("Couldn't load your CV: {error}", { error: t(out.error || String(res.status)) });
     return;
   }
-  choose.textContent = out.cv ? "Replace it" : "Choose file";
+  choose.textContent = t(out.cv ? "Replace it" : "Choose file");
   if (!out.cv) {
-    status.textContent = "Add your CV and we'll fill in your profile from it.";
+    status.textContent = t("Add your CV and we'll fill in your profile from it.");
     return;
   }
   status.replaceChildren(
-    el("span", { class: "cv-line" }, `✓ ${out.cv.name}, added ${agoWords(out.cv.uploaded_at)}`),
-    el("button", { type: "button", class: "btn-link", onclick: downloadMyCV }, "Download"));
+    el("span", { class: "cv-line" }, t("✓ {name}, added {time}", { name: out.cv.name, time: agoWords(out.cv.uploaded_at) })),
+    el("button", { type: "button", class: "btn-link", onclick: downloadMyCV }, t("Download")));
 }
 
 function wireCVUpload(overlay) {
@@ -233,19 +235,19 @@ async function uploadMyCV(file) {
   let uploaded = false;
   result.hidden = true;
   btn.disabled = true;
-  btn.textContent = "Uploading…";
+  btn.textContent = t("Uploading…");
   try {
     let [res, out] = await send(false);
     if (res.status === 409) {
-      if (!confirm(`${out.error}\n\nOK replaces it with the text of ${file.name}.`)) return;
+      if (!confirm(`${t(out.error)}\n\n${t("OK replaces it with the text of {file}.", { file: file.name })}`)) return;
       [res, out] = await send(true);
     }
     if (!res.ok) {
-      fail((out.error || `HTTP ${res.status}`).replace(/^invalid input: /, ""));
+      fail(t((out.error || `HTTP ${res.status}`).replace(/^invalid input: /, "")));
       return;
     }
     uploaded = true;
-    showToast("CV added. Your profile is updated.", "success");
+    showToast(t("CV added. Your profile is updated."), "success");
   } catch (e) {
     fail(e.message);
   } finally {
@@ -262,7 +264,7 @@ async function downloadMyCV() {
   const res = await apiFetch(`${API_BASE}/cv/file`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    showToast(err.error || `HTTP ${res.status}`, "error");
+    showToast(t(err.error || `HTTP ${res.status}`), "error");
     return;
   }
   const name = (res.headers.get("Content-Disposition") || "").match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i);
@@ -276,7 +278,7 @@ async function downloadCV(id) {
   const res = await apiFetch(`${API_BASE}/jobs/${id}/cv.pdf`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    showToast(err.error || `HTTP ${res.status}`, "error");
+    showToast(t(err.error || `HTTP ${res.status}`), "error");
     return;
   }
   const url = URL.createObjectURL(await res.blob());
@@ -299,28 +301,28 @@ async function sendEmailDraft(id) {
   try {
     await APIClient.put(`jobs/${id}/draft`, { to, subject, body }); // keep the user's edits
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
   window.location.href = mailto(to, subject, body);
   setTimeout(async () => {
-    if (!confirm("Did you send the email from your mail app? (Mark it sent and move the job to Applied)")) return;
+    if (!confirm(t("Did you send the email from your mail app? (Mark it sent and move the job to Applied)"))) return;
     try {
       await APIClient.post(`jobs/${id}/draft/sent`);
-      showToast("Marked as sent.", "success");
+      showToast(t("Marked as sent."), "success");
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(t(e.message), "error");
     }
     refreshAppState();
   }, 1500);
 }
 
 async function rejectEmailDraft(id) {
-  if (!confirm("Discard this draft?")) return;
+  if (!confirm(t("Discard this draft?"))) return;
   try {
     await APIClient.post(`jobs/${id}/draft/reject`);
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
   }
   refreshAppState();
 }
@@ -351,7 +353,7 @@ function applyButton(job, tailored) {
   const open = job.status === "Saved" || job.status === "Waiting to apply";
   if (!site || !open || job.topcv_status || job.apply_state === "filling" || job.apply_state === "confirm") return "";
   if (!tailored && !(AppState.setup && AppState.setup.cv)) return "";
-  return `<button class="btn-primary card-primary" onclick="applyOnSite('${job.id}')" title="Opens the job in a window with your ${esc(site.name)} login. You submit it there.">Apply on ${esc(site.name)}</button>`;
+  return `<button class="btn-primary card-primary" onclick="applyOnSite('${job.id}')" title="${esc(t("Opens the job in a window with your {site} login. You submit it there.", { site: site.name }))}">${esc(t("Apply on {site}", { site: site.name }))}</button>`;
 }
 
 // Assisted apply: you approve by clicking, and you submit on the site yourself.
@@ -360,7 +362,7 @@ async function applyOnSite(id) {
   try {
     prep = await APIClient.post(`jobs/${id}/apply`);
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
   if (prep.cover_letter) {
@@ -368,12 +370,14 @@ async function applyOnSite(id) {
   }
   const topcv = prep.site_id === "topcv";
   alert(
-    `A ${prep.site} window is opening with your login. In it:\n\n` +
-    "1. Click Apply" + (topcv ? " (Ứng tuyển)" : "") + "\n" +
-    "2. Upload this CV:\n   " + prep.cv_pdf + "\n" +
-    (prep.cover_letter ? "3. Paste the cover letter (already copied to your clipboard)\n4. Submit, then close the window\n" : "3. Submit, then close the window\n") +
-    (topcv ? "\nbraveduck checks TopCV afterwards and moves the job to Applied if it's there."
-           : "\nWhen you close the window, the card asks whether you submitted it.")
+    t("A {site} window is opening with your login. In it:", { site: prep.site }) + "\n\n" +
+    t(topcv ? "1. Click Apply (Ứng tuyển)" : "1. Click Apply") + "\n" +
+    t("2. Upload this CV:") + "\n   " + prep.cv_pdf + "\n" +
+    (prep.cover_letter
+      ? t("3. Paste the cover letter (already copied to your clipboard)") + "\n" + t("4. Submit, then close the window") + "\n"
+      : t("3. Submit, then close the window") + "\n") +
+    "\n" + t(topcv ? "braveduck checks TopCV afterwards and moves the job to Applied if it's there."
+                   : "When you close the window, the card asks whether you submitted it.")
   );
   refreshAppState();
 }
@@ -383,10 +387,10 @@ async function confirmApplied(id, submitted) {
   try {
     await APIClient.post(`jobs/${id}/apply/confirm`, { submitted });
   } catch (e) {
-    showToast(e.message, "error");
+    showToast(t(e.message), "error");
     return;
   }
-  if (submitted) showToast("Moved to Applied", "success");
+  if (submitted) showToast(t("Moved to Applied"), "success");
   refreshAppState();
 }
 
@@ -402,9 +406,9 @@ async function saveJobDetails(id) {
   const val = key => document.getElementById(`edit-${key}-${id}`).value;
   try {
     await APIClient.updateJob(id, { title: val("title"), company: val("company"), salary: val("salary"), location: val("location") });
-    showToast("Details saved.", "success");
+    showToast(t("Details saved."), "success");
   } catch (e) {
-    showToast(`Couldn't save: ${e.message}`, "error");
+    showToast(t("Couldn't save: {error}", { error: t(e.message) }), "error");
   }
   refreshAppState();
 }
@@ -420,7 +424,7 @@ function saveJobNotes(id, textarea) {
       const j = AppState.jobs.find(item => item.id === id);
       if (j) j.notes = text;
     } catch (e) {
-      showToast(`Couldn't save notes: ${e.message}`, "error");
+      showToast(t("Couldn't save notes: {error}", { error: t(e.message) }), "error");
     }
   }, 500);
 }
@@ -464,10 +468,10 @@ async function transitionCardStatus(id, newStatus, committedEl) {
   if (!j || j.status === newStatus) return;
   try {
     await APIClient.updateJob(id, { status: newStatus });
-    showToast(`Job moved to ${newStatus}`, "success");
+    showToast(t("Job moved to {status}", { status: t(newStatus) }), "success");
     if (committedEl && document.activeElement === committedEl) committedEl.blur();
   } catch (e) {
-    showToast(`Couldn't move job: ${e.message}`, "error");
+    showToast(t("Couldn't move job: {error}", { error: t(e.message) }), "error");
     if (committedEl && committedEl.value === newStatus) committedEl.value = j.status;
   }
   refreshAppState();
@@ -478,7 +482,7 @@ async function downloadJobsCSV() {
   const res = await apiFetch(`${API_BASE}/export.csv`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    showToast(err.error || `HTTP ${res.status}`, "error");
+    showToast(t(err.error || `HTTP ${res.status}`), "error");
     return;
   }
   const url = URL.createObjectURL(await res.blob());
