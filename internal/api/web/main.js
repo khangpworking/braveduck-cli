@@ -315,7 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const badge = card.querySelector(".apply-badge.tailoring");
           if (badge) {
             const elapsed = formatDuration(Date.now() - new Date(job.saved_at).getTime() / 2);
-            badge.innerText = `✍️ Tailoring CV (${elapsed})`;
+            badge.innerText = t("✍️ Tailoring CV ({time})", { time: elapsed });
           }
         }
       }

@@ -9,7 +9,7 @@ function formatSalary(s) {
   if (!/vnd/i.test(s) || !/\d{6,}/.test(s)) return s;
   const millions = n => {
     const m = Number(n) / 1e6;
-    return Number.isInteger(m) ? String(m) : m.toFixed(1).replace(/\.0$/, "");
+    return Number(m.toFixed(1)).toLocaleString(I18N.lang);
   };
   let out = s.replace(/(\d{6,})\s*-\s*(\d{6,})/, (_, a, b) => `${millions(a)}–${millions(b)}`)
     .replace(/\d{6,}/g, n => millions(n));
@@ -88,8 +88,8 @@ function renderBoard() {
     let sortSelectorHtml = "";
     if (colName === "Saved" && colJobs.some(isRated) && colJobs.length > 1) {
       sortSelectorHtml = `
-        <button class="column-sort" title="Change the order" data-sort="${sortMethod}" onclick="toggleSavedSort(event)">
-          ${sortMethod} ▾
+        <button class="column-sort" title="${esc(t("Change the order"))}" data-sort="${sortMethod}" onclick="toggleSavedSort(event)">
+          ${t(sortMethod)} ▾
         </button>
       `;
     }
@@ -97,9 +97,9 @@ function renderBoard() {
     colEl.innerHTML = `
       <div class="column-header" role="button" tabindex="0" aria-expanded="${isDesktop ? !folded : !isCollapsed}"
            onclick="toggleColumnCollapse('${colName}')" onkeydown="laneHeaderKey(event, '${colName}')"
-           title="${isDesktop ? (folded ? `Show ${colName}` : `Fold ${colName} away`) : ""}">
-        <h2 class="column-title">${colName}</h2>
-        <span class="column-count">${colJobs.length}</span>
+           title="${isDesktop ? esc(folded ? t("Show {lane}", {lane: t(colName)}) : t("Fold {lane} away", {lane: t(colName)})) : ""}">
+        <h2 class="column-title">${esc(t(colName))}</h2>
+        <span class="column-count">${colJobs.length.toLocaleString(I18N.lang)}</span>
       </div>
       ${sortSelectorHtml}
       <div class="column-cards" id="cards-${colName.replace(/\s+/g, "-")}"></div>
@@ -115,7 +115,7 @@ function renderBoard() {
     if (hidden > 0 || (showAll && colJobs.length > LANE_PAGE)) {
       const more = document.createElement("button");
       more.className = "btn-secondary btn-sm lane-more";
-      more.textContent = hidden > 0 ? `Show ${hidden} more` : "Show fewer";
+      more.textContent = hidden > 0 ? t("Show {n} more", { n: hidden.toLocaleString(I18N.lang) }) : t("Show fewer");
       more.addEventListener("click", () => {
         if (hidden > 0) fullLanes.add(colName); else fullLanes.delete(colName);
         renderBoard();
@@ -199,20 +199,20 @@ function setCardDetailsOpen(key, open) {
 // Red and amber are warnings; grey is only information.
 function clockBadge(job) {
   const badge = (level, text, why) => ({ level, html: `<span class="expiry-badge ${level}"${why ? ` title="${esc(why)}"` : ""}>${text}</span>` });
-  const toClosed = (days, why) => badge("red", `⛔ to Closed in ${days > 0 ? days : 0}d`, `${why} Turn on Keep or pin it to stop that.`);
+  const toClosed = (days, why) => badge("red", t("⛔ to Closed in {n}d", { n: Math.max(0, days).toLocaleString(I18N.lang) }), `${why} ${t("Turn on Keep or pin it to stop that.")}`);
   const clock = job.clock;
   if (clock && clock.kind === "deadline") {
-    if (job.keep) return badge("grey", "🛟 kept");
-    if (job.pinned) return clock.state === "expired" ? badge("red", "⛔ closed") : badge("amber", "📅 deadline");
-    if (clock.state === "expired") return toClosed(clock.closes_in, "The posting has closed: this card moves to Closed 7 days after its deadline.");
-    if (clock.state === "warning") return badge("amber", `⚠ ${clock.days}d left`);
-    return badge("grey", new Date(`${clock.date}T00:00:00`).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' }), "Closing date");
+    if (job.keep) return badge("grey", t("🛟 kept"));
+    if (job.pinned) return clock.state === "expired" ? badge("red", t("⛔ closed")) : badge("amber", t("📅 deadline"));
+    if (clock.state === "expired") return toClosed(clock.closes_in, t("The posting has closed: this card moves to Closed 7 days after its deadline."));
+    if (clock.state === "warning") return badge("amber", t("⚠ {n}d left", { n: clock.days.toLocaleString(I18N.lang) }));
+    return badge("grey", fmtDate(`${clock.date}T00:00:00`, { day: 'numeric', month: 'short' }), t("Closing date"));
   }
   if (clock && clock.kind === "applied") {
-    if (job.keep) return badge("grey", "🛟 kept");
-    const waiting = badge("grey", `📮 ${clock.days}d`, "Days since you applied");
-    if (job.pinned) return clock.state === "silent" ? waiting : badge("grey", "⛔ no reply");
-    if (clock.state !== "silent") return toClosed(clock.closes_in, "No answer yet: this card moves to Closed 27 days after applying.");
+    if (job.keep) return badge("grey", t("🛟 kept"));
+    const waiting = badge("grey", t("📮 {n}d", { n: clock.days.toLocaleString(I18N.lang) }), t("Days since you applied"));
+    if (job.pinned) return clock.state === "silent" ? waiting : badge("grey", t("⛔ no reply"));
+    if (clock.state !== "silent") return toClosed(clock.closes_in, t("No answer yet: this card moves to Closed 27 days after applying."));
     return waiting;
   }
   return null;
@@ -273,13 +273,13 @@ function renderJobCard(job, container) {
 
   let scoreHtml = "";
   if (job.score_status === "scoring") {
-    scoreHtml = `<span class="score-badge score-pending" style="font-size:11px" title="Your AI is rating this job">rating…</span>`;
+    scoreHtml = `<span class="score-badge score-pending" style="font-size:11px" title="${esc(t("Your AI is rating this job"))}">${t("rating…")}</span>`;
   } else if (job.score_status === "failed") {
-    scoreHtml = `<button class="score-badge score-f score-retry" onclick="retryScoring('${job.id}')" title="Rating failed. Click to try again.">Rating failed</button>`;
+    scoreHtml = `<button class="score-badge score-f score-retry" onclick="retryScoring('${job.id}')" title="${esc(t("Rating failed. Click to try again."))}">${t("Rating failed")}</button>`;
   } else if (job.score_status === "stuck") {
-    scoreHtml = `<button class="score-badge score-f score-retry" onclick="retryScoring('${job.id}')" title="Rating got stuck. Click to try again.">Rating stuck</button>`;
+    scoreHtml = `<button class="score-badge score-f score-retry" onclick="retryScoring('${job.id}')" title="${esc(t("Rating got stuck. Click to try again."))}">${t("Rating stuck")}</button>`;
   } else if (isRated(job)) {
-    scoreHtml = `<span class="score-badge ${scoreClass}" title="How well this job fits you">${esc(job.score_letter)} ${esc(job.score)}</span>`;
+    scoreHtml = `<span class="score-badge ${scoreClass}" title="${esc(t("How well this job fits you"))}">${esc(job.score_letter)} ${Number(job.score).toLocaleString(I18N.lang)}</span>`;
   }
 
   // Salary chip
@@ -290,33 +290,33 @@ function renderJobCard(job, container) {
   if (job.status === "Waiting to apply") {
     if (job.cv_status === "tailoring") {
       const elapsed = formatDuration(Date.now() - new Date(job.saved_at).getTime() / 2); // simulated duration
-      automationHtml = `<span class="apply-badge tailoring">✍️ Tailoring CV (${elapsed})</span>`;
+      automationHtml = `<span class="apply-badge tailoring">${t("✍️ Tailoring CV ({time})", { time: elapsed })}</span>`;
     } else if (job.draft_status === "drafting") {
-      automationHtml = `<span class="apply-badge tailoring">✍️ Drafting email...</span>`;
+      automationHtml = `<span class="apply-badge tailoring">${t("✍️ Drafting email...")}</span>`;
     }
   } else if (job.status === "Applied") {
     if (job.apply_state === "queued") {
-      automationHtml = `<span class="apply-badge queued">🕒 queued</span>`;
+      automationHtml = `<span class="apply-badge queued">${t("🕒 queued")}</span>`;
     } else if (job.apply_state === "filling") {
-      automationHtml = `<span class="apply-badge queued">✍️ filling…</span>`;
+      automationHtml = `<span class="apply-badge queued">${t("✍️ filling…")}</span>`;
     }
   }
 
   if (job.apply_state === "confirm") {
     const site = siteFor(job);
-    automationHtml = `<span class="apply-confirm">Did you submit it${site ? ` on ${esc(site.name)}` : ""}?
-      <button class="btn-primary btn-sm" onclick="confirmApplied('${job.id}', true)">Yes, I applied</button>
-      <button class="btn-secondary btn-sm" onclick="confirmApplied('${job.id}', false)">Not yet</button></span>`;
+    automationHtml = `<span class="apply-confirm">${site ? t("Did you submit it on {site}?", { site: esc(site.name) }) : t("Did you submit it?")}
+      <button class="btn-primary btn-sm" onclick="confirmApplied('${job.id}', true)">${t("Yes, I applied")}</button>
+      <button class="btn-secondary btn-sm" onclick="confirmApplied('${job.id}', false)">${t("Not yet")}</button></span>`;
   }
 
   if (job.apply_state === "failed") {
-    automationHtml = `<button class="apply-badge failed" onclick="retryApply('${job.id}')" title="Applying on the site failed. Click to try again.">✕ Apply failed: try again</button>`;
+    automationHtml = `<button class="apply-badge failed" onclick="retryApply('${job.id}')" title="${esc(t("Applying on the site failed. Click to try again."))}">${t("✕ Apply failed: try again")}</button>`;
   }
 
   // Move-to dropdown items
   const stages = ["Saved", "Waiting to apply", "Applied", "Interview", "Offer", "Closed"];
   const selectOptions = stages
-    .map(st => `<option value="${st}" ${job.status === st ? "selected" : ""}>${st}</option>`)
+    .map(st => `<option value="${st}" ${job.status === st ? "selected" : ""}>${esc(t(st))}</option>`)
     .join("");
 
   // An open card lists every warning itself; a failed apply is warning enough.
@@ -330,7 +330,7 @@ function renderJobCard(job, container) {
           <div class="card-company">${esc(job.company)}</div>
         </div>
         <div class="card-actions-group">
-          ${job.pinned ? `<span class="card-pin" role="img" aria-label="Pinned" title="Pinned: stays at the top">📌</span>` : ""}
+          ${job.pinned ? `<span class="card-pin" role="img" aria-label="${esc(t("Pinned"))}" title="${esc(t("Pinned: stays at the top"))}">📌</span>` : ""}
           ${scoreHtml}
         </div>
       </div>
@@ -341,12 +341,12 @@ function renderJobCard(job, container) {
 
     <div class="card-footer">
       <!-- Quick stage jump dropdown (accessible alternative to drag) -->
-      <select class="move-select" title="Move this job to another stage" aria-label="Stage: ${esc(job.title)}" onchange="moveStageDropdown('${job.id}', this)" onclick="event.stopPropagation()">
+      <select class="move-select" title="${esc(t("Move this job to another stage"))}" aria-label="${esc(t("Stage: {title}", { title: job.title }))}" onchange="moveStageDropdown('${job.id}', this)" onclick="event.stopPropagation()">
         ${selectOptions}
       </select>
       <div class="card-footer-actions">
-        ${job.url ? `<a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="card-link" title="Open the job on its site" aria-label="Open the job: ${esc(job.title)}" onclick="event.stopPropagation()">Open ↗</a>` : ""}
-        <button class="card-link expand-btn" title="${isOpen ? "Hide the details" : "Show the details"}" aria-label="Details: ${esc(job.title)}" aria-expanded="${isOpen}" onclick="toggleCardDetail('${job.id}')">${isOpen ? "Hide ▴" : "Details ▾"}</button>
+        ${job.url ? `<a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="card-link" title="${esc(t("Open the job on its site"))}" aria-label="${esc(t("Open the job: {title}", { title: job.title }))}" onclick="event.stopPropagation()">${t("Open ↗")}</a>` : ""}
+        <button class="card-link expand-btn" title="${esc(isOpen ? t("Hide the details") : t("Show the details"))}" aria-label="${esc(t("Details: {title}", { title: job.title }))}" aria-expanded="${isOpen}" onclick="toggleCardDetail('${job.id}')">${isOpen ? t("Hide ▴") : t("Details ▾")}</button>
       </div>
     </div>
 
@@ -376,23 +376,23 @@ function cardFacts(job) {
   if (job.company_geo_status === "ok" && typeof job.company_distance_km === "number") {
     const km = job.company_distance_km;
     const icon = km <= ((AppState.location && AppState.location.max_km) || 10) ? "✅" : "🔴";
-    facts.push(`<span class="intel-badge" title="Distance from your location">${icon} ${km < 10 ? km.toFixed(1) : Math.round(km)} km</span>`);
+    facts.push(`<span class="intel-badge" title="${esc(t("Distance from your location"))}">${icon} ${km.toLocaleString(I18N.lang, { minimumFractionDigits: km < 10 ? 1 : 0, maximumFractionDigits: km < 10 ? 1 : 0 })} km</span>`);
   } else if (!locSet) {
     // No location yet: nothing to measure from, so no badge (📍 Location sets it).
   } else if (job.company_geo_status === "geocode_failed") {
-    facts.push(`<span class="intel-badge" title="This job's address couldn't be found on the map.">📍 unknown</span>`);
+    facts.push(`<span class="intel-badge" title="${esc(t("This job's address couldn't be found on the map."))}">📍 ${t("unknown")}</span>`);
   } else if (job.company_geo_status === "no_address") {
-    facts.push(`<span class="intel-badge" title="This job has no address. Add one under Edit details.">📍 no address</span>`);
+    facts.push(`<span class="intel-badge" title="${esc(t("This job has no address. Add one under Edit details."))}">📍 ${t("no address")}</span>`);
   } else {
-    facts.push(`<span class="intel-badge" title="Looking up this address…">📍 …</span>`);
+    facts.push(`<span class="intel-badge" title="${esc(t("Looking up this address…"))}">📍 …</span>`);
   }
 
   // Company active date (masothue link)
   if (job.company_active_date === "🏢 …" || job.company_active_date === "🏢 Unknown") {
-    facts.push(`<span class="intel-badge" title="When the company started">${esc(job.company_active_date)}</span>`);
+    facts.push(`<span class="intel-badge" title="${esc(t("When the company started"))}">${esc(t(job.company_active_date))}</span>`);
   } else if (job.company_active_date) {
     const year = new Date(job.company_active_date).getFullYear();
-    facts.push(`<a href="https://masothue.com/Search/?q=${encodeURIComponent(job.company)}" target="_blank" rel="noopener noreferrer" class="intel-badge" title="The year the company started" onclick="event.stopPropagation()">📅 ${year}</a>`);
+    facts.push(`<a href="https://masothue.com/Search/?q=${encodeURIComponent(job.company)}" target="_blank" rel="noopener noreferrer" class="intel-badge" title="${esc(t("The year the company started"))}" onclick="event.stopPropagation()">📅 ${year}</a>`);
   }
 
   // Platform badges
@@ -404,22 +404,22 @@ function cardFacts(job) {
       suitable: "✅ TopCV: suitable",
       rejected: "❌ TopCV: not suitable"
     };
-    facts.push(`<span class="apply-badge" title="${esc(job.apply_detail)}">${esc(labels[job.topcv_status] || job.topcv_status)}</span>`);
+    facts.push(`<span class="apply-badge" title="${esc(t(job.apply_detail))}">${esc(t(labels[job.topcv_status] || job.topcv_status))}</span>`);
   } else if (job.discovery_source === "VietnamWorks" && job.vnw_status) {
-    facts.push(`<span class="apply-badge">${job.vnw_status === "seen" ? "👁 seen" : esc(job.vnw_status)}</span>`);
+    facts.push(`<span class="apply-badge">${job.vnw_status === "seen" ? t("👁 seen") : esc(job.vnw_status)}</span>`);
   }
 
   // Sent markers
   if (job.apply_state === "sent") {
-    facts.push(`<span class="apply-badge sent">✓ sent</span>`);
+    facts.push(`<span class="apply-badge sent">${t("✓ sent")}</span>`);
   } else if (job.apply_state === "replied") {
-    facts.push(`<span class="apply-badge sent">✓ replied</span>`);
+    facts.push(`<span class="apply-badge sent">${t("✓ replied")}</span>`);
   }
   if (job.followup_sent_at) {
-    facts.push(`<span class="apply-badge sent">📨 followup</span>`);
+    facts.push(`<span class="apply-badge sent">${t("📨 followup")}</span>`);
   }
 
-  facts.push(`<span class="age-label" title="When it was found, and where">${esc(timeAgo(job.saved_at))} · ${esc(sourceName(job.discovery_source))}</span>`);
+  facts.push(`<span class="age-label" title="${esc(t("When it was found, and where"))}">${esc(timeAgo(job.saved_at))} · ${esc(sourceName(job.discovery_source))}</span>`);
   return facts.join("");
 }
 
@@ -427,22 +427,22 @@ function cardFacts(job) {
 function primaryAction(job) {
   const move = (label, to) => `<button class="btn-primary card-primary" onclick="transitionCardStatus('${job.id}', '${to}')">${label}</button>`;
   switch (job.status) {
-    case "Applied": return move("Got an interview", "Interview");
-    case "Interview": return move("Got an offer", "Offer");
-    case "Offer": return move("Close this job", "Closed");
-    case "Closed": return move("Back to Saved", "Saved");
+    case "Applied": return move(t("Got an interview"), "Interview");
+    case "Interview": return move(t("Got an offer"), "Offer");
+    case "Offer": return move(t("Close this job"), "Closed");
+    case "Closed": return move(t("Back to Saved"), "Saved");
   }
   // The card is already asking "did you submit it?".
   if (job.apply_state === "confirm") return "";
   const apply = applyButton(job, job.cv_status === "ready");
   if (apply) return apply;
   if (draftIsPrimary(job)) {
-    return `<button class="btn-primary card-primary" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>`;
+    return `<button class="btn-primary card-primary" onclick="sendEmailDraft('${job.id}')">${t("Send from my mail app")}</button>`;
   }
   if (job.url) {
-    return `<a class="btn-primary card-primary" href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer">Open the job ↗</a>`;
+    return `<a class="btn-primary card-primary" href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer">${t("Open the job ↗")}</a>`;
   }
-  return move("I applied", "Applied");
+  return move(t("I applied"), "Applied");
 }
 
 // draftIsPrimary: the card's main button sends the unsent email draft.
@@ -464,14 +464,14 @@ function renderCardDetailContents(job, detailContainer) {
     .map(item => `<li>${esc(item)}</li>`);
   const whyHtml = reasons.length ? `
     <div class="detail-section">
-      <div class="detail-title">Why this rating</div>
+      <div class="detail-title">${t("Why this rating")}</div>
       <ul class="assessment-list">${reasons.slice(0, 3).join("")}</ul>
     </div>` : "";
   const ratingHtml = `
     <div class="detail-section">
-      <div class="detail-title">Rating</div>
+      <div class="detail-title">${t("Rating")}</div>
       ${reasons.length > 3 ? `<ul class="assessment-list">${reasons.slice(3).join("")}</ul>` : ""}
-      <button class="btn-secondary btn-sm" style="align-self:flex-start;" onclick="askAI('rate', '${job.id}')">${isRated(job) ? "Rate again" : "Rate"}</button>
+      <button class="btn-secondary btn-sm" style="align-self:flex-start;" onclick="askAI('rate', '${job.id}')">${isRated(job) ? t("Rate again") : t("Rate")}</button>
     </div>`;
 
   // 2. Other raters, for those who turned on comparing them in Settings.
@@ -485,7 +485,7 @@ function renderCardDetailContents(job, detailContainer) {
           list += `
             <div style="margin-bottom: 6px;">
               <span class="score-badge ${rating.letter === "A" ? "score-a" : (rating.letter === "B" ? "score-b" : "score-c")}" style="font-size: 11px;">
-                ${esc(model)}: ${esc(rating.letter)} ${esc(rating.score)}
+                ${esc(model)}: ${esc(rating.letter)} ${Number(rating.score).toLocaleString(I18N.lang)}
               </span>
               <p style="font-size:12px; margin: 2px 0 0 0; color: var(--body); font-style: italic;">
                 "${esc(rating.reasoning)}"
@@ -506,15 +506,15 @@ function renderCardDetailContents(job, detailContainer) {
           <select class="text-input" style="padding: 4px 8px; font-size:12px; width: auto;" id="askModelSelect-${job.id}">
             ${options}
           </select>
-          <button class="btn-secondary btn-sm" style="padding: 4px 10px; font-size:12px;" onclick="askAnotherModel('${job.id}')">Ask Model</button>
+          <button class="btn-secondary btn-sm" style="padding: 4px 10px; font-size:12px;" onclick="askAnotherModel('${job.id}')">${t("Ask Model")}</button>
         </div>
       `;
     }
 
     otherModelsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">Other AI ratings</div>
-        ${list || '<div style="font-size:12px; color:var(--muted)">No other AI has rated this job yet.</div>'}
+        <div class="detail-title">${t("Other AI ratings")}</div>
+        ${list || `<div style="font-size:12px; color:var(--muted)">${t("No other AI has rated this job yet.")}</div>`}
         ${askSelectHtml}
       </div>
     `;
@@ -526,7 +526,7 @@ function renderCardDetailContents(job, detailContainer) {
     const pills = job.skills.map(s => `<span class="skill-pill">${esc(s)}</span>`).join("");
     skillsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">Skills</div>
+        <div class="detail-title">${t("Skills")}</div>
         <div class="skills-list">${pills}</div>
       </div>
     `;
@@ -541,7 +541,7 @@ function renderCardDetailContents(job, detailContainer) {
 
     summaryHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">Summary</div>
+        <div class="detail-title">${t("Summary")}</div>
         <ul class="assessment-list">${content}</ul>
       </div>
     `;
@@ -550,24 +550,24 @@ function renderCardDetailContents(job, detailContainer) {
   // 5. Notes block
   const notesHtml = `
     <div class="detail-section">
-      <div class="detail-title">My notes (saved as you type)</div>
-      <textarea class="textarea-input" style="height: 60px; font-size: 12px;" aria-label="My notes" placeholder="Add custom notes..." oninput="saveJobNotes('${job.id}', this)">${esc(job.notes)}</textarea>
+      <div class="detail-title">${t("My notes (saved as you type)")}</div>
+      <textarea class="textarea-input" style="height: 60px; font-size: 12px;" aria-label="${esc(t("My notes"))}" placeholder="${esc(t("Add custom notes..."))}" oninput="saveJobNotes('${job.id}', this)">${esc(job.notes)}</textarea>
     </div>
   `;
 
   // 5b. Edit details (fix a scraped title, a group-id "company", …)
   const field = (key, label, value) => `
-      <label style="font-size:11px; font-weight:600; color:var(--muted)">${label}</label>
+      <label style="font-size:11px; font-weight:600; color:var(--muted)">${esc(t(label))}</label>
       <input type="text" class="text-input" id="edit-${key}-${job.id}" value="${esc(value)}" style="font-size:12px; padding: 4px 8px; margin-bottom: 4px;">`;
   const editHtml = `
     <details class="detail-section edit-details" style="border-top: 1px solid var(--hairline); padding-top: 8px;" ${openDetails.has(`edit-${job.id}`) ? "open" : ""} ontoggle="setCardDetailsOpen('edit-${job.id}', this.open)">
-      <summary class="detail-title" style="cursor:pointer;">Edit details</summary>
+      <summary class="detail-title" style="cursor:pointer;">${t("Edit details")}</summary>
       <div style="display:flex; flex-direction:column; margin-top:6px;">
         ${field("title", "Title", job.title)}
         ${field("company", "Company", job.company)}
         ${field("salary", "Salary", job.salary)}
         ${field("location", "Location", job.location)}
-        <button class="btn-secondary btn-sm" style="align-self:flex-start; margin-top:4px;" onclick="saveJobDetails('${job.id}')">Save details</button>
+        <button class="btn-secondary btn-sm" style="align-self:flex-start; margin-top:4px;" onclick="saveJobDetails('${job.id}')">${t("Save details")}</button>
       </div>
     </details>
   `;
@@ -588,14 +588,14 @@ function renderCardDetailContents(job, detailContainer) {
       if (job.status === "Applied") {
         btnLabel = "Undo: I haven't applied";
         btnAction = `undoOnSiteApply('${job.id}')`;
-        undoBtn = `<p style="font-size:12px; margin: 4px 0 0 0; color: var(--success-border)">✓ You applied on the site.</p>`;
+        undoBtn = `<p style="font-size:12px; margin: 4px 0 0 0; color: var(--success-border)">${t("✓ You applied on the site.")}</p>`;
       }
 
       applyBlockHtml = `
         <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-          <div class="detail-title">🌐 Apply on ${esc(sourceName(job.discovery_source))}</div>
+          <div class="detail-title">${esc(t("🌐 Apply on {site}", { site: sourceName(job.discovery_source) }))}</div>
           <div style="margin-top: 6px;">
-            <button class="btn-secondary btn-sm" onclick="${btnAction}">${btnLabel}</button>
+            <button class="btn-secondary btn-sm" onclick="${btnAction}">${esc(t(btnLabel))}</button>
             ${undoBtn}
           </div>
         </div>
@@ -609,39 +609,39 @@ function renderCardDetailContents(job, detailContainer) {
       let emailEditorHtml;
       if (!draft) {
         emailEditorHtml = `
-          <p style="font-size:12px; color:var(--muted); margin: 4px 0;">No draft yet.</p>
-          <textarea class="textarea-input" id="draftNotes-${job.id}" style="height:40px; font-size:12px;" aria-label="Notes for your AI" placeholder="Optional notes for your AI (tone, what to stress)…">${esc(job.draft_notes)}</textarea>
-          <button class="btn-secondary btn-sm" style="margin-top:6px; align-self:flex-start;" onclick="askAI('draft', '${job.id}')">Ask your AI to draft it</button>`;
+          <p style="font-size:12px; color:var(--muted); margin: 4px 0;">${t("No draft yet.")}</p>
+          <textarea class="textarea-input" id="draftNotes-${job.id}" style="height:40px; font-size:12px;" aria-label="${esc(t("Notes for your AI"))}" placeholder="${esc(t("Optional notes for your AI (tone, what to stress)…"))}">${esc(job.draft_notes)}</textarea>
+          <button class="btn-secondary btn-sm" style="margin-top:6px; align-self:flex-start;" onclick="askAI('draft', '${job.id}')">${t("Ask your AI to draft it")}</button>`;
       } else {
         const ro = isSent ? "readonly" : "";
         emailEditorHtml = `
           <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
             <div>
-              <label for="draftTo-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
-              <input type="text" id="draftTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${ro} style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
+              <label for="draftTo-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">${t("Recipient")}</label>
+              <input type="text" id="draftTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${ro} style="font-size:12px; padding: 4px 8px;" placeholder="${esc(t("recruiter@company.com"))}">
             </div>
             <div>
-              <label for="draftSubject-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">Subject</label>
+              <label for="draftSubject-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">${t("Subject")}</label>
               <input type="text" id="draftSubject-${job.id}" class="text-input" value="${esc(draft.subject)}" ${ro} style="font-size:12px; padding: 4px 8px;">
             </div>
             <div>
-              <label for="draftBody-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
+              <label for="draftBody-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">${t("Email Body")}</label>
               <textarea id="draftBody-${job.id}" class="textarea-input" style="height: 140px; font-size: 12px;" ${ro}>${esc(draft.body)}</textarea>
             </div>
             ${isSent
-              ? `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">✓ Sent (you confirmed sending it).</p>`
+              ? `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">${t("✓ Sent (you confirmed sending it).")}</p>`
               : `<div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
-                   ${!draftIsPrimary(job) ? `<button class="btn-secondary btn-sm" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>` : ""}
-                   <button class="btn-secondary btn-sm" onclick="askAI('draft', '${job.id}')">Re-draft</button>
-                   <button class="btn-danger btn-sm" style="padding: 6px 12px; font-size:12px;" onclick="rejectEmailDraft('${job.id}')">Discard</button>
+                   ${!draftIsPrimary(job) ? `<button class="btn-secondary btn-sm" onclick="sendEmailDraft('${job.id}')">${t("Send from my mail app")}</button>` : ""}
+                   <button class="btn-secondary btn-sm" onclick="askAI('draft', '${job.id}')">${t("Re-draft")}</button>
+                   <button class="btn-danger btn-sm" style="padding: 6px 12px; font-size:12px;" onclick="rejectEmailDraft('${job.id}')">${t("Discard")}</button>
                  </div>
-                 <p style="font-size:11px; color:var(--muted); margin:0;">Attach the tailored CV PDF in your mail app before sending.</p>`}
+                 <p style="font-size:11px; color:var(--muted); margin:0;">${t("Attach the tailored CV PDF in your mail app before sending.")}</p>`}
           </div>`;
       }
 
       applyBlockHtml = `
         <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-          <div class="detail-title">✉ Email</div>
+          <div class="detail-title">${t("✉ Email")}</div>
           ${emailEditorHtml}
         </div>
       `;
@@ -650,11 +650,11 @@ function renderCardDetailContents(job, detailContainer) {
     // Interview reply: written by you, sent from your own mail app.
     applyBlockHtml = `
       <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-        <div class="detail-title">📨 Reply to the recruiter</div>
+        <div class="detail-title">${t("📨 Reply to the recruiter")}</div>
         <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
-          <input type="text" id="replyTo-${job.id}" class="text-input" aria-label="Recruiter's email" value="${esc((job.draft_email && job.draft_email.to) || job.contact_email)}" style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
-          <textarea id="replyBody-${job.id}" class="textarea-input" aria-label="Your reply" style="height: 80px; font-size: 12px;" placeholder="Your reply…"></textarea>
-          <button class="btn-primary btn-sm" style="align-self:flex-start;" onclick="sendInterviewReply('${job.id}')">Open in my mail app</button>
+          <input type="text" id="replyTo-${job.id}" class="text-input" aria-label="${esc(t("Recruiter's email"))}" value="${esc((job.draft_email && job.draft_email.to) || job.contact_email)}" style="font-size:12px; padding: 4px 8px;" placeholder="${esc(t("recruiter@company.com"))}">
+          <textarea id="replyBody-${job.id}" class="textarea-input" aria-label="${esc(t("Your reply"))}" style="height: 80px; font-size: 12px;" placeholder="${esc(t("Your reply…"))}"></textarea>
+          <button class="btn-primary btn-sm" style="align-self:flex-start;" onclick="sendInterviewReply('${job.id}')">${t("Open in my mail app")}</button>
         </div>
       </div>
     `;
@@ -664,14 +664,14 @@ function renderCardDetailContents(job, detailContainer) {
   let cvControlsHtml = "";
   if (job.status === "Saved" || job.status === "Waiting to apply" || job.status === "Applied") {
     const ready = job.cv_status === "ready";
-    const when = ready && job.cv_generated_at ? new Date(job.cv_generated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "";
+    const when = ready && job.cv_generated_at ? new Date(job.cv_generated_at).toLocaleString(I18N.lang, { dateStyle: "short", timeStyle: "short" }) : "";
     cvControlsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">CV for this job</div>
-        <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${ready ? `Version ${esc(job.cv_version)} · ${esc(when)}` : "Not written yet."}</p>
+        <div class="detail-title">${t("CV for this job")}</div>
+        <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${ready ? esc(t("Version {n} · {date}", { n: job.cv_version, date: when })) : t("Not written yet.")}</p>
         <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
-          ${ready ? `<button class="btn-secondary btn-sm" onclick="downloadCV('${job.id}')">Download CV.pdf</button>` : ""}
-          <button class="btn-secondary btn-sm" onclick="askAI('cv', '${job.id}')">${ready ? "Ask your AI to improve it" : "Ask your AI to tailor it"}</button>
+          ${ready ? `<button class="btn-secondary btn-sm" onclick="downloadCV('${job.id}')">${t("Download CV.pdf")}</button>` : ""}
+          <button class="btn-secondary btn-sm" onclick="askAI('cv', '${job.id}')">${ready ? t("Ask your AI to improve it") : t("Ask your AI to tailor it")}</button>
         </div>
       </div>
     `;
@@ -683,10 +683,10 @@ function renderCardDetailContents(job, detailContainer) {
   const canMarkApplied = (job.status === "Saved" || job.status === "Waiting to apply") && job.url && job.apply_state !== "confirm";
   const quickHtml = `
     <div class="card-quick">
-      ${canKeep ? `<button class="keep-toggle" role="switch" aria-checked="${Boolean(job.keep)}" title="Keep this job: it won't move to Closed by itself" onclick="toggleKeepExemption('${job.id}')"><span class="keep-track" aria-hidden="true"></span>Keep</button>` : ""}
-      ${canMarkApplied ? `<button class="btn-secondary btn-sm" onclick="transitionCardStatus('${job.id}', 'Applied')">I applied</button>` : ""}
-      ${job.status === "Saved" ? `<button class="btn-secondary btn-sm" title="${job.pinned ? "Stop keeping it at the top" : "Keep it at the top of the lane"}" aria-pressed="${Boolean(job.pinned)}" onclick="togglePin('${job.id}')">📌 ${job.pinned ? "Unpin" : "Pin"}</button>` : ""}
-      <button class="btn-secondary btn-sm card-delete" title="Delete this job" aria-label="Delete job: ${esc(job.title)}" onclick="deleteJobCard('${job.id}')">🗑 Delete</button>
+      ${canKeep ? `<button class="keep-toggle" role="switch" aria-checked="${Boolean(job.keep)}" title="${esc(t("Keep this job: it won't move to Closed by itself"))}" onclick="toggleKeepExemption('${job.id}')"><span class="keep-track" aria-hidden="true"></span>${t("Keep")}</button>` : ""}
+      ${canMarkApplied ? `<button class="btn-secondary btn-sm" onclick="transitionCardStatus('${job.id}', 'Applied')">${t("I applied")}</button>` : ""}
+      ${job.status === "Saved" ? `<button class="btn-secondary btn-sm" title="${esc(job.pinned ? t("Stop keeping it at the top") : t("Keep it at the top of the lane"))}" aria-pressed="${Boolean(job.pinned)}" onclick="togglePin('${job.id}')">📌 ${job.pinned ? t("Unpin") : t("Pin")}</button>` : ""}
+      <button class="btn-secondary btn-sm card-delete" title="${esc(t("Delete this job"))}" aria-label="${esc(t("Delete job: {title}", { title: job.title }))}" onclick="deleteJobCard('${job.id}')">${t("🗑 Delete")}</button>
     </div>
   `;
 
@@ -695,7 +695,7 @@ function renderCardDetailContents(job, detailContainer) {
     ${whyHtml}
     ${primaryAction(job)}
     <details class="card-more" ${openDetails.has(`more-${job.id}`) ? "open" : ""} ontoggle="setCardDetailsOpen('more-${job.id}', this.open)">
-      <summary>More</summary>
+      <summary>${t("More")}</summary>
       <div class="card-more-body">
         ${quickHtml}
         ${notesHtml}
@@ -727,7 +727,7 @@ function showJobCard(id) {
   document.getElementById("closeDrawerBtn").click();
   const job = AppState.jobs.find(j => j.id === id);
   if (!job) {
-    showToast(`Job #${id} is no longer on the board`, "info");
+    showToast(t("Job #{id} is no longer on the board", { id }), "info");
     return;
   }
   // A direct link to a job must reveal it even when the search, "Show N more"
@@ -758,7 +758,7 @@ async function togglePin(id) {
 }
 
 async function deleteJobCard(id) {
-  if (confirm("Are you sure you want to delete this job card?")) {
+  if (confirm(t("Are you sure you want to delete this job card?"))) {
     await APIClient.deleteJob(id);
     AppState.expandedCards.delete(id);
     refreshAppState();

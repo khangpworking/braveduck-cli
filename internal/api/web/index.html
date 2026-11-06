@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="braveduck-token" content="">
-  <title>braveduck — job board</title>
+  <title data-i18n>braveduck — job board</title>
   <!-- Offline/buildless: no web fonts. app.css falls back to a system font stack. -->
   <link rel="stylesheet" href="app.css">
 </head>
@@ -20,7 +20,7 @@
     </div>
     <div class="nav-right">
       <span class="nav-user" id="hostedUser" hidden></span>
-      <button class="btn-secondary activity-btn" id="activityBtn" title="Recent activity" aria-label="Recent activity" aria-expanded="false" aria-controls="activityPanel">🔔</button>
+      <button class="btn-secondary activity-btn" id="activityBtn" title="Recent activity" data-i18n-title aria-label="Recent activity" data-i18n-aria-label aria-expanded="false" aria-controls="activityPanel">🔔</button>
       <button class="btn-primary" id="openDrawerBtn" data-i18n>+ Add Job</button>
     </div>
   </header>
@@ -33,9 +33,9 @@
     </section>
 
     <!-- Today: one short line; what to act on opens under it -->
-    <section class="today-strip" id="todayWidget" aria-label="Today">
+    <section class="today-strip" id="todayWidget" aria-label="Today" data-i18n-aria-label>
       <details class="today-details soft-card">
-        <summary><strong>Today</strong> <span id="todaySummary"></span></summary>
+        <summary><strong data-i18n>Today</strong> <span id="todaySummary"></span></summary>
         <div class="today-panel">
           <div id="todayList" class="today-list"></div>
           <div class="chips" id="crawlChips"></div>
@@ -52,10 +52,10 @@
 
     <!-- Toolbar Filters -->
     <section class="toolbar">
-      <input type="search" id="jobSearch" class="text-input search-input" placeholder="Search jobs  ( / )" aria-label="Search jobs" autocomplete="off">
+      <input type="search" id="jobSearch" class="text-input search-input" placeholder="Search jobs  ( / )" data-i18n-placeholder aria-label="Search jobs" data-i18n-aria-label autocomplete="off">
       <div class="toolbar-actions">
-        <button class="btn-secondary btn-sm" id="myCVBtn">📄 My CV</button>
-        <button class="btn-secondary btn-sm" id="profileBtn">👤 Profile</button>
+        <button class="btn-secondary btn-sm" id="myCVBtn" data-i18n>📄 My CV</button>
+        <button class="btn-secondary btn-sm" id="profileBtn" data-i18n>👤 Profile</button>
         <button class="btn-secondary btn-sm" id="settingsBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsMenu" data-i18n>⚙ Settings ▾</button>
       </div>
     </section>
@@ -70,7 +70,7 @@
       <button class="settings-item" role="menuitem" id="agentBtn" hidden>🤖 Connect your AI agent</button>
       <button class="settings-item" role="menuitem" id="exportBtn">⬇ Download my jobs (CSV)</button>
       <button class="settings-item" role="menuitem" id="langBtn"></button>
-      <button class="settings-item" role="menuitem" id="notifyBtn">🔔 Notify me of great matches: off</button>
+      <button class="settings-item" role="menuitem" id="notifyBtn" data-i18n>🔔 Notify me of great matches: off</button>
     </div>
 
     <!-- Backfill Rating Banner (Conditionally Visible) -->
@@ -337,10 +337,10 @@
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- Recent activity: opened with the 🔔 button -->
-  <section class="activity-panel" id="activityPanel" aria-label="Recent activity" hidden>
+  <section class="activity-panel" id="activityPanel" aria-label="Recent activity" data-i18n-aria-label hidden>
     <div class="activity-header">
-      <h3 class="widget-title">Recent activity</h3>
-      <button class="btn-close" id="activityCloseBtn" aria-label="Close recent activity">×</button>
+      <h3 class="widget-title" data-i18n>Recent activity</h3>
+      <button class="btn-close" id="activityCloseBtn" aria-label="Close recent activity" data-i18n-aria-label>×</button>
     </div>
     <ul class="log-feed" id="logFeed"></ul>
   </section>
@@ -349,6 +349,7 @@
   <!-- The board's script, in order: one global scope (classic scripts, no build step). -->
   <script src="i18n.js"></script>  <!-- language: t(), Vietnamese by default -->
   <script src="i18n-vi-core.js"></script>
+  <script src="i18n-vi-board.js"></script>
   <script src="core.js"></script>  <!-- API client, HTML safety, field adapters, app state -->
   <script src="panels.js"></script>  <!-- settings windows: logins, location, search terms, sources -->
   <script src="widgets.js"></script>  <!-- refreshing state; header, Today, notifications -->

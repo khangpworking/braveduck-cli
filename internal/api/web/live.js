@@ -50,10 +50,10 @@ async function onLiveUpdatesClosed() {
     // server down: wait for it, then decide again
   }
   if (status === 401) {
-    showToast("The board server restarted — reloading…", "info");
+    showToast(t("The board server restarted — reloading…"), "info");
     setTimeout(() => location.reload(), 1000);
   } else if (status === 0) {
-    showToast("Lost connection to the board server — reconnecting…", "error");
+    showToast(t("Lost connection to the board server — reconnecting…"), "error");
     setTimeout(onLiveUpdatesClosed, 3000);
   } else if (!pollTimer) {
     // Server is fine, live updates aren't: refresh now and then instead.
@@ -83,13 +83,43 @@ function showToast(message, type = "success") {
   }, 3000);
 }
 
+// Known server event templates; preserve unknown messages, especially errors.
+function activityMessage(message) {
+  if (I18N.lang === "en") return message;
+  const stageNames = { saved: "Saved", waiting: "Waiting to apply", applied: "Applied", interview: "Interview", offer: "Offer", closed: "Closed" };
+  const patterns = [
+    [/^Added (".*")$/, "Added {job}", ([, job]) => ({ job })],
+    [/^Removed (".*")$/, "Removed {job}", ([, job]) => ({ job })],
+    [/^Moved (".*") to (saved|waiting|applied|interview|offer|closed)$/, "Moved {job} to {stage}", ([, job, stage]) => ({ job, stage: t(stageNames[stage]) })],
+    [/^Rated (".*") ([A-F]) ([\d.]+) \((.*)\)$/, "Rated {job} {letter} {score} ({rater})", ([, job, letter, score, rater]) => ({ job, letter, score: Number(score).toLocaleString(I18N.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), rater })],
+    [/^Tailored CV v(\d+) for (".*")$/, "Tailored CV v{n} for {job}", ([, n, job]) => ({ n, job })],
+    [/^Email draft ready for (".*")$/, "Email draft ready for {job}", ([, job]) => ({ job })],
+    [/^Application email sent for (".*")$/, "Application email sent for {job}", ([, job]) => ({ job })],
+    [/^Applied on (.*): (".*")$/, "Applied on {site}: {job}", ([, site, job]) => ({ site, job })],
+    [/^Connected (.+)$/, "Connected {site}", ([, site]) => ({ site })],
+    [/^Disconnected (.+)$/, "Disconnected {site}", ([, site]) => ({ site })],
+    [/^Following the Facebook group (.+)$/, "Following the Facebook group {url}", ([, url]) => ({ url })],
+    [/^(.+): (\d+) new job\(s\)$/, "{source}: {n} new jobs", ([, source, n]) => ({ source: sourceName(source), n: Number(n).toLocaleString(I18N.lang) })],
+    [/^(.+): (\d+) new job post\(s\)$/, "{source}: {n} new job posts", ([, source, n]) => ({ source, n: Number(n).toLocaleString(I18N.lang) })],
+    [/^Moved (\d+) expired job\(s\) to Closed \(drag one back to keep it\)$/, "Moved {n} expired jobs to Closed (drag one back to keep it)", ([, n]) => ({ n: Number(n).toLocaleString(I18N.lang) })],
+    [/^Uploaded your CV (".*") — its text is in your profile$/, "Uploaded your CV {file} — its text is in your profile", ([, file]) => ({ file })],
+    [/^TopCV sync: (\d+) updated, (\d+) moved to Applied, (\d+) added$/, "TopCV sync: {updated} updated, {moved} moved to Applied, {added} added", ([, updated, moved, added]) => ({ updated, moved, added })],
+    [/^(.+) is a private group: only its members can see its posts, so paste the ones you want$/, "{group} is a private group: only its members can see its posts, so paste the ones you want", ([, group]) => ({ group })]
+  ];
+  for (const [pattern, key, vars] of patterns) {
+    const match = pattern.exec(message);
+    if (match) return t(key, vars(match));
+  }
+  return t(message);
+}
+
 // Recent activity: hidden until the 🔔 button opens it.
 function renderActivityLog() {
   const feed = document.getElementById("logFeed");
   const activity = AppState.activity;
 
   if (activity.length === 0) {
-    feed.innerHTML = `<li class="log-item">Nothing yet.</li>`;
+    feed.innerHTML = `<li class="log-item">${t("Nothing yet.")}</li>`;
     return;
   }
 
@@ -101,7 +131,7 @@ function renderActivityLog() {
     return `
       <li class="log-item">
         <span class="log-icon">${icon}</span>
-        <span class="log-message">${esc(act.message)}</span>
+        <span class="log-message">${esc(activityMessage(act.message))}</span>
         <span class="log-time">${esc(act.timestamp)}</span>
       </li>
     `;
@@ -147,10 +177,10 @@ function timeAgo(dateString) {
   const diffHr = Math.floor(diffMin / 60);
   const diffDays = Math.floor(diffHr / 24);
 
-  if (diffSec < 60) return "just now";
-  if (diffMin < 60) return `${diffMin}m`;
-  if (diffHr < 24) return `${diffHr}h`;
-  return `${diffDays}d`;
+  if (diffSec < 60) return t("just now");
+  if (diffMin < 60) return t("{n}m", { n: diffMin.toLocaleString(I18N.lang) });
+  if (diffHr < 24) return t("{n}h", { n: diffHr.toLocaleString(I18N.lang) });
+  return t("{n}d", { n: diffDays.toLocaleString(I18N.lang) });
 }
 
 function formatDuration(ms) {
