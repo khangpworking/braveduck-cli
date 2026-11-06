@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 // Tailored CVs and application emails, "bring your own AI" like rating:
@@ -100,8 +101,7 @@ func (s *Service) SubmitCV(ctx context.Context, id int64, markdown string) (jobs
 	if len(markdown) > maxCVChars {
 		return jobs.Job{}, fmt.Errorf("%w: the CV is over %d characters", ErrInvalid, maxCVChars)
 	}
-	j, err := s.GetJob(ctx, id)
-	if err != nil {
+	if _, err := s.GetJob(ctx, id); err != nil {
 		return jobs.Job{}, err
 	}
 	if s.profilePath == "" {
@@ -112,19 +112,19 @@ func (s *Service) SubmitCV(ctx context.Context, id int64, markdown string) (jobs
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return jobs.Job{}, err
 	}
-	version := j.CVVersion + 1
-	if version > maxCVVersions {
+	j, err := s.st.SaveCV(ctx, id, maxCVVersions, s.now(), func(version int) (string, error) {
+		path := filepath.Join(dir, fmt.Sprintf("job-%d-v%d.md", id, version))
+		return path, os.WriteFile(path, []byte(markdown+"\n"), 0o600)
+	})
+	if errors.Is(err, store.ErrCVLimit) {
 		return jobs.Job{}, fmt.Errorf("%w: this job already has %d CV versions", ErrInvalid, maxCVVersions)
 	}
-	path := filepath.Join(dir, fmt.Sprintf("job-%d-v%d.md", id, version))
-	if err := os.WriteFile(path, []byte(markdown+"\n"), 0o600); err != nil {
-		return jobs.Job{}, err
-	}
-	if err := s.st.SetCV(ctx, id, path, version, s.now()); err != nil {
+	if err != nil {
 		return jobs.Job{}, notFound(err)
 	}
-	s.logEvent(ctx, "added", fmt.Sprintf("Tailored CV v%d for %q", version, j.Title))
-	return s.GetJob(ctx, id)
+	s.logEvent(ctx, "added", fmt.Sprintf("Tailored CV v%d for %q", j.CVVersion, j.Title))
+	decorate(&j, s.now(), s.maxKM(ctx))
+	return j, nil
 }
 
 // CV returns job id's current tailored CV (Markdown).

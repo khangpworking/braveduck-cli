@@ -259,12 +259,22 @@ func b2i(b bool) int {
 // already stored.
 var ErrDuplicateURL = errors.New("this job is already on the board")
 
+// ErrJobLimit means an insert would exceed the board's configured job cap.
+var ErrJobLimit = errors.New("the board is full")
+
 // Add inserts a new job and returns its id. now backfills any empty
 // SavedAt/CreatedAt/UpdatedAt with a single consistent ISO timestamp.
 //
 // A non-empty URL must be unique: the existence check and the insert are one
 // statement, so two concurrent adds of the same link can't both succeed.
 func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, error) {
+	return s.AddWithLimit(ctx, j, now, 0)
+}
+
+// AddWithLimit inserts only when the board has room. The capacity check and
+// insert are one write statement, including across separate database handles.
+// A non-positive limit leaves the board uncapped.
+func (s *Store) AddWithLimit(ctx context.Context, j jobs.Job, now time.Time, limit int) (int64, error) {
 	ts := now.UTC().Format(time.RFC3339)
 	if j.SavedAt == "" {
 		j.SavedAt = ts
@@ -279,18 +289,40 @@ func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, erro
 
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(writeCols)), ",")
 	q := fmt.Sprintf(
-		"INSERT INTO jobs (%s) SELECT %s WHERE ? = '' OR NOT EXISTS (SELECT 1 FROM jobs WHERE url = ?)",
+		`INSERT INTO jobs (%s) SELECT %s
+		 WHERE (? = '' OR NOT EXISTS (SELECT 1 FROM jobs WHERE url = ?))
+		 AND (? <= 0 OR (SELECT COUNT(*) FROM jobs) < ?)`,
 		strings.Join(writeCols, ","), ph)
-	res, err := s.db.ExecContext(ctx, q, append(writeArgs(j), j.URL, j.URL)...)
+	// Keep the write lock until a rejected insert is classified, so a racing
+	// deletion cannot turn a full-board error into a duplicate error.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, q, append(writeArgs(j), j.URL, j.URL, limit, limit)...)
 	if err != nil {
 		return 0, err
 	}
 	if n, err := res.RowsAffected(); err != nil {
 		return 0, err
 	} else if n == 0 {
+		if limit > 0 {
+			var count int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs").Scan(&count); err != nil {
+				return 0, err
+			}
+			if count >= limit {
+				return 0, ErrJobLimit
+			}
+		}
 		return 0, ErrDuplicateURL
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
 }
 
 // Get returns the job with the given id, or sql.ErrNoRows when absent.
@@ -495,16 +527,59 @@ func (s *Store) SetTopcvStatus(ctx context.Context, id int64, status, detail str
 	return affectedOne(res)
 }
 
-// SetCV records a job's current tailored CV file and version.
-func (s *Store) SetCV(ctx context.Context, id int64, path string, version int, now time.Time) error {
-	ts := now.UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx,
-		"UPDATE jobs SET cv_path = ?, cv_version = ?, cv_status = 'ready', cv_generated_at = ?, updated_at = ? WHERE id = ?",
-		path, version, ts, ts, id)
+// ErrCVLimit means the job already has its maximum number of CV versions.
+var ErrCVLimit = errors.New("the job has reached its CV version limit")
+
+// SaveCV allocates a version, writes its file, and publishes it under one
+// database write lock. write must only persist the local file and must not
+// reenter the store. A failed write leaves the previous CV/version published.
+func (s *Store) SaveCV(ctx context.Context, id int64, limit int, now time.Time, write func(int) (string, error)) (jobs.Job, error) {
+	// database/sql automatically rolls back when the transaction's context
+	// ends. Keep that from releasing the lock while write is still touching
+	// the file; all SQL statements below still use the caller's context.
+	tx, err := s.db.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
-		return err
+		return jobs.Job{}, err
 	}
-	return affectedOne(res)
+	defer tx.Rollback()
+	// Acquire the write lock before reading the version, so independent
+	// processes cannot choose the same filename or bypass the version cap.
+	var version int
+	err = tx.QueryRowContext(ctx, `UPDATE jobs SET cv_version = COALESCE(cv_version, 0) + 1
+		WHERE id = ? AND COALESCE(cv_version, 0) < ? RETURNING cv_version`, id, limit).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		var exists int
+		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM jobs WHERE id = ?", id).Scan(&exists); err != nil {
+			return jobs.Job{}, err
+		}
+		return jobs.Job{}, ErrCVLimit
+	}
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	path, err := write(version)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	ts := now.UTC().Format(time.RFC3339)
+	_, err = tx.ExecContext(ctx,
+		"UPDATE jobs SET cv_path = ?, cv_status = 'ready', cv_generated_at = ?, updated_at = ? WHERE id = ?",
+		path, ts, ts, id)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	// Return this submission's snapshot, even if a later writer commits before
+	// the caller gets its response.
+	j, err := scanJob(tx.QueryRowContext(ctx, "SELECT "+selectCols+" FROM jobs WHERE id = ?", id))
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return jobs.Job{}, err
+	}
+	list := []jobs.Job{j}
+	err = s.loadRatings(ctx, list)
+	return list[0], err
 }
 
 // SetDraft stores a job's email draft (JSON, or "" to clear it) and status.

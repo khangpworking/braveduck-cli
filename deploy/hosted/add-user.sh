@@ -26,7 +26,7 @@ case "$name$email" in
 esac
 db=${USERS_DB:-authelia/users_database.yml}
 [ -e "$db" ] || printf 'users:\n' >"$db"
-if grep -q "^  $user:\$" "$db"; then
+if grep -Fqx "  $user:" "$db"; then
 	echo "$user is already in $db" >&2
 	exit 1
 fi

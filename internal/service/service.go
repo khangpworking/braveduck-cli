@@ -265,16 +265,10 @@ func (s *Service) save(ctx context.Context, j jobs.Job, leadCheck bool) (jobs.Jo
 		}
 	}
 
-	if s.maxJobs > 0 {
-		n, err := s.st.CountJobs(ctx)
-		if err != nil {
-			return jobs.Job{}, err
-		}
-		if n >= s.maxJobs {
-			return jobs.Job{}, fmt.Errorf("%w: the board is full (%d jobs) — delete some old ones first", ErrInvalid, s.maxJobs)
-		}
+	id, err := s.st.AddWithLimit(ctx, j, s.now(), s.maxJobs)
+	if errors.Is(err, store.ErrJobLimit) {
+		return jobs.Job{}, fmt.Errorf("%w: the board is full (%d jobs) — delete some old ones first", ErrInvalid, s.maxJobs)
 	}
-	id, err := s.st.Add(ctx, j, s.now())
 	if err != nil {
 		return jobs.Job{}, err
 	}
