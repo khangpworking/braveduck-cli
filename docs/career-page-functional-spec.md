@@ -205,7 +205,8 @@ Two apply channels, auto-detected per job:
 
 - Every job is auto-scored (A–F + number) with reasoning.
 - **Default model** owns the main score badge. **A/B mode** lets up to 3 models
-  score simultaneously; challengers show as compare badges + detail reasoning.
+  score simultaneously; challengers' grades and reasoning show under the open
+  card's More → Other AI ratings (4.2).
 - **Ask another model** — one-off score of a single card by any model.
 - **Rating config panel** (⚙ Rating): enable A/B, pick models (max 3), choose the
   default. After enabling, a banner offers **"Rate all saved jobs"** (backfill)
@@ -249,7 +250,7 @@ Two apply channels, auto-detected per job:
 
 - **Live cross-tab refresh** via SSE (`/events`): when any tab mutates the board,
   others update (with echo-suppression so the acting tab doesn't double-reload).
-- **Score polling**: while any card is `scoring…`, poll `/jobs/statuses` and swap
+- **Score polling**: while any card is `rating…`, poll `/jobs/statuses` and swap
   badges in place; mark `stuck` after 5 min.
 - **Rating polling**: `/jobs/ratings` for challenger verdicts as they land.
 - **Apply-state polling**: cooldown timers tick down live; failed→retry inline.
