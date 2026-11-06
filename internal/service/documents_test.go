@@ -3,9 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 func docSvc(t *testing.T) (*Service, int64) {
@@ -45,6 +50,95 @@ func TestCVVersionsArePrivateFiles(t *testing.T) {
 	}
 	if md, _, err := s.CV(ctx, id); err != nil || !strings.Contains(md, "and more") {
 		t.Fatalf("CV = %q, %v", md, err)
+	}
+}
+
+func TestConcurrentCVVersionsPreserveEverySubmission(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	var services []*Service
+	for range 2 {
+		st, err := store.Open(filepath.Join(dir, "board.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { st.Close() })
+		s := New(st)
+		s.SetDataDir(dir)
+		services = append(services, s)
+	}
+	j, err := services[0].AddJob(ctx, NewJob{Title: "Engineer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	type submission struct {
+		job      jobs.Job
+		markdown string
+		err      error
+	}
+	const writers = maxCVVersions + 10
+	start := make(chan struct{})
+	results := make(chan submission, writers)
+	for i := range writers {
+		go func() {
+			<-start
+			markdown := fmt.Sprintf("# Candidate\n\nSubmission %d: five years of building Go backend services.", i)
+			got, err := services[i%len(services)].SubmitCV(ctx, j.ID, markdown)
+			results <- submission{got, markdown, err}
+		}()
+	}
+	close(start)
+	var accepted []submission
+	versions := map[int]bool{}
+	for range writers {
+		r := <-results
+		if r.err == nil {
+			accepted = append(accepted, r)
+			versions[r.job.CVVersion] = true
+		} else if !errors.Is(r.err, ErrInvalid) || !strings.Contains(r.err.Error(), "CV versions") {
+			t.Errorf("submit: %v", r.err)
+		}
+	}
+	if len(accepted) != maxCVVersions || len(versions) != maxCVVersions {
+		t.Fatalf("accepted %d submissions with %d distinct versions; want %d of each", len(accepted), len(versions), maxCVVersions)
+	}
+	for _, r := range accepted {
+		data, err := os.ReadFile(r.job.CVPath)
+		if err != nil || string(data) != r.markdown+"\n" {
+			t.Errorf("version %d lost its submitted content: %q, %v", r.job.CVVersion, data, err)
+		}
+	}
+	current, err := services[0].GetJob(ctx, j.ID)
+	if err != nil || current.CVVersion != maxCVVersions || current.CVStatus != "ready" {
+		t.Fatalf("current CV = %+v, %v", current, err)
+	}
+}
+
+func TestFailedCVWritePreservesPublishedVersion(t *testing.T) {
+	s, id := docSvc(t)
+	ctx := context.Background()
+	markdown := "# Candidate\n\nFive years of building Go backend services and databases."
+	first, err := s.SubmitCV(ctx, id, markdown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The next version's filename cannot be written as a regular file.
+	blocked := filepath.Join(filepath.Dir(first.CVPath), fmt.Sprintf("job-%d-v2.md", id))
+	if err := os.Mkdir(blocked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SubmitCV(ctx, id, markdown+"\nMore experience."); err == nil {
+		t.Fatal("submit succeeded despite the blocked output file")
+	}
+	text, current, err := s.CV(ctx, id)
+	if err != nil || text != markdown+"\n" || current.CVVersion != 1 || current.CVPath != first.CVPath || current.CVStatus != "ready" {
+		t.Fatalf("failed write changed published CV: %+v, %q, %v", current, text, err)
+	}
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
+	}
+	if next, err := s.SubmitCV(ctx, id, markdown+"\nMore experience."); err != nil || next.CVVersion != 2 {
+		t.Fatalf("retry = version %d, %v; want version 2", next.CVVersion, err)
 	}
 }
 
