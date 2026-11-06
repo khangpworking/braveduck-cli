@@ -32,6 +32,15 @@ func (s *Store) GetRatingConfig(ctx context.Context) (rating.Config, error) {
 	}), nil
 }
 
+// RatingConfigChosen reports whether the user has saved a rater config. A fresh
+// board has no row, so its default is only a placeholder — a Jev key may take
+// over automatically until the user picks a rater.
+func (s *Store) RatingConfigChosen(ctx context.Context) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM rating_config WHERE id = 1").Scan(&n)
+	return n > 0, err
+}
+
 // SetRatingConfig validates (strict — see rating.Config.Validate) and upserts the
 // single config row. Returns the stored config read back through Normalize.
 func (s *Store) SetRatingConfig(ctx context.Context, c rating.Config) (rating.Config, error) {

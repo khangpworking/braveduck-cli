@@ -100,6 +100,8 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("PUT /api/crawl-schedule/{source}", s.putCrawlSchedule)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
 	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
+	mux.HandleFunc("GET /api/jev", s.getJev)
+	mux.HandleFunc("PUT /api/jev", s.putJev)
 	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
 	mux.HandleFunc("GET /api/activity", s.getActivity)
 	mux.HandleFunc("GET /api/events", s.events)
@@ -206,7 +208,7 @@ func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, list, err)
 }
 
-// createReq is the Extract & Add payload: a single pasted string that is either
+// createReq is the board's "Add" payload: a single pasted string that is either
 // a listing URL or free-text JD.
 type createReq struct {
 	Content string `json:"content"`
@@ -329,6 +331,36 @@ func (s *server) putRatingConfig(w http.ResponseWriter, r *http.Request) {
 		ABEnabled: in.ABMode, Models: in.Models, DefaultModel: in.DefaultModel,
 	})
 	reply(w, http.StatusOK, toRatingJSON(c), err)
+}
+
+// jevJSON is whether Jev can rate here and whether this user opted out of
+// sending their profile to it.
+type jevJSON struct {
+	Available bool `json:"available"`
+	OptOut    bool `json:"opt_out"`
+}
+
+func (s *server) jevState(r *http.Request) (jevJSON, error) {
+	out, err := s.svc.JevOptedOut(r.Context())
+	return jevJSON{Available: s.svc.JevAvailable(), OptOut: out}, err
+}
+
+func (s *server) getJev(w http.ResponseWriter, r *http.Request) {
+	v, err := s.jevState(r)
+	reply(w, http.StatusOK, v, err)
+}
+
+func (s *server) putJev(w http.ResponseWriter, r *http.Request) {
+	var in jevJSON
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.SetJevOptOut(r.Context(), in.OptOut); err != nil {
+		reply(w, http.StatusOK, nil, err)
+		return
+	}
+	v, err := s.jevState(r)
+	reply(w, http.StatusOK, v, err)
 }
 
 // getCrawlStatus reports per-source crawl health and today's find count. The
@@ -491,7 +523,12 @@ func reply(w http.ResponseWriter, code int, v any, err error) {
 	case errors.Is(err, service.ErrInvalid):
 		writeErr(w, http.StatusBadRequest, err)
 	case errors.Is(err, service.ErrProfileEmpty):
-		writeErr(w, http.StatusConflict, err) // a precondition: fill in the profile first
+		// The board can't edit a file path; send people to the profile form.
+		// CLI and MCP still get the detailed service error with the path.
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Answer a few questions first",
+			"code":  "profile_empty",
+		})
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
 	}

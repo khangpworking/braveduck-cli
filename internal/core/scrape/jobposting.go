@@ -1,5 +1,5 @@
 // JobPosting extraction: lift a listing's structured fields from its page so the
-// board's "Extract & Add" can ingest a URL with no AI. Job sites embed a
+// board's "Add" can ingest a URL with no AI. Job sites embed a
 // schema.org/JobPosting as <script type="application/ld+json">; that JSON is the
 // exact, authoritative source (title, company, salary, location, skills,
 // deadline), so we parse it rather than guess. Pasted free-text has no such
@@ -168,6 +168,7 @@ var companyRE = regexp.MustCompile(`(?i)(^|\s)(công ty|cty|tập đoàn|company
 
 // pastedCompany finds the employer: the first phrase after the title that looks
 // like a company name, else (multi-line pastes) the second line, as before.
+// Salary, location, skill and requirement lines are never an employer.
 func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 	for i, seg := range segs {
 		if i > 0 && companyRE.MatchString(seg) && len(seg) <= 120 {
@@ -184,13 +185,93 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 		}
 	}
 	if len(lines) > 1 {
-		return truncate(lines[1], 120)
+		return truncate(employerLine(lines[1]), 120)
 	}
 	return ""
 }
 
 // labelRE strips a leading "Label:" ("Mức lương:", "Company:") from a phrase.
 var labelRE = regexp.MustCompile(`^[^:]{1,20}:\s*`)
+
+// employerLine returns the employer a pasted line names, or "" when the line
+// is pay, place, requirements or perks instead. The second line of a JD is
+// often one of these, so it must never become the company. A name that merely
+// mentions a place ("Shopee Vietnam", "VNG - Hồ Chí Minh") is still a company,
+// and a trailing place is dropped from it ("FPT Software, Hà Nội").
+func employerLine(line string) string {
+	if detailLabelRE.MatchString(line) || payLineRE.MatchString(line) || isPlaceLine(line) {
+		return ""
+	}
+	parts := strings.Split(line, ",")
+	n := len(parts)
+	for n > 1 && isPlace(strings.ToLower(parts[n-1])) {
+		n--
+	}
+	if n == len(parts) {
+		return line
+	}
+	for _, p := range parts[:n] {
+		if placeDetailRE.MatchString(strings.ToLower(strings.TrimSpace(p))) {
+			return ""
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts[:n], ","))
+}
+
+// placeDetailRE spots the work-type or address part of a location line
+// ("Full-time", "Tầng 5", "123 Lê Lợi", "Số 1 Duy Tân", "Nguyen Trai Street").
+var placeDetailRE = regexp.MustCompile(`^((full[- ]?time|part[- ]?time|hybrid|remote|onsite|on-site|toàn thời gian|bán thời gian|phường|đường|phố|số|ngõ|ngách|hẻm|kiệt|khu|kcn|lô|tầng|lầu|tòa|toà|floor|street|road)(\s|$|\.)|p\.\s*\d|\d)|\s(street|st|road|rd)\.?$`)
+
+// detailLabelRE spots a line that starts with a JD detail label.
+var detailLabelRE = regexp.MustCompile(`(?i)^(mức lương|lương|salary|thu nhập|compensation|thỏa thuận|negotiable|địa điểm|địa chỉ|location|nơi làm việc|workplace|hybrid|remote|onsite|on-site|yêu cầu|requirements?|qualifications?|kỹ năng|skills?|kinh nghiệm|experience|mô tả|description|quyền lợi|benefits?|phúc lợi|hạn nộp|deadline|liên hệ|contact|email)(\s|$|:|,|\.|-)`)
+
+// payLineRE spots a line that starts with an amount of pay ("30-40 triệu",
+// "$1,500", "Up to 2000 USD").
+var payLineRE = regexp.MustCompile(`(?i)^(up to|upto|từ|tới|đến)?\s*(\$\s*\d|\d[\d.,]*\s*(-|–|~|đến|to)?\s*[\d.,]*\s*(triệu|tr|million|usd|vnd|đ|\$)(\s|$|/|,|\.|\)))`)
+
+// isPlaceLine reports whether every part of a line is a place ("Hà Nội",
+// "Cầu Giấy, Hà Nội", "Quận 1, TP. Hồ Chí Minh").
+func isPlaceLine(line string) bool {
+	lower := strings.ToLower(line)
+	found := false
+	for _, part := range placeSepRE.Split(lower, -1) {
+		if strings.TrimSpace(part) == "" {
+			continue
+		}
+		if !isPlace(part) {
+			return false
+		}
+		found = true
+	}
+	return found
+}
+
+// isPlace reports whether one lower-cased part names a city, province,
+// country or district.
+func isPlace(part string) bool {
+	part = strings.TrimSpace(placePrefixRE.ReplaceAllString(strings.TrimSpace(part), ""))
+	return places[part] || districtRE.MatchString(part)
+}
+
+var (
+	placeSepRE    = regexp.MustCompile(`\s*[,|/–]\s*|\s+-\s+`)
+	placePrefixRE = regexp.MustCompile(`^(tp\.?|thành phố|tỉnh|city of)\s*`)
+	districtRE    = regexp.MustCompile(`^((quận|q\.|district)\s*\d+|(quận|huyện)\s+\S.*)$`)
+	places        = map[string]bool{
+		"hà nội": true, "ha noi": true, "hanoi": true, "hồ chí minh": true, "ho chi minh": true,
+		"ho chi minh city": true, "hcm": true, "hcmc": true, "sài gòn": true, "saigon": true,
+		"đà nẵng": true, "da nang": true, "danang": true, "hải phòng": true, "hai phong": true,
+		"cần thơ": true, "can tho": true, "việt nam": true, "vietnam": true, "viet nam": true,
+		"bình dương": true, "binh duong": true, "đồng nai": true, "dong nai": true,
+		"bắc ninh": true, "bac ninh": true, "long an": true, "hưng yên": true, "hung yen": true,
+		"khánh hòa": true, "khanh hoa": true, "nha trang": true, "huế": true, "hue": true,
+		"ba đình": true, "hoàn kiếm": true, "đống đa": true, "cầu giấy": true, "thanh xuân": true,
+		"hai bà trưng": true, "tây hồ": true, "long biên": true, "hoàng mai": true, "hà đông": true,
+		"nam từ liêm": true, "bắc từ liêm": true, "thủ đức": true, "bình thạnh": true,
+		"tân bình": true, "phú nhuận": true, "gò vấp": true, "tân phú": true, "bình tân": true,
+		"hải châu": true,
+	}
+)
 
 // FetchJobPosting fetches a listing and extracts its JobPosting. It tries plain
 // HTTP first (cheap, no browser); if that finds no JobPosting AND an external
@@ -443,11 +524,13 @@ func deadlineDate(s string) string {
 var salaryRE = regexp.MustCompile(`(?i)(salary|lương|\$|usd|vnd|triệu|million)`)
 
 // pastedSalary returns the first short phrase that mentions pay, minus any
-// "Mức lương:" style label.
+// "Mức lương:" style label (with or without a colon).
 func pastedSalary(segs []string) string {
 	for _, seg := range segs {
 		if salaryRE.MatchString(seg) && len(seg) < 80 {
-			if v := strings.TrimSpace(labelRE.ReplaceAllString(seg, "")); v != "" {
+			v := strings.TrimSpace(labelRE.ReplaceAllString(seg, ""))
+			v = strings.TrimSpace(salaryLabelRE.ReplaceAllString(v, ""))
+			if v != "" {
 				return truncate(v, 80)
 			}
 			return truncate(seg, 80)
@@ -455,6 +538,9 @@ func pastedSalary(segs []string) string {
 	}
 	return ""
 }
+
+// salaryLabelRE drops a bare pay label such as "Lương " or "Salary -".
+var salaryLabelRE = regexp.MustCompile(`(?i)^(mức\s+)?(lương|salary|thu nhập|pay)\s*[:\-]?\s*`)
 
 func stripTags(s string) string { return tagRE.ReplaceAllString(s, " ") }
 

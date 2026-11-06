@@ -198,6 +198,8 @@ DELETE /api/platforms/:name/login   disconnect / clear session
 
 GET    /api/rating-config           current default model + A/B config
 PUT    /api/rating-config
+GET    /api/jev                     Jev available + this user's opt-out
+PUT    /api/jev                     set the opt-out (body: {opt_out})
 GET    /api/keywords                crawler keyword lists
 PUT    /api/keywords
 

@@ -8,6 +8,11 @@ async function askAI(kind, id, model) {
     if (kind === "rate") showToast("Rating…", "info");
     req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : kind === "rate" ? { model } : {});
   } catch (e) {
+    if (e.code === "profile_empty") {
+      showToast(e.message, "info");
+      openProfile();
+      return;
+    }
     showToast(e.message, "error");
     return;
   }
@@ -294,7 +299,7 @@ async function sendEmailDraft(id) {
   try {
     await APIClient.put(`jobs/${id}/draft`, { to, subject, body }); // keep the user's edits
   } catch (e) {
-    showToast(`Fix the draft first: ${e.message}`, "error");
+    showToast(e.message, "error");
     return;
   }
   window.location.href = mailto(to, subject, body);
