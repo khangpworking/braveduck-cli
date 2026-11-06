@@ -211,16 +211,16 @@ func employerLine(line string) string {
 		return line
 	}
 	for _, p := range parts[:n] {
-		if p = strings.ToLower(strings.TrimSpace(p)); !isPlace(p) && !placeDetailRE.MatchString(p) {
-			return strings.TrimSpace(strings.Join(parts[:n], ","))
+		if placeDetailRE.MatchString(strings.ToLower(strings.TrimSpace(p))) {
+			return ""
 		}
 	}
-	return ""
+	return strings.TrimSpace(strings.Join(parts[:n], ","))
 }
 
 // placeDetailRE spots the work-type or address part of a location line
-// ("Full-time", "Tầng 5", "123 Lê Lợi", "Phường 4").
-var placeDetailRE = regexp.MustCompile(`^(full[- ]?time|part[- ]?time|hybrid|remote|onsite|on-site|toàn thời gian|bán thời gian|phường|p\.\s*\d|đường|tầng|lầu|tòa|floor|\d)`)
+// ("Full-time", "Tầng 5", "123 Lê Lợi", "Số 1 Duy Tân", "Nguyen Trai Street").
+var placeDetailRE = regexp.MustCompile(`^((full[- ]?time|part[- ]?time|hybrid|remote|onsite|on-site|toàn thời gian|bán thời gian|phường|đường|phố|số|ngõ|ngách|hẻm|kiệt|khu|kcn|lô|tầng|lầu|tòa|toà|floor|street|road)(\s|$|\.)|p\.\s*\d|\d)|\s(street|st|road|rd)\.?$`)
 
 // detailLabelRE spots a line that starts with a JD detail label.
 var detailLabelRE = regexp.MustCompile(`(?i)^(mức lương|lương|salary|thu nhập|compensation|thỏa thuận|negotiable|địa điểm|địa chỉ|location|nơi làm việc|workplace|hybrid|remote|onsite|on-site|yêu cầu|requirements?|qualifications?|kỹ năng|skills?|kinh nghiệm|experience|mô tả|description|quyền lợi|benefits?|phúc lợi|hạn nộp|deadline|liên hệ|contact|email)(\s|$|:|,|\.|-)`)
