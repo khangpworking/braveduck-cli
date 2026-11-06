@@ -179,6 +179,15 @@ func launchRemote(ctx context.Context, svc string, o launchOpts) (*rod.Browser, 
 		msg := fmt.Sprintf("browser: the browser service at %s: %s", svc, err)
 		for _, raw := range []string{svc, addr} {
 			if u, err := url.Parse(raw); err == nil {
+				// QueryEscape canonicalizes escapes. Also hide the exact value
+				// supplied in the URL, which may use other valid spellings.
+				for _, pair := range strings.Split(u.RawQuery, "&") {
+					name, value, _ := strings.Cut(pair, "=")
+					name, _ = url.QueryUnescape(name)
+					if name == "key" && value != "" {
+						msg = strings.ReplaceAll(msg, value, "[redacted]")
+					}
+				}
 				for _, key := range u.Query()["key"] {
 					if key != "" {
 						msg = strings.ReplaceAll(msg, url.QueryEscape(key), "[redacted]")

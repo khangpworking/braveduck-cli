@@ -36,6 +36,7 @@ func TestServiceNeedsTheKey(t *testing.T) {
 // was configured with a WebSocket URL. Neither spelling may expose its key.
 func TestServiceConnectionErrorsHideKey(t *testing.T) {
 	const key = "dummy-browser-service-key /+"
+	const escapedKey = "%64ummy-browser-service-key%20%2f%2b"
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, _, err := w.(http.Hijacker).Hijack()
 		if err == nil {
@@ -48,14 +49,19 @@ func TestServiceConnectionErrorsHideKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, scheme := range []string{"http", "ws"} {
-		for _, source := range []string{"file", "url"} {
-			t.Run(scheme+"/"+source, func(t *testing.T) {
+		for _, source := range []struct{ name, parameter, value string }{
+			{"file", "", ""},
+			{"url", "key", url.QueryEscape(key)},
+			{"url-escaped", "key", escapedKey},
+			{"url-escaped-name", "%6bey", escapedKey},
+		} {
+			t.Run(scheme+"/"+source.name, func(t *testing.T) {
 				addr := scheme + strings.TrimPrefix(svc.URL, "http")
 				t.Setenv(BrowserKeyFileEnv, "")
-				if source == "file" {
+				if source.name == "file" {
 					t.Setenv(BrowserKeyFileEnv, keyFile)
 				} else {
-					addr += "?key=" + url.QueryEscape(key)
+					addr += "?" + source.parameter + "=" + source.value
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -63,8 +69,10 @@ func TestServiceConnectionErrorsHideKey(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected a connection error")
 				}
-				if strings.Contains(err.Error(), key) || strings.Contains(err.Error(), url.QueryEscape(key)) {
-					t.Fatal("connection error exposed the browser-service key")
+				for _, spelling := range []string{key, url.QueryEscape(key), source.value} {
+					if spelling != "" && strings.Contains(err.Error(), spelling) {
+						t.Fatal("connection error exposed the browser-service key")
+					}
 				}
 				if !strings.Contains(err.Error(), strings.TrimPrefix(svc.URL, "http://")) {
 					t.Fatalf("connection error lost the service address: %v", err)
