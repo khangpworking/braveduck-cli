@@ -66,8 +66,13 @@ func TestProfileFormKeepsOtherText(t *testing.T) {
 	}
 	f.Roles = []string{"Data Analyst"}
 	out := WithProfileForm(hand, f)
+	if !strings.Contains(out, "- Minimum I'll accept: 25 triệu/tháng net") {
+		t.Errorf("an unchanged pay figure was rewritten:\n%s", out)
+	}
+	f.MinPay.Amount = 30_000_000
+	out = WithProfileForm(hand, f)
 	for _, want := range []string{"- Stock options: yes please", "# My dog\n\nHe needs walks at 6pm.", "I build things.",
-		"- Minimum I'll accept: 25,000,000 VND per month (net)", "# What I'm looking for\n", "- Target roles / job titles: Data Analyst"} {
+		"- Minimum I'll accept: 30,000,000 VND per month (net)", "# What I'm looking for\n", "- Target roles / job titles: Data Analyst"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q:\n%s", want, out)
 		}

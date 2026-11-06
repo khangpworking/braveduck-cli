@@ -108,34 +108,31 @@ function pfSection(title, ...fields) {
 
 function renderProfileForm() {
   const f = profileForm.form, o = profileForm.options;
+  // Fields the form doesn't show (target pay, schedule, …) stay in the
+  // profile: they go back to the server unchanged.
+  const locationLink = el("div", { class: "pf-field pf-hint" },
+    "📍 Where you live and how far you'll travel to work: ",
+    el("button", { type: "button", class: "btn-link", onclick: () => {
+      document.getElementById("profileModalOverlay").classList.remove("open");
+      document.getElementById("locationBtn").click();
+    } }, "set your location →"));
   document.getElementById("profileFormBody").replaceChildren(
     pfSection("1. What job do you want?",
       tagsField("Job titles", "The roles you'd apply for, e.g. Business Analyst, Kế toán.", f.roles, []),
       choiceField("Level", f.seniority, o.seniority),
-      tagsField("Industries you like", "", f.industries_want, []),
-      tagsField("Industries to avoid", "", f.industries_avoid, [])),
-    pfSection("2. Pay",
-      moneyField("The least you'd accept", f.min_pay, o),
-      moneyField("What you're hoping for", f.target_pay, o),
-      tagsField("Benefits that matter", "", f.benefits, o.benefits)),
-    pfSection("3. Where and how you work",
-      textField("Where you live or can work from", f, "location", "e.g. Cầu Giấy, Hà Nội"),
-      choiceField("Work mode", f.work_modes, o.work_modes),
-      textField("Longest commute you'd do", f, "max_commute", "e.g. 10 km or 45 minutes"),
-      textField("Would you move? Where?", f, "relocate", "e.g. Yes, to Đà Nẵng")),
-    pfSection("4. Schedule",
       choiceField("Type of job", f.job_types, o.job_types),
-      textField("Working days and hours", f, "schedule", "e.g. Mon–Fri, office hours"),
-      textField("When can you start?", f, "start_date", "e.g. in 2 weeks")),
-    pfSection("5. Deal-breakers",
-      tagsField("A job is a \"no\" if…", "Tap a suggestion or type your own.", f.deal_breakers, o.deal_breakers)),
-    pfSection("6. About you",
+      choiceField("Work mode", f.work_modes, o.work_modes),
+      locationLink),
+    pfSection("2. Pay",
+      moneyField("The least you'd accept", f.min_pay, o)),
+    pfSection("3. Deal-breakers",
+      tagsField("A job is a \"no\" if…", "Saturday work and unstated pay are also flagged on job cards. Anything you add here guides the rating.", f.deal_breakers, o.deal_breakers)),
+    pfSection("4. About you",
       areaField("Your experience and skills", f, "about_me", "Filled in from your CV when you upload one. Edit freely.", 6)),
     el("details", { class: "pf-more" }, el("summary", {}, "More (optional)"),
-      textField("Company size you prefer", f, "company_size", "e.g. startup, 50–200 people"),
-      tagsField("What you value", "", f.values, o.values),
+      tagsField("Industries you like", "", f.industries_want, []),
+      tagsField("Industries to avoid", "", f.industries_avoid, []),
       tagsField("Languages you can work in", "", f.languages, o.languages),
-      textField("Work permit or visa needs", f, "work_auth", ""),
       areaField("Anything else the rater should know", f, "notes", "", 3)));
 }
 
