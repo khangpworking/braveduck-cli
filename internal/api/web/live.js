@@ -66,7 +66,7 @@ function showToast(message, type = "success") {
   const container = document.getElementById("toastContainer");
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️')}</span> ${esc(t(message))}`;
+  toast.innerHTML = `<span>${type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️')}</span> ${esc(message)}`;
   container.appendChild(toast);
   
   // Show animation
@@ -91,7 +91,7 @@ function activityMessage(message) {
     [/^Added (".*")$/, "Added {job}", ([, job]) => ({ job })],
     [/^Removed (".*")$/, "Removed {job}", ([, job]) => ({ job })],
     [/^Moved (".*") to (saved|waiting|applied|interview|offer|closed)$/, "Moved {job} to {stage}", ([, job, stage]) => ({ job, stage: t(stageNames[stage]) })],
-    [/^Rated (".*") ([A-F]) ([\d.]+) \((.*)\)$/, "Rated {job} {letter} {score} ({rater})", ([, job, letter, score, rater]) => ({ job, letter, score: Number(score).toLocaleString(I18N.lang), rater })],
+    [/^Rated (".*") ([A-F]) ([\d.]+) \((.*)\)$/, "Rated {job} {letter} {score} ({rater})", ([, job, letter, score, rater]) => ({ job, letter, score: Number(score).toLocaleString(I18N.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), rater })],
     [/^Tailored CV v(\d+) for (".*")$/, "Tailored CV v{n} for {job}", ([, n, job]) => ({ n, job })],
     [/^Email draft ready for (".*")$/, "Email draft ready for {job}", ([, job]) => ({ job })],
     [/^Application email sent for (".*")$/, "Application email sent for {job}", ([, job]) => ({ job })],

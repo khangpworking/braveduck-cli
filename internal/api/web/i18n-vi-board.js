@@ -198,7 +198,6 @@ I18N.add("vi", {
   "Updated your profile": "Đã cập nhật hồ sơ của bạn",
   "Made a new key for your AI agent (the old one no longer works)": "Đã tạo khóa mới cho AI của bạn (khóa cũ không còn dùng được)",
   "Removed your AI agent's key": "Đã xóa khóa của AI của bạn",
-  "Session expired — reloading the board…": "Phiên làm việc đã hết hạn — đang tải lại bảng việc…",
   "just now": "Vừa xong",
   "{n}m": "{n} phút trước",
   "{n}h": "{n} giờ trước",
