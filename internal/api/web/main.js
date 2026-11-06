@@ -21,6 +21,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   openBtn.addEventListener("click", openDrawer);
   document.getElementById("agentKeyNew").addEventListener("click", newAgentKey);
+  document.getElementById("agentBtn").addEventListener("click", openAgentModal);
+  document.getElementById("askConnectOpen").addEventListener("click", openAgentModal);
   document.getElementById("agentKeyRevoke").addEventListener("click", revokeAgentKey);
   closeBtn.addEventListener("click", closeDrawer);
   overlay.addEventListener("click", closeDrawer);
@@ -283,6 +285,7 @@ document.addEventListener("DOMContentLoaded", () => {
       cvModal.classList.remove("open");
       profileModal.classList.remove("open");
       document.getElementById("askModalOverlay").classList.remove("open");
+      document.getElementById("agentModalOverlay").classList.remove("open");
       document.getElementById("locationModalOverlay").classList.remove("open");
     });
   });

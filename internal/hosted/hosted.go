@@ -207,7 +207,7 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if t == nil || !t.svc.CheckAgentKey(r.Context(), key) || (s.logins != nil && !s.logins.allowed(name)) {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="braveduck"`)
-		writeErr(w, http.StatusUnauthorized, "this needs your agent key: make one on your board (Ask your AI)")
+		writeErr(w, http.StatusUnauthorized, "this needs your agent key: make one on your board (⚙ Settings → Connect your AI agent)")
 		return
 	}
 	r2 := r.Clone(browser.WithOwner(r.Context(), name))

@@ -53,19 +53,16 @@ func TestBoardOnSharedServer(t *testing.T) {
 		t.Fatalf("a saved login can't be removed:\n%s", text)
 	}
 
-	// Ask your AI shows how to connect an agent to this board over HTTPS.
-	if _, err := svc.SaveProfile(context.Background(), "# About me\nGo developer.\n\n# What I'm looking for\nBackend roles.\n"); err != nil {
-		t.Fatal(err)
+	// A new user with no jobs connects an agent from ⚙ Settings.
+	page.MustEval(`() => document.getElementById("platformsModalOverlay").classList.remove("open")`)
+	if page.MustElement("#agentBtn").MustProperty("hidden").Bool() {
+		t.Fatal("no Connect your AI agent in Settings on a shared server")
 	}
-	j, err := svc.AddJob(context.Background(), service.NewJob{Title: "Go Engineer", Company: "Duck Co", JD: "Go."})
-	if err != nil {
-		t.Fatal(err)
-	}
-	page.MustEval(`id => askAI("cv", String(id))`, j.ID)
-	page.MustWait(`() => !document.getElementById("askConnect").hidden`)
+	page.MustElement("#agentBtn").MustEval(`() => this.click()`)
+	page.MustWait(`() => document.getElementById("agentModalOverlay").classList.contains("open")`)
 	page.MustElement("#agentKeyNew").MustEval(`() => this.click()`)
-	page.MustWait(`() => !document.getElementById("askConnectCmd").hidden`)
-	cmd := page.MustElement("#askConnectCmd").MustText()
+	page.MustWait(`() => !document.getElementById("agentConnectCmd").hidden`)
+	cmd := page.MustElement("#agentConnectCmd").MustText()
 	if !strings.Contains(cmd, "claude mcp add --transport http braveduck "+ts.URL+"/mcp") {
 		t.Fatalf("connect command = %q", cmd)
 	}
@@ -76,4 +73,18 @@ func TestBoardOnSharedServer(t *testing.T) {
 	}
 	page.MustElement("#agentKeyRevoke").MustEval(`() => this.click()`)
 	waitUntil(t, func() bool { return !svc.CheckAgentKey(context.Background(), key) }, "the key still works after Remove")
+	page.MustEval(`() => document.getElementById("agentModalOverlay").classList.remove("open")`)
+
+	// Ask your AI points to the same window.
+	if _, err := svc.SaveProfile(context.Background(), "# About me\nGo developer.\n\n# What I'm looking for\nBackend roles.\n"); err != nil {
+		t.Fatal(err)
+	}
+	j, err := svc.AddJob(context.Background(), service.NewJob{Title: "Go Engineer", Company: "Duck Co", JD: "Go."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page.MustEval(`id => askAI("cv", String(id))`, j.ID)
+	page.MustWait(`() => !document.getElementById("askConnect").hidden`)
+	page.MustElement("#askConnectOpen").MustEval(`() => this.click()`)
+	page.MustWait(`() => document.getElementById("agentModalOverlay").classList.contains("open") && !document.getElementById("askModalOverlay").classList.contains("open")`)
 }
