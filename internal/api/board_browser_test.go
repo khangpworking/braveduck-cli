@@ -346,11 +346,18 @@ func TestRatingSettings(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	// The window closes once the board has the server's answer, which can
+	// come after the database already has the config: wait for it, or the
+	// reopened window gets closed by that late answer.
+	page.MustWait(`() => !document.getElementById("ratingModalOverlay").classList.contains("open")`)
+
 	// Too many raters: the server refuses and the window says why.
 	openModal(t, page, "ratingBtn", "ratingModalOverlay")
 	page.MustElement("#ratingModalOverlay.open")
 	openRatingAdvanced(page)
-	page.MustElement("#challengerModelsInput").MustSelectAllText().MustInput("a, b, c")
+	// Set by script: the toast from the first save can still cover the
+	// field, and rod's typing waits until nothing covers it.
+	page.MustEval(`() => { const i = document.getElementById("challengerModelsInput"); i.value = "a, b, c"; i.dispatchEvent(new Event("input")); }`)
 	clickID(page, "saveRatingConfigBtn")
 	msg := page.MustElement("#ratingConfigError").MustWaitVisible().MustText()
 	if !strings.Contains(msg, "at most 3") {

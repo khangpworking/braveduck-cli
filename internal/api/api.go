@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -119,6 +120,15 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	return guard(token, mux)
 }
 
+// BoardLang is the board's default language: BRAVEDUCK_LANG ("vi" or
+// "en"), Vietnamese when unset.
+func BoardLang() string {
+	if v := os.Getenv("BRAVEDUCK_LANG"); v == "en" || v == "vi" {
+		return v
+	}
+	return "vi"
+}
+
 // tokenMeta is the placeholder in web/index.html that renderIndex fills.
 const tokenMeta = `<meta name="braveduck-token" content="">`
 
@@ -131,6 +141,8 @@ func renderIndex(web fs.FS, token string) http.HandlerFunc {
 	}
 	page := bytes.Replace(raw, []byte(tokenMeta),
 		[]byte(`<meta name="braveduck-token" content="`+html.EscapeString(token)+`">`), 1)
+	// The board's language until the user picks one (⚙ Settings).
+	page = bytes.Replace(page, []byte(`<html lang="vi">`), []byte(`<html lang="`+BoardLang()+`">`), 1)
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
