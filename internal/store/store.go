@@ -495,16 +495,59 @@ func (s *Store) SetTopcvStatus(ctx context.Context, id int64, status, detail str
 	return affectedOne(res)
 }
 
-// SetCV records a job's current tailored CV file and version.
-func (s *Store) SetCV(ctx context.Context, id int64, path string, version int, now time.Time) error {
-	ts := now.UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx,
-		"UPDATE jobs SET cv_path = ?, cv_version = ?, cv_status = 'ready', cv_generated_at = ?, updated_at = ? WHERE id = ?",
-		path, version, ts, ts, id)
+// ErrCVLimit means the job already has its maximum number of CV versions.
+var ErrCVLimit = errors.New("the job has reached its CV version limit")
+
+// SaveCV allocates a version, writes its file, and publishes it under one
+// database write lock. write must only persist the local file and must not
+// reenter the store. A failed write leaves the previous CV/version published.
+func (s *Store) SaveCV(ctx context.Context, id int64, limit int, now time.Time, write func(int) (string, error)) (jobs.Job, error) {
+	// database/sql automatically rolls back when the transaction's context
+	// ends. Keep that from releasing the lock while write is still touching
+	// the file; all SQL statements below still use the caller's context.
+	tx, err := s.db.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
-		return err
+		return jobs.Job{}, err
 	}
-	return affectedOne(res)
+	defer tx.Rollback()
+	// Acquire the write lock before reading the version, so independent
+	// processes cannot choose the same filename or bypass the version cap.
+	var version int
+	err = tx.QueryRowContext(ctx, `UPDATE jobs SET cv_version = COALESCE(cv_version, 0) + 1
+		WHERE id = ? AND COALESCE(cv_version, 0) < ? RETURNING cv_version`, id, limit).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		var exists int
+		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM jobs WHERE id = ?", id).Scan(&exists); err != nil {
+			return jobs.Job{}, err
+		}
+		return jobs.Job{}, ErrCVLimit
+	}
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	path, err := write(version)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	ts := now.UTC().Format(time.RFC3339)
+	_, err = tx.ExecContext(ctx,
+		"UPDATE jobs SET cv_path = ?, cv_status = 'ready', cv_generated_at = ?, updated_at = ? WHERE id = ?",
+		path, ts, ts, id)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	// Return this submission's snapshot, even if a later writer commits before
+	// the caller gets its response.
+	j, err := scanJob(tx.QueryRowContext(ctx, "SELECT "+selectCols+" FROM jobs WHERE id = ?", id))
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return jobs.Job{}, err
+	}
+	list := []jobs.Job{j}
+	err = s.loadRatings(ctx, list)
+	return list[0], err
 }
 
 // SetDraft stores a job's email draft (JSON, or "" to clear it) and status.
