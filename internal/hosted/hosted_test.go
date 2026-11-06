@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const secret = "0123456789abcdef0123456789abcdef-test"
@@ -167,6 +168,51 @@ func TestOptionsAreChecked(t *testing.T) {
 		if _, err := New(context.Background(), o); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// A failed restart must report its error without waiting for the caller to
+// cancel the schedulers of boards that were already opened.
+func TestStartupFailureStopsOpenedBoards(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TYPESAFE_API_KEY", "")
+	for _, cause := range []string{"user cap", "unreadable database"} {
+		t.Run(cause, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, user := range []string{"alice", "bob"} {
+				if err := os.Mkdir(filepath.Join(dir, user), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			maxUsers := 1
+			if cause == "unreadable database" {
+				maxUsers = 2
+				if err := os.Mkdir(filepath.Join(dir, "bob", "braveduck.db"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			result := make(chan error, 1)
+			go func() {
+				s, err := New(ctx, Options{Dir: dir, UserHeader: "Remote-User", Secret: secret, MaxUsers: maxUsers, Tick: time.Hour})
+				if s != nil {
+					cancel()
+					s.Close()
+				}
+				result <- err
+			}()
+			select {
+			case err := <-result:
+				if err == nil || !strings.Contains(err.Error(), "open bob") {
+					t.Fatalf("startup error = %v, want bob's failure", err)
+				}
+			case <-time.After(2 * time.Second):
+				cancel()
+				<-result // drain cleanup before the temp directories are removed
+				t.Fatal("startup hung until its caller cancelled the context")
+			}
+		})
 	}
 }
 
