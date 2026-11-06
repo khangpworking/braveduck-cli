@@ -115,7 +115,24 @@ document.addEventListener("DOMContentLoaded", () => {
       config.models.filter(m => m !== config.default_model).join(", ");
     document.getElementById("ratingConfigError").style.display = "none";
     document.getElementById("ratingAdvanced").open = false;
+    showJev(await APIClient.getJev());
     ratingModal.classList.add("open");
+  });
+
+  // Jev: a short notice that the profile is sent, and a per-user opt-out.
+  const jevOptOut = document.getElementById("jevOptOutCheckbox");
+  function showJev(j) {
+    document.getElementById("jevBlock").hidden = !(j.available || j.opt_out);
+    document.getElementById("jevNotice").hidden = j.opt_out;
+    jevOptOut.checked = j.opt_out;
+  }
+  jevOptOut.addEventListener("change", async () => {
+    try {
+      showJev(await APIClient.setJevOptOut(jevOptOut.checked));
+    } catch (e) {
+      jevOptOut.checked = !jevOptOut.checked;
+      showToast(e.message, "error");
+    }
   });
 
   saveRatingBtn.addEventListener("click", async () => {

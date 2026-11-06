@@ -155,6 +155,11 @@ func JevVerdict(id int64, ans map[string]jev.Answer) Verdict {
 // JevRate rates job id with Jev now and stores the verdict (the badge, when
 // Jev is the default rater).
 func (s *Service) JevRate(ctx context.Context, id int64) (jobs.Job, error) {
+	if out, err := s.JevOptedOut(ctx); err != nil {
+		return jobs.Job{}, err
+	} else if out {
+		return jobs.Job{}, ErrJevOptedOut
+	}
 	b, err := s.RateBrief(ctx, id)
 	if err != nil {
 		return jobs.Job{}, err
@@ -195,10 +200,43 @@ func (s *Service) jevIsDefault(ctx context.Context) bool {
 	return err == nil && IsJevModel(c.DefaultModel)
 }
 
+// jevOptOutKey is the settings key set when the user chose not to send their
+// profile to Jev. Settings live in each user's own database, so on a shared
+// server one user's choice never affects another.
+const jevOptOutKey = "jev_opt_out"
+
+// ErrJevOptedOut means the user turned Jev off for their profile.
+var ErrJevOptedOut = fmt.Errorf("%w: you chose not to send your profile to Jev — turn it back on in Settings → Rating", ErrInvalid)
+
+// JevOptedOut reports whether the user chose not to send their profile to Jev.
+func (s *Service) JevOptedOut(ctx context.Context) (bool, error) {
+	v, _, err := s.st.Setting(ctx, jevOptOutKey)
+	return v == "1", err
+}
+
+// SetJevOptOut records whether the user's profile may be sent to Jev.
+func (s *Service) SetJevOptOut(ctx context.Context, out bool) error {
+	v := ""
+	if out {
+		v = "1"
+	}
+	return s.st.SetSetting(ctx, jevOptOutKey, v)
+}
+
+// JevAvailable reports whether a Jev key (or client) is there to rate with.
+func (s *Service) JevAvailable() bool {
+	_, err := s.jevClient()
+	return err == nil
+}
+
 // autoEnableJev makes Jev the rater on a board that has a Jev key and where the
-// owner has never picked a rater. A board the user configured is left alone.
-// It reports whether Jev is the default rater afterwards.
+// owner has never picked a rater. A board the user configured is left alone,
+// and nothing runs once the user opted out of Jev. It reports whether Jev
+// should rate automatically.
 func (s *Service) autoEnableJev(ctx context.Context) bool {
+	if out, err := s.JevOptedOut(ctx); err != nil || out {
+		return false
+	}
 	if s.jevIsDefault(ctx) {
 		return true
 	}

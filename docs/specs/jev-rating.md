@@ -1,7 +1,8 @@
 # Spec: rating with Jev
 
 Status: **built** · Owner choice (2026-11-04): Jev is the **default rater**,
-using the **full profile**.
+using the **full profile**. Owner choice (2026-11-06): automatic Jev rating is
+**on by default**, with a notice and a **per-user opt-out**.
 
 ## What Jev is
 
@@ -32,19 +33,29 @@ write text, so CVs and emails stay with the user's own AI.
 
 ## When it runs
 
+- **On by default:** when a Jev key is available and the user hasn't picked a
+  rater yet, Jev becomes the default rater by itself (the scheduled job or the
+  board's Rate button turns it on). A rater the user picked is kept.
 - `braveduck jev enable` makes Jev the default rater and keeps the current
   raters as challengers.
 - **Automatically:** the built-in source `jev-rate` in the universal schedule
-  (every 30 min by default) rates up to 20 unrated jobs. It does nothing
-  unless Jev is the default rater, and stops at the first API error.
+  (every 30 min by default) rates up to 20 unrated jobs. It does nothing when
+  there is no key, another rater was picked, or the user opted out, and stops
+  at the first API error.
 - On demand: `braveduck jev rate <id>|--all`, the board's Rate button, and
   MCP `rate_with_jev`.
 
 ## Privacy and the key
 
 - **Sent to TypeSafe:** the user's full profile (their CV) and each job's
-  text. The user chose this over a condensed profile. `braveduck jev status`
+  text. The owner chose this over a condensed profile. `braveduck jev status`
   says so.
+- **Notice:** the board's rating window (⚙ Settings → Rating) says in one
+  line that the profile and jobs are sent to TypeSafe's Jev to rate them.
+- **Opt-out:** in the same window, "Don't send my profile to Jev" stops Jev
+  for that user: no automatic rating and no Jev rating on demand. The choice
+  is saved in the user's own database, so on a shared server one user's
+  opt-out never affects another. Unticking it turns Jev back on.
 - **Key:** `TYPESAFE_API_KEY`, else the file `jev-route` uses
   (`~/.config/jev-route/typesafe.env`). It is read at call time, never
   printed, logged or stored, and redacted from errors (`Bearer ***`).

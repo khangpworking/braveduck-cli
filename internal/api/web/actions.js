@@ -9,11 +9,9 @@ async function askAI(kind, id, model) {
     req = await APIClient.askRequest(kind, id, kind === "draft" ? { notes: notesEl ? notesEl.value : "" } : kind === "rate" ? { model } : {});
   } catch (e) {
     if (e.code === "profile_empty") {
-      showToast("Answer a few questions first", "info");
-      if (kind === "rate") {
-        openProfile();
-        return;
-      }
+      showToast(e.message, "info");
+      openProfile();
+      return;
     }
     showToast(e.message, "error");
     return;

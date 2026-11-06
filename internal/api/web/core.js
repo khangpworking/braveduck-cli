@@ -281,6 +281,21 @@ const APIClient = {
     return readAPIJSON('/rating-config');
   },
 
+  async getJev() {
+    return readAPIJSON('/jev');
+  },
+
+  async setJevOptOut(optOut) {
+    const res = await apiFetch(`${API_BASE}/jev`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ opt_out: optOut })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  },
+
   async getStats() {
     return readAPIJSON('/stats');
   },

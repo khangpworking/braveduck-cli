@@ -138,6 +138,39 @@ func TestParsePastedJDNeverTakesDetailLineAsCompany(t *testing.T) {
 	}
 }
 
+// A second line that names an employer stays the company, even when the name
+// mentions a place or a common word; only clear pay, place or requirement
+// lines are dropped.
+func TestPastedSecondLineCompany(t *testing.T) {
+	for _, tc := range []struct{ line, company string }{
+		{"Shopee Vietnam", "Shopee Vietnam"},
+		{"Samsung Vietnam", "Samsung Vietnam"},
+		{"Bosch Global Software Technologies Vietnam", "Bosch Global Software Technologies Vietnam"},
+		{"VNG - Hồ Chí Minh", "VNG - Hồ Chí Minh"},
+		{"Experian Vietnam", "Experian Vietnam"},
+		{"Qualcomm", "Qualcomm"},
+		{"3S Group", "3S Group"},
+		{"Lương 30-40 triệu gross", ""},
+		{"Salary: $1,500", ""},
+		{"$1,500 - $2,000", ""},
+		{"Up to 2000 USD", ""},
+		{"30-40 triệu", ""},
+		{"Hà Nội", ""},
+		{"Ho Chi Minh City, Vietnam", ""},
+		{"Quận 1, TP. Hồ Chí Minh", ""},
+		{"Remote", ""},
+		{"Yêu cầu: React", ""},
+		{"Requirements - 3 years Go", ""},
+	} {
+		t.Run(tc.line, func(t *testing.T) {
+			jp := ParsePastedJD("Data Analyst\n" + tc.line + "\nMô tả: phân tích số liệu")
+			if jp.Company != tc.company {
+				t.Errorf("company = %q, want %q", jp.Company, tc.company)
+			}
+		})
+	}
+}
+
 func TestParsePostNeverTakesDetailLineAsCompany(t *testing.T) {
 	post := "HIRING BACKEND ENGINEER\nLương 30-40 triệu gross\nHybrid, Hà Nội\nGửi CV về hr@duck.vn"
 	if jp := ParsePost(post); jp.Company != "" {

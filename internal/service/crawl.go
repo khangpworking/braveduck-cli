@@ -401,7 +401,7 @@ func (s *Service) runDue(ctx context.Context) {
 			continue // nothing to sync without a login; don't flag it as failing
 		}
 		if sc.Source == JevRateSource && !s.autoEnableJev(ctx) {
-			continue // no Jev key, or the user picked another rater
+			continue // no Jev key, the user picked another rater, or opted out of Jev
 		}
 		if t, ok := last[sc.Source]; ok && s.now().Sub(t) < time.Duration(sc.EveryMinutes)*time.Minute {
 			continue

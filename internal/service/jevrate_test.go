@@ -226,3 +226,71 @@ func TestRunJevRateAutoEnables(t *testing.T) {
 		t.Fatalf("rater = %+v, want Jev", cfg)
 	}
 }
+
+// Opting out stops automatic Jev rating for that user only: on a shared
+// server each user has their own database, so another user's board keeps
+// rating with Jev.
+func TestJevOptOutIsPerUser(t *testing.T) {
+	ctx := context.Background()
+	alice, aliceID := docSvc(t)
+	alice.SetHosted(HostedInfo{User: "alice"})
+	aliceJev := &fakeJev{}
+	alice.SetJev(aliceJev)
+	bob, bobID := docSvc(t)
+	bob.SetHosted(HostedInfo{User: "bob"})
+	bobJev := &fakeJev{}
+	bob.SetJev(bobJev)
+
+	if err := alice.SetJevOptOut(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := alice.JevOptedOut(ctx); err != nil || !out {
+		t.Fatalf("alice opt-out not remembered: %v, %v", out, err)
+	}
+	if out, _ := bob.JevOptedOut(ctx); out {
+		t.Fatal("alice's opt-out leaked to bob")
+	}
+
+	if res, err := alice.Crawl(ctx, JevRateSource); err != nil || res.Added != 0 || aliceJev.calls != 0 {
+		t.Fatalf("opted-out auto rate = %+v, %v, %d calls", res, err, aliceJev.calls)
+	}
+	if j, _ := alice.GetJob(ctx, aliceID); j.ScoreStatus == "scored" {
+		t.Fatal("opted-out job was scored by Jev")
+	}
+	if cfg, _ := alice.RatingConfig(ctx); IsJevModel(cfg.DefaultModel) {
+		t.Fatalf("opt-out still made Jev the rater: %+v", cfg)
+	}
+	if _, err := alice.JevRate(ctx, aliceID); !errors.Is(err, ErrJevOptedOut) || aliceJev.calls != 0 {
+		t.Fatalf("JevRate after opt-out = %v, %d calls", err, aliceJev.calls)
+	}
+
+	if res, err := bob.Crawl(ctx, JevRateSource); err != nil || res.Added != 1 || bobJev.calls != 1 {
+		t.Fatalf("bob auto rate = %+v, %v, %d calls", res, err, bobJev.calls)
+	}
+	if j, _ := bob.GetJob(ctx, bobID); j.ScoreStatus != "scored" {
+		t.Fatalf("bob's job not scored: %+v", j)
+	}
+
+	// Turning it back on lets Jev rate alice's jobs again.
+	if err := alice.SetJevOptOut(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := alice.Crawl(ctx, JevRateSource); err != nil || res.Added != 1 || aliceJev.calls != 1 {
+		t.Fatalf("opted back in auto rate = %+v, %v, %d calls", res, err, aliceJev.calls)
+	}
+}
+
+// Opting out also stops a board where Jev is already the rater.
+func TestJevOptOutStopsEnabledJev(t *testing.T) {
+	s, fj, id := jevSvc(t)
+	ctx := context.Background()
+	if err := s.SetJevOptOut(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := s.Crawl(ctx, JevRateSource); err != nil || res.Added != 0 || fj.calls != 0 {
+		t.Fatalf("auto rate after opt-out = %+v, %v, %d calls", res, err, fj.calls)
+	}
+	if _, err := s.RequestRating(ctx, id, ""); !errors.Is(err, ErrJevOptedOut) || fj.calls != 0 {
+		t.Fatalf("Rate after opt-out = %v, %d calls", err, fj.calls)
+	}
+}

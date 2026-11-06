@@ -184,7 +184,7 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 			lines = append(lines, l)
 		}
 	}
-	if len(lines) > 1 && !nonCompanyRE.MatchString(lines[1]) {
+	if len(lines) > 1 && !notCompany(lines[1]) {
 		return truncate(lines[1], 120)
 	}
 	return ""
@@ -193,10 +193,49 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 // labelRE strips a leading "Label:" ("Mức lương:", "Company:") from a phrase.
 var labelRE = regexp.MustCompile(`^[^:]{1,20}:\s*`)
 
-// nonCompanyRE spots a pasted line that is pay, place, requirements or perks
-// instead of an employer. The second line of a JD is often one of these, so it
-// must never become the company.
-var nonCompanyRE = regexp.MustCompile(`(?i)(^|\s)(lương|salary|thu nhập|compensation|thỏa thuận|negotiable|gross|net|triệu|million|vnd|usd|địa điểm|địa chỉ|location|nơi làm việc|workplace|hybrid|remote|onsite|on-site|yêu cầu|requirements?|qualifications?|kỹ năng|skills?|kinh nghiệm|experience|mô tả|description|quyền lợi|benefits?|phúc lợi|hạn nộp|deadline|liên hệ|contact|email|hà nội|hồ chí minh|hcm|đà nẵng|việt nam|hanoi|ho chi minh|da nang|vietnam|quận|district|tỉnh|city)(\s|$|:|,|\.)`)
+// notCompany reports whether a pasted line is pay, place, requirements or
+// perks instead of an employer. The second line of a JD is often one of these,
+// so it must never become the company. A name that merely mentions a place
+// ("Shopee Vietnam", "VNG - Hồ Chí Minh") is still a company.
+func notCompany(line string) bool {
+	return detailLabelRE.MatchString(line) || payLineRE.MatchString(line) || isPlaceLine(line)
+}
+
+// detailLabelRE spots a line that starts with a JD detail label.
+var detailLabelRE = regexp.MustCompile(`(?i)^(mức lương|lương|salary|thu nhập|compensation|thỏa thuận|negotiable|địa điểm|địa chỉ|location|nơi làm việc|workplace|hybrid|remote|onsite|on-site|yêu cầu|requirements?|qualifications?|kỹ năng|skills?|kinh nghiệm|experience|mô tả|description|quyền lợi|benefits?|phúc lợi|hạn nộp|deadline|liên hệ|contact|email)(\s|$|:|,|\.|-)`)
+
+// payLineRE spots a line that starts with an amount of pay ("30-40 triệu",
+// "$1,500", "Up to 2000 USD").
+var payLineRE = regexp.MustCompile(`(?i)^(up to|upto|từ|tới|đến)?\s*(\$\s*\d|\d[\d.,]*\s*(-|–|~|đến|to)?\s*[\d.,]*\s*(triệu|tr|million|usd|vnd|đ|\$)(\s|$|/|,|\.|\)))`)
+
+// isPlaceLine reports whether every part of a line is a place ("Hà Nội",
+// "Quận 1, TP. Hồ Chí Minh", "Ho Chi Minh City, Vietnam").
+func isPlaceLine(line string) bool {
+	found := false
+	for _, part := range placeSepRE.Split(strings.ToLower(line), -1) {
+		part = strings.TrimSpace(placePrefixRE.ReplaceAllString(strings.TrimSpace(part), ""))
+		if part == "" {
+			continue
+		}
+		if !places[part] && !districtRE.MatchString(part) {
+			return false
+		}
+		found = true
+	}
+	return found
+}
+
+var (
+	placeSepRE    = regexp.MustCompile(`\s*[,|/–]\s*|\s+-\s+`)
+	placePrefixRE = regexp.MustCompile(`^(tp\.?|thành phố|tỉnh|city of)\s*`)
+	districtRE    = regexp.MustCompile(`^((quận|q\.|district)\s*\d+|(quận|huyện)\s+\S.*)$`)
+	places        = map[string]bool{
+		"hà nội": true, "ha noi": true, "hanoi": true, "hồ chí minh": true, "ho chi minh": true,
+		"ho chi minh city": true, "hcm": true, "hcmc": true, "sài gòn": true, "saigon": true,
+		"đà nẵng": true, "da nang": true, "danang": true, "hải phòng": true, "hai phong": true,
+		"cần thơ": true, "can tho": true, "việt nam": true, "vietnam": true, "viet nam": true,
+	}
+)
 
 // FetchJobPosting fetches a listing and extracts its JobPosting. It tries plain
 // HTTP first (cheap, no browser); if that finds no JobPosting AND an external
