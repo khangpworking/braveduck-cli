@@ -87,7 +87,12 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "crawl", "Fetch new jobs now from braveduck's built-in crawlers (or one `source`, e.g. vietnamworks), using the user's search_queries keyword list and filters. Returns found / filtered / duplicates (already on the board) / added counts.", write, t.crawl)
 	add(srv, "retry_crawl", "Same as crawl, for one source (the board's Retry).", write, t.retryCrawl)
 	add(srv, "get_crawl_schedule", "How often each job source fetches new jobs (every_minutes; 0 = off).", readOnly, t.getCrawlSchedule)
-	add(srv, "set_crawl_schedule", "Set how often a source fetches new jobs: every_minutes 0 (off) or 15-1440 for built-in crawlers (5-1440 for external tools).", idempotentWrite, t.setCrawlSchedule)
+	crawlMin := service.MinBuiltinEveryMinutes
+	if svc.Hosted() != nil {
+		crawlMin = service.HostedMinEveryMinutes
+	}
+	add(srv, "set_crawl_schedule", fmt.Sprintf("Set how often a source fetches new jobs: every_minutes 0 (off) or %d-%d for built-in crawlers (%d-%d for external tools).",
+		crawlMin, service.MaxEveryMinutes, service.MinEveryMinutes, service.MaxEveryMinutes), idempotentWrite, t.setCrawlSchedule)
 	add(srv, "set_keywords", "Replace one or more keyword lists. search_queries are what crawlers search for; positive_title / negative_title / negative_content / negative_company filter results. Lists you don't pass are left alone.", idempotentWrite, t.setKeywords)
 	add(srv, "sync_platform", "Read the user's application history on a job site (platform: topcv) with their saved login, read-only, and update the board: TopCV status per job, Saved/Waiting jobs moved to Applied, missing applications added.", write, t.syncPlatform)
 	add(srv, "cv_brief", "Everything needed to tailor the user's CV for one job: their profile, the job, instructions, and the current version if there is one. Write the CV in Markdown, then call submit_cv.", readOnly, t.cvBrief)
