@@ -208,8 +208,8 @@ Two apply channels, auto-detected per job:
   score simultaneously; challengers' grades and reasoning show under the open
   card's More → Other AI ratings (4.2).
 - **Ask another model** — one-off score of a single card by any model.
-- **Rating config panel** (⚙ Rating): enable A/B, pick models (max 3), choose the
-  default. After enabling, a banner offers **"Rate all saved jobs"** (backfill)
+- **Rating config panel** (⚙ Rating): one line on how jobs get graded; under
+  **Advanced**, enable A/B, pick models (max 3), choose the default. After enabling, a banner offers **"Rate all saved jobs"** (backfill)
   or **"Only new jobs from now."**
 - Re-score on failure; a 5-min-stuck badge offers manual retry.
 
@@ -237,9 +237,11 @@ Two apply channels, auto-detected per job:
 
 ## 8. Config panels
 
-### 8.1 Crawler keyword editor (⚙ Keywords)
-- Edit the keyword lists that drive each crawler's searches.
-- **Preview** shows what a keyword change would match before saving; **Save all**
+### 8.1 Crawler keyword editor (⚙ Search terms)
+- One question, "What jobs should we look for?", edits the search terms as tags
+  (Enter adds one); the filter lists (hide jobs that mention…, title/company
+  filters) wait under **More**.
+- A one-line count says how many jobs on the board mention the terms; **Save**
   persists. Purpose: tune what jobs get crawled.
 
 ### 8.2 Rating config — see §6.
