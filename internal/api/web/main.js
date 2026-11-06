@@ -1,4 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
+  applyI18n();
+  const langBtn = document.getElementById("langBtn");
+  const other = I18N.lang === "vi" ? "en" : "vi";
+  langBtn.textContent = "🌐 " + I18N.names[other];
+  langBtn.addEventListener("click", () => I18N.set(other));
   // Toggle Drawer
   const drawer = document.getElementById("addJobDrawer");
   const overlay = document.getElementById("drawerOverlay");

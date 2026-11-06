@@ -19,6 +19,7 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("HOME", home)
 	os.Setenv("TYPESAFE_API_KEY", "")
+	os.Setenv("BRAVEDUCK_LANG", "en") // tests read the board in English (i18n has its own test)
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)

@@ -21,7 +21,7 @@
     <div class="nav-right">
       <span class="nav-user" id="hostedUser" hidden></span>
       <button class="btn-secondary activity-btn" id="activityBtn" title="Recent activity" aria-label="Recent activity" aria-expanded="false" aria-controls="activityPanel">🔔</button>
-      <button class="btn-primary" id="openDrawerBtn">+ Add Job</button>
+      <button class="btn-primary" id="openDrawerBtn" data-i18n>+ Add Job</button>
     </div>
   </header>
 
@@ -56,7 +56,7 @@
       <div class="toolbar-actions">
         <button class="btn-secondary btn-sm" id="myCVBtn">📄 My CV</button>
         <button class="btn-secondary btn-sm" id="profileBtn">👤 Profile</button>
-        <button class="btn-secondary btn-sm" id="settingsBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsMenu">⚙ Settings ▾</button>
+        <button class="btn-secondary btn-sm" id="settingsBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsMenu" data-i18n>⚙ Settings ▾</button>
       </div>
     </section>
 
@@ -69,6 +69,7 @@
       <button class="settings-item" role="menuitem" id="locationBtn">📍 Location</button>
       <button class="settings-item" role="menuitem" id="agentBtn" hidden>🤖 Connect your AI agent</button>
       <button class="settings-item" role="menuitem" id="exportBtn">⬇ Download my jobs (CSV)</button>
+      <button class="settings-item" role="menuitem" id="langBtn"></button>
       <button class="settings-item" role="menuitem" id="notifyBtn">🔔 Notify me of great matches: off</button>
     </div>
 
@@ -348,6 +349,8 @@
 
   <!-- Scripts -->
   <!-- The board's script, in order: one global scope (classic scripts, no build step). -->
+  <script src="i18n.js"></script>  <!-- language: t(), Vietnamese by default -->
+  <script src="i18n-vi-core.js"></script>
   <script src="core.js"></script>  <!-- API client, HTML safety, field adapters, app state -->
   <script src="panels.js"></script>  <!-- settings windows: logins, location, search terms, sources -->
   <script src="widgets.js"></script>  <!-- refreshing state; header, Today, notifications -->
