@@ -34,7 +34,7 @@ async function refreshAppState() {
     }
   } catch (e) {
     if (generation === refreshGeneration) {
-      showToast(`Couldn't refresh board: ${e.message}`, "error");
+      showToast(t("Couldn't refresh board: {message}", { message: t(e.message) }), "error");
     }
   }
 }
@@ -63,10 +63,10 @@ function renderStatPills() {
 
   const container = document.getElementById("statPills");
   container.innerHTML = `
-    <span class="stat-pill">Saved <strong>${counts.Saved}</strong></span>
-    <span class="stat-pill">Applied <strong>${counts.Applied}</strong></span>
-    <span class="stat-pill">Interview <strong>${counts.Interview}</strong></span>
-    <span class="stat-pill">Offer <strong>${counts.Offer}</strong></span>
+    <span class="stat-pill">${esc(t("Saved"))} <strong>${counts.Saved.toLocaleString(I18N.lang)}</strong></span>
+    <span class="stat-pill">${esc(t("Applied"))} <strong>${counts.Applied.toLocaleString(I18N.lang)}</strong></span>
+    <span class="stat-pill">${esc(t("Interview"))} <strong>${counts.Interview.toLocaleString(I18N.lang)}</strong></span>
+    <span class="stat-pill">${esc(t("Offer"))} <strong>${counts.Offer.toLocaleString(I18N.lang)}</strong></span>
   `;
 }
 
@@ -87,7 +87,7 @@ function notifyOn() {
 }
 
 function renderNotifyButton() {
-  document.getElementById("notifyBtn").textContent = `🔔 Notify me of great matches: ${notifyOn() ? "on" : "off"}`;
+  document.getElementById("notifyBtn").textContent = notifyOn() ? t("🔔 Notify me of great matches: on") : t("🔔 Notify me of great matches: off");
 }
 
 function markMatchesSeen(jobs) {
@@ -97,17 +97,17 @@ function markMatchesSeen(jobs) {
 async function toggleNotify() {
   if (notifyOn()) {
     localStorage.setItem(NOTIFY_KEY, "off");
-    showToast("Match notifications off", "info");
+    showToast(t("Match notifications off"), "info");
   } else if (!("Notification" in window)) {
-    showToast("This browser can't show notifications", "error");
+    showToast(t("This browser can't show notifications"), "error");
   } else {
     const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
     if (perm !== "granted") {
-      showToast("Notifications are blocked for this page in your browser settings", "error");
+      showToast(t("Notifications are blocked for this page in your browser settings"), "error");
     } else {
       localStorage.setItem(NOTIFY_KEY, "on");
       markMatchesSeen(AppState.jobs); // only matches rated from now on
-      showToast("You'll be notified of new A and B matches while the board is open", "success");
+      showToast(t("You'll be notified of new A and B matches while the board is open"), "success");
     }
   }
   renderNotifyButton();
@@ -120,14 +120,14 @@ function notifyNewMatches(jobs) {
   const fresh = greatMatches(jobs).filter(j => !seen.has(j.id)).sort((a, b) => b.score - a.score);
   // A few at most: rated while the board was closed shouldn't mean a flood.
   for (const j of fresh.slice(0, 3)) {
-    const n = new Notification(`Great match: ${j.title}`, {
-      body: `${j.score_letter} · ${Number(j.score).toFixed(1)}${j.company ? ` — ${j.company}` : ""}`,
+    const n = new Notification(t("Great match: {title}", { title: j.title }), {
+      body: `${j.score_letter} · ${Number(j.score).toLocaleString(I18N.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${j.company ? ` — ${j.company}` : ""}`,
       tag: `braveduck-job-${j.id}`
     });
     n.onclick = () => { window.focus(); showJobCard(j.id); n.close(); };
   }
   if (fresh.length > 3) {
-    const n = new Notification(`${fresh.length - 3} more great matches`, { body: "See Today on the board.", tag: "braveduck-more" });
+    const n = new Notification(t("{n} more great matches", { n: (fresh.length - 3).toLocaleString(I18N.lang) }), { body: t("See Today on the board."), tag: "braveduck-more" });
     n.onclick = () => { window.focus(); n.close(); };
   }
   markMatchesSeen(jobs);
@@ -146,7 +146,17 @@ const SOURCE_NAMES = {
 
 function sourceName(source) {
   const key = String(source).toLowerCase();
-  return Object.hasOwn(SOURCE_NAMES, key) ? SOURCE_NAMES[key] : source;
+  return Object.hasOwn(SOURCE_NAMES, key) ? t(SOURCE_NAMES[key]) : source;
+}
+
+function todayReason(message) {
+  const deadline = /^closes in (\d+) days$/.exec(message);
+  if (deadline) return t("closes in {n} days", { n: Number(deadline[1]).toLocaleString(I18N.lang) });
+  const applied = /^applied (\d+) days ago$/.exec(message);
+  if (applied) return t("applied {n} days ago", { n: Number(applied[1]).toLocaleString(I18N.lang) });
+  const score = /^([AB]) · (\d+\.\d+)$/.exec(message);
+  if (score) return `${score[1]} · ${Number(score[2]).toLocaleString(I18N.lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+  return t(message);
 }
 
 let todayCount = 0;
@@ -161,14 +171,14 @@ async function renderToday() {
   todayCount = groups.reduce((n, g) => n + g.items.length, 0);
   renderTodaySummary();
   if (!groups.length) {
-    list.innerHTML = `<div class="today-empty">Nothing needs you today.</div>`;
+    list.innerHTML = `<div class="today-empty">${t("Nothing needs you today.")}</div>`;
     return;
   }
   list.innerHTML = groups.map(g => `
     <div class="today-group">
-      <div class="today-group-title">${esc(g.title)}</div>
+      <div class="today-group-title">${esc(t(g.title))}</div>
       <ul>${g.items.map(it => `
-        <li><button class="today-item" data-job="${esc(String(it.job_id))}">${esc(it.title)}<span class="today-why">${esc(it.why)}</span></button></li>`).join("")}
+        <li><button class="today-item" data-job="${esc(String(it.job_id))}">${esc(it.title)}<span class="today-why">${esc(todayReason(it.why))}</span></button></li>`).join("")}
       </ul>
     </div>`).join("");
   list.querySelectorAll("button[data-job]").forEach(btn => btn.addEventListener("click", () => showJobCard(btn.dataset.job)));
@@ -177,9 +187,9 @@ async function renderToday() {
 function renderTodaySummary() {
   const fresh = AppState.crawlStatus ? Number(AppState.crawlStatus.newJobsToday) : 0;
   const parts = [];
-  if (fresh > 0) parts.push(plural(fresh, "new job"));
-  if (todayCount > 0) parts.push(`${todayCount} to look at`);
-  document.getElementById("todaySummary").textContent = parts.join(" · ") || "Nothing needs you";
+  if (fresh > 0) parts.push(t(fresh === 1 ? "{n} new job" : "{count} new jobs", { n: fresh.toLocaleString(I18N.lang), count: fresh.toLocaleString(I18N.lang) }));
+  if (todayCount > 0) parts.push(t("{n} to look at", { n: todayCount.toLocaleString(I18N.lang) }));
+  document.getElementById("todaySummary").textContent = parts.join(" · ") || t("Nothing needs you");
 }
 
 function renderMoraleWidget() {
@@ -192,11 +202,17 @@ function renderMoraleWidget() {
   if (!st) return;
   document.getElementById("moraleWidget").hidden = st.resolved < 1;
   document.getElementById("moraleSubline").innerText =
-    `${plural(st.interviews, "interview")} from ${plural(st.resolved, "answered application")} · ${st.pending} waiting`;
+    t("{interviews} from {applications} · {pending} waiting", {
+      interviews: plural(st.interviews, "interview"),
+      applications: plural(st.resolved, "answered application"),
+      n: st.interviews.toLocaleString(I18N.lang),
+      resolved: st.resolved.toLocaleString(I18N.lang),
+      pending: st.pending.toLocaleString(I18N.lang)
+    });
   const rate = document.getElementById("moraleRate");
-  rate.innerText = st.resolved >= 3 ? `${Math.round(st.interview_rate * 100)}%` : "—";
+  rate.innerText = st.resolved >= 3 ? `${Math.round(st.interview_rate * 100).toLocaleString(I18N.lang)}%` : "—";
   rate.hidden = st.resolved < 3;
-  document.getElementById("moraleMessage").innerText = st.morale || "";
+  document.getElementById("moraleMessage").innerText = t(st.morale || "");
 }
 
 function renderCrawlStatus() {
@@ -209,7 +225,7 @@ function renderCrawlStatus() {
   // Background tasks (rating, status sync) find no jobs: no chip, but a
   // failing one still shows in the warnings.
   chipsContainer.innerHTML = status.sources.filter(s => !s.task)
-    .map(s => `<span class="chip">${esc(sourceName(s.name))} <strong style="color:var(--ink)">${esc(s.count)}</strong></span>`)
+    .map(s => `<span class="chip">${esc(sourceName(s.name))} <strong style="color:var(--ink)">${Number(s.count).toLocaleString(I18N.lang)}</strong></span>`)
     .join("");
 
   // Render unhealthy sources: the one thing here that shouldn't wait for a click.
@@ -218,11 +234,14 @@ function renderCrawlStatus() {
   unhealthyContainer.hidden = unhealthySources.length === 0;
   unhealthyContainer.innerHTML = unhealthySources
     .map(s => {
-      const problem = s.task ? "isn't working" : s.lastError ? "couldn't check for jobs" : "hasn't checked for jobs lately";
+      const key = s.task ? "⚠️ {source} isn't working (last try: {when})"
+        : s.lastError ? "⚠️ {source} couldn't check for jobs (last try: {when})"
+        : "⚠️ {source} hasn't checked for jobs lately (last try: {when})";
+      const problem = t(key, { source: sourceName(s.name), when: timeAgo(s.lastRun) || t("never") });
       return `
-        <div class="chip unhealthy" ${s.lastError ? `title="${esc(s.lastError)}"` : ""}>
-          <span>⚠️ ${esc(sourceName(s.name))} ${problem} (last try: ${esc(timeAgo(s.lastRun) || "never")})</span>
-          <button class="btn-text" onclick="triggerCrawlerRetry(${jsArg(s.name)})">Try again</button>
+        <div class="chip unhealthy" ${s.lastError ? `title="${esc(t(s.lastError))}"` : ""}>
+          <span>${esc(problem)}</span>
+          <button class="btn-text" onclick="triggerCrawlerRetry(${jsArg(s.name)})">${t("Try again")}</button>
         </div>
       `;
     })
@@ -232,7 +251,7 @@ function renderCrawlStatus() {
 async function triggerCrawlerRetry(source) {
   const flash = document.getElementById("retryFlash");
   flash.hidden = false;
-  flash.innerText = `⟳ Checking ${sourceName(source)} again…`;
+  flash.innerText = t("⟳ Checking {source} again…", { source: sourceName(source) });
 
   let result;
   try {
@@ -245,9 +264,9 @@ async function triggerCrawlerRetry(source) {
   // The real backend returns {ok:false, message} until crawlers are wired in;
   // surface that truth rather than a canned success.
   if (result && result.ok === false) {
-    showToast(result.message || `Couldn't check ${sourceName(source)}`, "error");
+    showToast(result.message ? t(result.message) : t("Couldn't check {source}", { source: sourceName(source) }), "error");
   } else {
-    showToast(result.message || `${sourceName(source)} checked`, "success");
+    showToast(result.message ? t(result.message) : t("{source} checked", { source: sourceName(source) }), "success");
   }
   refreshAppState();
 }
