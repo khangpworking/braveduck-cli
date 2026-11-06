@@ -184,8 +184,8 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 			lines = append(lines, l)
 		}
 	}
-	if len(lines) > 1 && !notCompany(lines[1]) {
-		return truncate(lines[1], 120)
+	if len(lines) > 1 {
+		return truncate(employerLine(lines[1]), 120)
 	}
 	return ""
 }
@@ -193,13 +193,34 @@ func pastedCompany(text string, segs []string, lineTwoIsCompany bool) string {
 // labelRE strips a leading "Label:" ("Mức lương:", "Company:") from a phrase.
 var labelRE = regexp.MustCompile(`^[^:]{1,20}:\s*`)
 
-// notCompany reports whether a pasted line is pay, place, requirements or
-// perks instead of an employer. The second line of a JD is often one of these,
-// so it must never become the company. A name that merely mentions a place
-// ("Shopee Vietnam", "VNG - Hồ Chí Minh") is still a company.
-func notCompany(line string) bool {
-	return detailLabelRE.MatchString(line) || payLineRE.MatchString(line) || isPlaceLine(line)
+// employerLine returns the employer a pasted line names, or "" when the line
+// is pay, place, requirements or perks instead. The second line of a JD is
+// often one of these, so it must never become the company. A name that merely
+// mentions a place ("Shopee Vietnam", "VNG - Hồ Chí Minh") is still a company,
+// and a trailing place is dropped from it ("FPT Software, Hà Nội").
+func employerLine(line string) string {
+	if detailLabelRE.MatchString(line) || payLineRE.MatchString(line) || isPlaceLine(line) {
+		return ""
+	}
+	parts := strings.Split(line, ",")
+	n := len(parts)
+	for n > 1 && isPlace(strings.ToLower(parts[n-1])) {
+		n--
+	}
+	if n == len(parts) {
+		return line
+	}
+	for _, p := range parts[:n] {
+		if p = strings.ToLower(strings.TrimSpace(p)); !isPlace(p) && !placeDetailRE.MatchString(p) {
+			return strings.TrimSpace(strings.Join(parts[:n], ","))
+		}
+	}
+	return ""
 }
+
+// placeDetailRE spots the work-type or address part of a location line
+// ("Full-time", "Tầng 5", "123 Lê Lợi", "Phường 4").
+var placeDetailRE = regexp.MustCompile(`^(full[- ]?time|part[- ]?time|hybrid|remote|onsite|on-site|toàn thời gian|bán thời gian|phường|p\.\s*\d|đường|tầng|lầu|tòa|floor|\d)`)
 
 // detailLabelRE spots a line that starts with a JD detail label.
 var detailLabelRE = regexp.MustCompile(`(?i)^(mức lương|lương|salary|thu nhập|compensation|thỏa thuận|negotiable|địa điểm|địa chỉ|location|nơi làm việc|workplace|hybrid|remote|onsite|on-site|yêu cầu|requirements?|qualifications?|kỹ năng|skills?|kinh nghiệm|experience|mô tả|description|quyền lợi|benefits?|phúc lợi|hạn nộp|deadline|liên hệ|contact|email)(\s|$|:|,|\.|-)`)
@@ -208,15 +229,10 @@ var detailLabelRE = regexp.MustCompile(`(?i)^(mức lương|lương|salary|thu n
 // "$1,500", "Up to 2000 USD").
 var payLineRE = regexp.MustCompile(`(?i)^(up to|upto|từ|tới|đến)?\s*(\$\s*\d|\d[\d.,]*\s*(-|–|~|đến|to)?\s*[\d.,]*\s*(triệu|tr|million|usd|vnd|đ|\$)(\s|$|/|,|\.|\)))`)
 
-// isPlaceLine reports whether a line is a place: every part is a place ("Hà
-// Nội", "Quận 1, TP. Hồ Chí Minh"), or it is a comma list ending in one
-// ("Cầu Giấy, Hà Nội", "Tầng 5, 123 Lê Lợi, Quận 1"). A " - " name such as
-// "VNG - Hồ Chí Minh" is still a company.
+// isPlaceLine reports whether every part of a line is a place ("Hà Nội",
+// "Cầu Giấy, Hà Nội", "Quận 1, TP. Hồ Chí Minh").
 func isPlaceLine(line string) bool {
 	lower := strings.ToLower(line)
-	if i := strings.LastIndex(lower, ","); i >= 0 && isPlace(lower[i+1:]) {
-		return true
-	}
 	found := false
 	for _, part := range placeSepRE.Split(lower, -1) {
 		if strings.TrimSpace(part) == "" {
@@ -249,6 +265,11 @@ var (
 		"bình dương": true, "binh duong": true, "đồng nai": true, "dong nai": true,
 		"bắc ninh": true, "bac ninh": true, "long an": true, "hưng yên": true, "hung yen": true,
 		"khánh hòa": true, "khanh hoa": true, "nha trang": true, "huế": true, "hue": true,
+		"ba đình": true, "hoàn kiếm": true, "đống đa": true, "cầu giấy": true, "thanh xuân": true,
+		"hai bà trưng": true, "tây hồ": true, "long biên": true, "hoàng mai": true, "hà đông": true,
+		"nam từ liêm": true, "bắc từ liêm": true, "thủ đức": true, "bình thạnh": true,
+		"tân bình": true, "phú nhuận": true, "gò vấp": true, "tân phú": true, "bình tân": true,
+		"hải châu": true,
 	}
 )
 
