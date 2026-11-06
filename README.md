@@ -147,7 +147,9 @@ their own board, with their own data. Logins are handled by
 [Authelia](https://www.authelia.com) behind [Caddy](https://caddyserver.com)
 (HTTPS from Let's Encrypt); [deploy/hosted](deploy/hosted/README.md) has the
 Docker Compose setup, scripts to add people, and a test of the whole chain.
-AI agents connect to `https://…/mcp` with a key made on the person's board. Job-site
+AI agents connect to `https://…/mcp` with a key made on the person's board.
+Pasting a Facebook group's link follows the group: with the optional
+fb-watcher scanner, a public group's matching posts come in by themselves. Job-site
 logins and assisted apply open windows on your own screen, so they stay on
 braveduck running on your computer.
 

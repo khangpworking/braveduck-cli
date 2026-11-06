@@ -126,6 +126,39 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
   keychain or a shared passphrase, so one user's saved logins can't be opened
   with another's key.
 
+## Facebook groups (optional)
+
+People follow a Facebook group by pasting its link in **+ Add Job**. Posts
+from **public** groups that match a person's search terms then come to their
+board by themselves. A **private** group's posts are only for its members, so
+braveduck never shares them; the board tells people to paste the posts they
+want (link + text).
+
+braveduck never opens Facebook. [fb-watcher](https://github.com/khangpworking/fb-watcher)
+does, with **one** Facebook account you log in once; it reads every followed
+group, checks once a day whether each one is public, and hands new posts to
+braveduck over the private `scanner` network.
+
+```bash
+git clone https://github.com/khangpworking/fb-watcher ../../../fb-watcher   # or set FB_WATCHER_DIR
+./setup.sh --secrets                                                          # adds secrets/scanner_secret
+# log the scanner's account in: export its facebook.com cookies to a file, then
+docker compose --profile facebook run --rm -v "$PWD/fb-cookies.json:/tmp/c.json:ro" \
+  fbwatcher import-cookies /tmp/c.json
+rm fb-cookies.json
+docker compose --profile facebook up -d --build
+```
+
+Before relying on it, check what it sees on a public and on a private group:
+`docker compose --profile facebook run --rm fbwatcher check-group <link>`.
+A group counts as public only when its page says so; anything unclear is
+shown as "can't be read right now" and nothing from it is shared.
+
+Every followed group is read by that one account, so more groups means more
+for Facebook to notice; fb-watcher keeps its usual pace (a minute or more
+between rounds, seconds between groups), and each person follows at most 30
+groups.
+
 ## Where the browser runs
 
 Job pages are other people's code. Chromium runs them in the `browser`

@@ -85,6 +85,7 @@ func TestListsEveryTool(t *testing.T) {
 		"get_crawl_schedule", "set_crawl_schedule",
 		"ask_model", "cv_brief", "submit_cv", "draft_brief", "submit_draft", "reject_draft",
 		"apply_job", "crawl", "retry_crawl", "connect_platform", "disconnect_platform", "set_keywords",
+		"follow_facebook_group", "list_facebook_groups", "unfollow_facebook_group",
 	} {
 		if got[name] == nil {
 			t.Errorf("tool %q not listed", name)
@@ -310,5 +311,29 @@ func TestListJobsQueryTool(t *testing.T) {
 	call(t, cs, "list_jobs", map[string]any{"query": "ky su"}, &out)
 	if len(out.Jobs) != 1 || out.Jobs[0].Title != "Kỹ Sư AI" {
 		t.Fatalf("list_jobs query = %+v", out.Jobs)
+	}
+}
+
+// An agent follows a Facebook group with its own tool; add_job points there.
+func TestFacebookGroupTools(t *testing.T) {
+	cs := connect(t)
+	link := "https://www.facebook.com/groups/ai.jobs.vn/"
+	if res := call(t, cs, "add_job", map[string]any{"content": link}, nil); !res.IsError || !strings.Contains(text(res), "follow_facebook_group") {
+		t.Fatalf("add_job with a group link = %+v", res)
+	}
+	var f struct {
+		Group struct{ Key, Visibility string }
+		Added bool
+	}
+	if res := call(t, cs, "follow_facebook_group", map[string]any{"link": link}, &f); res.IsError || !f.Added || f.Group.Key != "ai.jobs.vn" || f.Group.Visibility != "checking" {
+		t.Fatalf("follow = %+v %+v", res, f)
+	}
+	var l struct{ Groups []struct{ Key string } }
+	call(t, cs, "list_facebook_groups", map[string]any{}, &l)
+	if len(l.Groups) != 1 {
+		t.Fatalf("list = %+v", l)
+	}
+	if res := call(t, cs, "unfollow_facebook_group", map[string]any{"key": "ai.jobs.vn"}, nil); res.IsError {
+		t.Fatalf("unfollow = %+v", res)
 	}
 }

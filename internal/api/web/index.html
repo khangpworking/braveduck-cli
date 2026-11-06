@@ -106,10 +106,16 @@
       
       <p style="font-size: 13px; color: var(--body); margin: 0 0 var(--spacing-xs) 0;">
         Paste a job link from TopCV, VietnamWorks, JobOKO, CareerLink or Facebook, or paste the job description text.
-        For a Facebook post, paste the link and then the post text under it. braveduck doesn't open Facebook.
+        For a Facebook post, paste the link and then the post text under it.
+        <strong>Paste a Facebook group's link</strong> to follow the group: job posts from public groups come to your board by themselves.
       </p>
       <textarea id="pasteJDTextarea" class="textarea-input" style="height: 240px; margin-bottom: var(--spacing-md);" placeholder="https://www.topcv.vn/viec-lam/...&#10;&#10;OR a Facebook post:&#10;https://www.facebook.com/groups/.../posts/.../&#10;🚀 HIRING AI ENGINEER ... (the post text)&#10;&#10;OR&#10;&#10;We are looking for a Senior Developer with 5 years experience..."></textarea>
       <button id="extractAddBtn" class="btn-primary" style="width: 100%;">Extract & Add</button>
+
+      <div id="fbGroupsBlock" hidden style="margin-top: 16px;">
+        <h4 style="margin: 0 0 6px 0; font-size: 13px;">📘 Facebook groups you follow</h4>
+        <ul id="fbGroupsList" style="list-style: none; margin: 0; padding: 0; font-size: 13px;"></ul>
+      </div>
       
       <div style="margin-top: 16px; padding: 12px; background: var(--surface-soft); border-radius: var(--radius-sm); border: 1px solid var(--hairline); display: flex; align-items: flex-start; gap: 12px;">
         <span style="font-size: 16px; line-height: 1.2;">✨</span>

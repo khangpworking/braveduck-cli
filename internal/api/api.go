@@ -24,6 +24,7 @@ import (
 
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
+	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -77,6 +78,8 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("POST /api/cv", s.uploadBaseCV)
 	mux.HandleFunc("GET /api/cv/file", s.baseCVFile)
 	mux.HandleFunc("GET /api/stats", s.getStats)
+	mux.HandleFunc("GET /api/facebook-groups", s.listFBGroups)
+	mux.HandleFunc("DELETE /api/facebook-groups/{key}", s.unfollowFBGroup)
 	mux.HandleFunc("GET /api/agent-key", s.getAgentKey)
 	mux.HandleFunc("POST /api/agent-key", s.newAgentKey)
 	mux.HandleFunc("DELETE /api/agent-key", s.revokeAgentKey)
@@ -198,6 +201,12 @@ type createReq struct {
 func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 	var req createReq
 	if !decode(w, r, &req) {
+		return
+	}
+	// A Facebook group's link follows the group instead of adding a job.
+	if _, _, ok := scrape.FacebookGroup(strings.TrimSpace(req.Content)); ok {
+		g, added, err := s.svc.FollowGroup(r.Context(), strings.TrimSpace(req.Content))
+		reply(w, http.StatusCreated, map[string]any{"group": g, "added": added}, err)
 		return
 	}
 	j, err := s.svc.AddFromContent(r.Context(), req.Content)

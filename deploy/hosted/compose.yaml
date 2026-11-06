@@ -58,6 +58,7 @@ services:
     networks:
       - default
       - browser
+      - scanner
     depends_on:
       - browser
     command:
@@ -71,6 +72,10 @@ services:
       - --max-jobs-per-user=${BRAVEDUCK_MAX_JOBS_PER_USER:-5000}
       - --logout-url=https://${AUTH_DOMAIN}/logout
       - --login-users-file=/authelia/users_database.yml
+      # The Facebook scanner (profile "facebook") reaches this port only on
+      # the private scanner network.
+      - --scanner-addr=0.0.0.0:8090
+      - --scanner-key-file=/run/secrets/scanner_secret
     volumes:
       - braveduck_data:/data # one folder per user under /data/users
       # Read-only: an agent key stops working when its user is disabled or
@@ -79,6 +84,7 @@ services:
     secrets:
       - proxy_secret
       - browser_secret
+      - scanner_secret
 
   # The browser service (go-rod's launcher manager, behind a key): Chromium
   # renders other sites' pages here, in a container with no users' data and
@@ -113,15 +119,39 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Optional: fb-watcher reads the Facebook groups people follow (pasted
+  # group links), with one logged-in Facebook account, and hands public
+  # groups' posts to braveduck. Start it with --profile facebook; it builds
+  # from a checkout of github.com/khangpworking/fb-watcher next to this repo
+  # (or FB_WATCHER_DIR). See README "Facebook groups".
+  fbwatcher:
+    profiles: ["facebook"]
+    build:
+      context: ${FB_WATCHER_DIR:-../../../fb-watcher}
+    restart: unless-stopped
+    networks:
+      - scanner
+    volumes:
+      - fbwatcher_data:/data # login profile, seen.db, config.json
+    secrets:
+      - scanner_secret
+    shm_size: 1gb
+    mem_limit: 2g
+    depends_on:
+      - braveduck
+
 networks:
   default:
   browser:
+  scanner:
 
 secrets:
   proxy_secret:
     file: ./secrets/proxy_secret
   browser_secret:
     file: ./secrets/browser_secret
+  scanner_secret:
+    file: ./secrets/scanner_secret
   session_secret:
     file: ./secrets/session_secret
   storage_encryption_key:
@@ -133,3 +163,4 @@ volumes:
   caddy_data:
   caddy_config:
   braveduck_data:
+  fbwatcher_data:

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
+	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -97,6 +99,9 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "confirm_applied", "After apply_job on a site other than TopCV: record whether the user says they submitted the application (submitted=true moves the job to Applied). Only pass what the user told you.", write, t.confirmApplied)
 	add(srv, "get_location", "The user's location and maximum commute (jobs farther than max_km are flagged on the board).", readOnly, t.getLocation)
 	add(srv, "set_location", "Set the user's location: either `address` (looked up with OpenStreetMap; the first match is used — confirm it with the user) or lat/lng, plus optional max_km. Only do this when the user asks.", idempotentWrite, t.setLocation)
+	add(srv, "follow_facebook_group", "Follow a Facebook group by its link (facebook.com/groups/…). braveduck's scanner checks whether it's public; a public group's new posts that match the user's search terms then come to the board by themselves. A private group's posts are only for its members: the user pastes the ones they want (add_job with the post link and text).", write, t.followGroup)
+	add(srv, "list_facebook_groups", "The Facebook groups the user follows, each with its name and visibility (checking, public, private or unavailable).", readOnly, t.listGroups)
+	add(srv, "unfollow_facebook_group", "Stop following a Facebook group (by its key from list_facebook_groups). Jobs already on the board stay.", destructive, t.unfollowGroup)
 	add(srv, "rate_with_jev", "Rate one job now with Jev (TypeSafe AI's decision model): A-F with probabilities and criterion-based reasons. Sends the user's profile and the job text to api.typesafe.ai.", write, t.rateWithJev)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
@@ -352,6 +357,9 @@ func (t tools) addJob(ctx context.Context, in addIn) (jobs.Job, error) {
 	case in.Content != "" && in.Title != "":
 		return jobs.Job{}, fmt.Errorf("%w: pass content or title, not both", service.ErrInvalid)
 	case in.Content != "":
+		if _, _, ok := scrape.FacebookGroup(strings.TrimSpace(in.Content)); ok {
+			return jobs.Job{}, fmt.Errorf("%w: that's a Facebook group's link — use follow_facebook_group to follow the group", service.ErrInvalid)
+		}
 		return t.svc.AddFromContent(ctx, in.Content)
 	default:
 		return t.svc.AddJob(ctx, service.NewJob{
@@ -560,4 +568,35 @@ func (t tools) setLocation(ctx context.Context, in locationIn) (service.Location
 
 func (t tools) rateWithJev(ctx context.Context, in idIn) (jobs.Job, error) {
 	return t.svc.JevRate(ctx, in.ID)
+}
+
+type followGroupIn struct {
+	Link string `json:"link" jsonschema:"the group's link, e.g. https://www.facebook.com/groups/123456/"`
+}
+
+type followGroupOut struct {
+	Group service.FBGroup `json:"group"`
+	Added bool            `json:"added" jsonschema:"false when the user already followed it"`
+}
+
+func (t tools) followGroup(ctx context.Context, in followGroupIn) (followGroupOut, error) {
+	g, added, err := t.svc.FollowGroup(ctx, in.Link)
+	return followGroupOut{g, added}, err
+}
+
+type groupsOut struct {
+	Groups []service.FBGroup `json:"groups"`
+}
+
+func (t tools) listGroups(ctx context.Context, _ struct{}) (groupsOut, error) {
+	gs, err := t.svc.FBGroups(ctx)
+	return groupsOut{gs}, err
+}
+
+type groupKeyIn struct {
+	Key string `json:"key" jsonschema:"the group's key, from list_facebook_groups"`
+}
+
+func (t tools) unfollowGroup(ctx context.Context, in groupKeyIn) (struct{}, error) {
+	return struct{}{}, t.svc.UnfollowGroup(ctx, in.Key)
 }

@@ -14,7 +14,7 @@ cd "$(dirname "$0")"
 secrets() {
 	mkdir -p secrets
 	chmod 700 secrets
-	for name in proxy_secret browser_secret session_secret storage_encryption_key jwt_secret; do
+	for name in proxy_secret browser_secret scanner_secret session_secret storage_encryption_key jwt_secret; do
 		if [ ! -s "secrets/$name" ]; then
 			od -An -N48 -tx1 /dev/urandom | tr -d ' \n' >"secrets/$name"
 			echo "made secrets/$name"

@@ -77,6 +77,17 @@ var migrations = []string{
 	 );`,
 	// 8: small key/value settings (e.g. which sources get the Jev lead check).
 	`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+	// 9: Facebook groups the user follows (pasted group links); a scanner
+	// reports each group's name and whether it's public.
+	`CREATE TABLE IF NOT EXISTS fb_groups (
+	   group_key  TEXT PRIMARY KEY,
+	   url        TEXT NOT NULL,
+	   name       TEXT NOT NULL DEFAULT '',
+	   visibility TEXT NOT NULL DEFAULT 'checking',
+	   note       TEXT NOT NULL DEFAULT '',
+	   added_at   TEXT NOT NULL,
+	   checked_at TEXT NOT NULL DEFAULT ''
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the
