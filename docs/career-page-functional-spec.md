@@ -209,8 +209,9 @@ Two apply channels, auto-detected per job:
   card's More → Other AI ratings (4.2).
 - **Ask another model** — one-off score of a single card by any model.
 - **Rating config panel** (⚙ Rating): one line on how jobs get graded; under
-  **Advanced**, enable A/B, pick models (max 3), choose the default. After enabling, a banner offers **"Rate all saved jobs"** (backfill)
-  or **"Only new jobs from now."**
+  **Advanced**, enable A/B, pick models (max 3), choose the default. After
+  enabling, a banner offers **"Rate all saved jobs"** (backfill) or **"Only new
+  jobs from now."**
 - Re-score on failure; a 5-min-stuck badge offers manual retry.
 
 ---
