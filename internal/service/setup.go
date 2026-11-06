@@ -23,6 +23,11 @@ var profileMu sync.Mutex
 func (s *Service) SaveProfile(ctx context.Context, text string) (Profile, error) {
 	profileMu.Lock()
 	defer profileMu.Unlock()
+	return s.saveProfileLocked(ctx, text)
+}
+
+// saveProfileLocked is SaveProfile for a caller holding profileMu.
+func (s *Service) saveProfileLocked(ctx context.Context, text string) (Profile, error) {
 	if s.profilePath == "" {
 		return Profile{}, fmt.Errorf("no profile path configured")
 	}

@@ -67,7 +67,7 @@ async function saveAskPaste() {
 // The steps ratings and crawls need. Each opens the window that does it.
 const SETUP_STEPS = [
   { key: "cv", title: "Upload your CV", hint: "Its text becomes the \"About me\" part of your profile.", action: "Upload CV", open: () => document.getElementById("myCVBtn").click() },
-  { key: "wants", title: "Say what you're looking for", hint: "Roles, minimum pay, where you can work, deal-breakers.", action: "Edit profile", open: () => openProfile() },
+  { key: "wants", title: "Say what you're looking for", hint: "The jobs you want, your minimum pay, where you can work, your deal-breakers.", action: "Answer a few questions", open: () => openProfile() },
   { key: "search_queries", title: "Add search terms", hint: "What the crawlers search job sites for, e.g. \"n8n\".", action: "Add terms", open: () => document.getElementById("keywordsBtn").click() },
 ];
 
@@ -158,49 +158,6 @@ function renderHostedUser(hosted) {
   el.innerHTML = `${esc(hosted.user)}${hosted.logout_url ? `<a href="${safeUrl(hosted.logout_url)}">Log out</a>` : ""}`;
 }
 
-async function openProfile() {
-  const status = document.getElementById("profileStatus");
-  const text = document.getElementById("profileText");
-  document.getElementById("profileModalOverlay").classList.add("open");
-  const res = await apiFetch(`${API_BASE}/profile`);
-  const p = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    status.innerText = `Couldn't load your profile: ${p.error || res.status}`;
-    return;
-  }
-  text.value = p.text || "";
-  renderProfileStatus(p);
-}
-
-function renderProfileStatus(p) {
-  document.getElementById("profileStatus").innerHTML = p.filled
-    ? `✓ Filled in, so jobs can be rated. Saved at <code>${esc(p.path)}</code>.`
-    : `Still empty, so no job can be rated yet. Saved at <code>${esc(p.path)}</code>.`;
-}
-
-async function saveProfile() {
-  const btn = document.getElementById("saveProfileBtn");
-  btn.disabled = true;
-  btn.textContent = "Saving…";
-  try {
-    const res = await apiFetch(`${API_BASE}/profile`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: document.getElementById("profileText").value })
-    });
-    const p = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      showToast(`Couldn't save: ${p.error || res.status}`, "error");
-      return;
-    }
-    renderProfileStatus(p);
-    showToast("Profile saved", "success");
-    renderSetup();
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Save";
-  }
-}
 
 // --- My CV (the base CV) -------------------------------------------------------
 async function renderMyCV() {
