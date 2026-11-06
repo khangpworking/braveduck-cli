@@ -51,4 +51,14 @@ func TestHostedCrawlInterval(t *testing.T) {
 	if _, err := s.SetCrawlSchedule(ctx, "vietnamworks", HostedMinEveryMinutes); err != nil {
 		t.Fatalf("shared server, hourly: %v", err)
 	}
+	// The board offers only what the server accepts.
+	scheds, err := s.CrawlSchedules(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sc := range scheds {
+		if sc.Builtin && sc.MinEveryMinutes != HostedMinEveryMinutes {
+			t.Errorf("%s: minimum = %d, want %d", sc.Source, sc.MinEveryMinutes, HostedMinEveryMinutes)
+		}
+	}
 }

@@ -145,6 +145,7 @@ func TestBoardClosedOverlaysDoNotTakeFocus(t *testing.T) {
 	page.MustElement("#closeDrawerBtn").MustWaitInvisible()
 
 	openModal(t, page, "ratingBtn", "ratingModalOverlay")
+	openRatingAdvanced(page)
 	page.MustElement("#defaultModelInput").MustFocus()
 	if !page.MustEval(`() => document.activeElement.id === 'defaultModelInput'`).Bool() {
 		t.Fatal("open modal input cannot receive focus")
@@ -321,6 +322,7 @@ func TestRatingSettings(t *testing.T) {
 	page := launchBrowser(t).MustPage(ts.URL).MustWaitLoad()
 	openModal(t, page, "ratingBtn", "ratingModalOverlay")
 	page.MustElement("#ratingModalOverlay.open") // opens once the stored config has loaded
+	openRatingAdvanced(page)
 	if v := page.MustElement("#defaultModelInput").MustProperty("value").Str(); v == "" {
 		t.Fatal("default rater not pre-filled from the stored config")
 	}
@@ -347,6 +349,7 @@ func TestRatingSettings(t *testing.T) {
 	// Too many raters: the server refuses and the window says why.
 	openModal(t, page, "ratingBtn", "ratingModalOverlay")
 	page.MustElement("#ratingModalOverlay.open")
+	openRatingAdvanced(page)
 	page.MustElement("#challengerModelsInput").MustSelectAllText().MustInput("a, b, c")
 	clickID(page, "saveRatingConfigBtn")
 	msg := page.MustElement("#ratingConfigError").MustWaitVisible().MustText()
@@ -356,7 +359,7 @@ func TestRatingSettings(t *testing.T) {
 }
 
 // Keywords saved on the board reach the store (PUT /api/keywords used to 404),
-// and the Sources window changes a schedule and runs "Crawl now".
+// and the Sources window changes a schedule and runs "Check now".
 func TestKeywordsAndSources(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -385,7 +388,7 @@ func TestKeywordsAndSources(t *testing.T) {
 		t.Fatalf("stale crawler warning = %q", warning)
 	}
 	openModal(t, page, "keywordsBtn", "keywordsModalOverlay")
-	page.MustElement("#kw-search_queries").MustInput("n8n, ai automation")
+	page.MustElement("#keywordsForm .pf-tag-input").MustInput("n8n, ai automation")
 	clickID(page, "saveKeywordsBtn")
 	waitUntil(t, func() bool {
 		k, _ := svc.Keywords(ctx)
@@ -393,8 +396,8 @@ func TestKeywordsAndSources(t *testing.T) {
 	}, "search queries not saved")
 
 	openModal(t, page, "sourcesBtn", "sourcesModalOverlay")
-	page.MustElement("#sourcesList select")
-	page.MustEval(`() => { const s = [...document.querySelectorAll("#sourcesList select")].pop(); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
+	page.MustElement("#sourcesList .source-row select")
+	page.MustEval(`() => { const s = document.querySelector("#sourcesList > .source-row select"); s.value = "360"; s.dispatchEvent(new Event("change")); }`)
 	waitUntil(t, func() bool {
 		for _, sc := range must(svc.CrawlSchedules(ctx)) {
 			if sc.Source == "vietnamworks" {
@@ -404,11 +407,12 @@ func TestKeywordsAndSources(t *testing.T) {
 		return false
 	}, "schedule not saved")
 
-	page.MustEval(`() => [...document.querySelectorAll("#sourcesList button")].pop().click()`)
+	page.MustWait(`() => !document.getElementById("checkSourcesBtn").disabled`)
+	clickID(page, "checkSourcesBtn")
 	waitUntil(t, func() bool {
 		l, _ := svc.ListJobs(ctx, service.ListFilter{Source: "vietnamworks"})
 		return len(l) == 1
-	}, "Crawl now didn't add the job")
+	}, "Check now didn't add the job")
 }
 
 type boardFakeCrawler struct{}
@@ -1033,22 +1037,20 @@ func TestBoardUploadsCV(t *testing.T) {
 	page := launchBrowser(t).MustPage("")
 	page.MustNavigate(ts.URL).MustWaitLoad()
 	page.MustElement("#myCVBtn").MustEval(`() => this.click()`)
-	page.MustElementR("#cvStatus", "No CV uploaded yet")
+	page.MustElementR("#cvStatus", "Add your CV")
 
+	// Picking the file is the upload: no second button.
 	page.MustElement("#cvFileInput").MustSetFiles(first)
-	page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
-	page.MustElementR("#cvResult", "uploaded")
-	page.MustElementR("#cvStatus", "is filled in")
+	page.MustElementR("#cvStatus", "added")
 	if !page.MustEval(`() => window.__pwned === undefined && !document.querySelector("#cvModalOverlay img")`).Bool() {
 		t.Fatal("the CV's file name injected markup")
 	}
 
 	// The second upload asks before replacing what's in About me.
 	wait, handle := page.MustHandleDialog()
-	page.MustElement("#cvFileInput").MustSetFiles(second)
 	go func() {
 		defer func() { _ = recover() }() // see TestLoginsPanel: a panic here would end the whole run
-		page.MustElement("#cvUploadBtn").MustEval(`() => this.click()`)
+		page.MustElement("#cvFileInput").MustSetFiles(second)
 	}()
 	if d := wait(); !strings.Contains(d.Message, "About me") {
 		t.Fatalf("dialog = %q", d.Message)

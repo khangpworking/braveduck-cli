@@ -162,71 +162,94 @@ function renderHostedUser(hosted) {
 
 
 // --- My CV (the base CV) -------------------------------------------------------
+// Picking or dropping a file uploads it: there is no second button.
 async function renderMyCV() {
   const status = document.getElementById("cvStatus");
+  const choose = document.getElementById("cvChooseBtn");
   const res = await apiFetch(`${API_BASE}/cv`);
   const out = await res.json().catch(() => ({}));
   if (!res.ok) {
-    status.innerText = `Couldn't load your CV: ${out.error || res.status}`;
+    status.textContent = `Couldn't load your CV: ${out.error || res.status}`;
     return;
   }
-  const profile = out.profile || {};
-  const profileLine = profile.filled
-    ? `Your profile (<code>${esc(profile.path)}</code>) is filled in, so jobs can be rated.`
-    : `Your profile (<code>${esc(profile.path)}</code>) is still empty, so no job can be rated yet.`;
+  choose.textContent = out.cv ? "Replace it" : "Choose file";
   if (!out.cv) {
-    status.innerHTML = `No CV uploaded yet. ${profileLine}`;
+    status.textContent = "Add your CV and we'll fill in your profile from it.";
     return;
   }
-  const cv = out.cv;
-  status.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
-      <div><strong>${esc(cv.name)}</strong>
-        <div style="font-size: 12px; color: var(--muted);">${esc(cv.kind.toUpperCase())} · ${Math.ceil(cv.size / 1024)} KB · uploaded ${esc(new Date(cv.uploaded_at).toLocaleString())}</div>
-      </div>
-      <button class="btn-secondary btn-sm" onclick="downloadMyCV()">Download</button>
-    </div>
-    <p style="margin: 8px 0 0;">${profileLine} Upload a new file to replace this one.</p>`;
+  status.replaceChildren(
+    el("span", { class: "cv-line" }, `✓ ${out.cv.name}, added ${agoWords(out.cv.uploaded_at)}`),
+    el("button", { type: "button", class: "btn-link", onclick: downloadMyCV }, "Download"));
 }
 
-async function uploadMyCV(replace) {
+function wireCVUpload(overlay) {
   const input = document.getElementById("cvFileInput");
-  const btn = document.getElementById("cvUploadBtn");
+  const drop = document.getElementById("cvDrop");
+  const hasFile = e => [...e.dataTransfer.types].includes("Files");
+  document.getElementById("cvChooseBtn").addEventListener("click", () => input.click());
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    input.value = ""; // so picking the same file again still counts
+    if (file) uploadMyCV(file);
+  });
+  // The whole window takes the drop: a near miss must not open the file in this tab.
+  overlay.addEventListener("dragover", e => {
+    if (!hasFile(e)) return;
+    e.preventDefault();
+    drop.classList.add("over");
+  });
+  overlay.addEventListener("dragleave", e => {
+    if (!overlay.contains(e.relatedTarget)) drop.classList.remove("over");
+  });
+  overlay.addEventListener("drop", e => {
+    if (!hasFile(e)) return;
+    e.preventDefault();
+    drop.classList.remove("over");
+    if (e.dataTransfer.files[0]) uploadMyCV(e.dataTransfer.files[0]);
+  });
+}
+
+async function uploadMyCV(file) {
+  const btn = document.getElementById("cvChooseBtn");
   const result = document.getElementById("cvResult");
-  const file = input.files[0];
-  if (!file) {
-    showToast("Choose your CV file first", "info");
-    return;
-  }
-  const form = new FormData();
-  form.append("file", file);
-  if (replace) form.append("replace", "true");
+  if (btn.disabled) return;
+  const send = async replace => {
+    const form = new FormData();
+    form.append("file", file);
+    if (replace) form.append("replace", "true");
+    const res = await apiFetch(`${API_BASE}/cv`, { method: "POST", body: form });
+    return [res, await res.json().catch(() => ({}))];
+  };
+  const fail = message => {
+    result.textContent = `❌ ${message}`;
+    result.hidden = false;
+  };
+  const label = btn.textContent;
+  let uploaded = false;
+  result.hidden = true;
   btn.disabled = true;
   btn.textContent = "Uploading…";
   try {
-    const res = await apiFetch(`${API_BASE}/cv`, { method: "POST", body: form });
-    const out = await res.json().catch(() => ({}));
-    if (res.status === 409 && !replace) {
-      if (confirm(`${out.error}\n\nOK replaces it with the text of ${file.name}.`)) return uploadMyCV(true);
-      return;
+    let [res, out] = await send(false);
+    if (res.status === 409) {
+      if (!confirm(`${out.error}\n\nOK replaces it with the text of ${file.name}.`)) return;
+      [res, out] = await send(true);
     }
-    result.style.display = "block";
-    const tone = (bg, fg, border) => Object.assign(result.style, { backgroundColor: bg, color: fg, border: `1px solid ${border}` });
     if (!res.ok) {
-      tone("#fee2e2", "#991b1b", "#fecaca");
-      result.innerText = `❌ ${out.error || `HTTP ${res.status}`}`;
+      fail((out.error || `HTTP ${res.status}`).replace(/^invalid input: /, ""));
       return;
     }
-    tone("#dcfce7", "#166534", "#bbf7d0");
-    result.innerHTML = `✅ <strong>${esc(out.name)}</strong> uploaded, and its text is now in your profile's About me.<br>` +
-      `Add what you're looking for (pay, location, deal-breakers) to the same file so ratings fit you.`;
-    input.value = "";
-    showToast("CV uploaded", "success");
-    renderMyCV();
-    renderSetup();
+    uploaded = true;
+    showToast("CV added. Your profile is updated.", "success");
+  } catch (e) {
+    fail(e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Upload";
+    btn.textContent = label;
+  }
+  if (uploaded) {
+    renderMyCV();
+    renderSetup();
   }
 }
 

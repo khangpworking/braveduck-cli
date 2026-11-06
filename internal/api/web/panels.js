@@ -154,68 +154,170 @@ async function clearLocation() {
   refreshAppState();
 }
 
-// Readable names for keyword lists (keys mirror internal/core/keyword.Lists).
-const KEYWORD_LABELS = {
-  search_queries: "Search queries — what crawlers search for (comma-separated)",
-  positive_title: "Keep only titles containing one of these",
-  negative_title: "Drop if the title contains",
-  negative_content: "Drop if the title or description contains",
-  negative_company: "Drop these companies"
-};
+// --- Search terms window ---------------------------------------------------------
+// One question; the filter lists wait under More (keys mirror
+// internal/core/keyword.Lists). Every list goes back to the server on Save.
+const KEYWORD_FILTERS = [
+  ["negative_content", "Hide jobs that mention…", "In the title or the description."],
+  ["negative_title", "Hide jobs with these words in the title", ""],
+  ["negative_company", "Hide jobs from these companies", ""],
+  ["positive_title", "Only keep jobs with these words in the title", ""]
+];
+let keywordLists = null;
 
-// --- Job sources (schedule) panel -----------------------------------------------
-const EVERY_CHOICES = [[0, "Off"], [5, "Every 5 min"], [15, "Every 15 min"], [30, "Every 30 min"], [60, "Every hour"],
-  [120, "Every 2 hours"], [360, "Every 6 hours"], [720, "Every 12 hours"], [1440, "Once a day"]];
+// foldText lets "ke toan" find "Kế toán", as the server's filters do.
+function foldText(s) {
+  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/đ/g, "d");
+}
+
+function keywordCountLine(terms) {
+  if (!terms.length) return "";
+  const folded = terms.map(foldText);
+  const n = AppState.jobs.filter(j => {
+    const text = foldText(`${j.title} ${j.jd_full || ""}`);
+    return folded.some(t => text.includes(t));
+  }).length;
+  if (n === 0) return "No jobs on your board mention these yet.";
+  return n === 1 ? "1 job on your board mentions these." : `${n} jobs on your board mention these.`;
+}
+
+async function openKeywords() {
+  try {
+    keywordLists = await APIClient.getKeywords();
+    if (keywordLists.error) throw new Error(keywordLists.error);
+  } catch (e) {
+    showToast(`Couldn't load your search terms: ${e.message}`, "error");
+    return;
+  }
+  const queries = keywordLists.search_queries = keywordLists.search_queries || [];
+  const count = el("p", { class: "pf-hint", id: "keywordsCount" });
+  const updateCount = () => { count.textContent = keywordCountLine(queries); };
+  KEYWORD_FILTERS.forEach(([key]) => { keywordLists[key] = keywordLists[key] || []; });
+  const filters = KEYWORD_FILTERS.map(([key, label, hint]) => tagsField(label, hint, keywordLists[key], []));
+  const inUse = KEYWORD_FILTERS.reduce((n, [key]) => n + keywordLists[key].length, 0);
+  document.getElementById("keywordsForm").replaceChildren(
+    tagsField("What jobs should we look for?", "Job titles or skills, e.g. Kế toán, n8n.", queries, [], updateCount),
+    count,
+    el("details", { class: "pf-more" }, el("summary", {}, inUse ? `More (${inUse} in use)` : "More"), ...filters));
+  updateCount();
+  document.getElementById("keywordsModalOverlay").classList.add("open");
+}
+
+async function saveKeywords() {
+  // Keep a term the user typed without pressing Enter.
+  document.querySelectorAll("#keywordsForm .pf-tag-input").forEach(i => i.dispatchEvent(new Event("blur")));
+  try {
+    await APIClient.updateKeywords(keywordLists);
+  } catch (e) {
+    showToast(`Couldn't save: ${e.message}`, "error");
+    return;
+  }
+  document.getElementById("keywordsModalOverlay").classList.remove("open");
+  showToast("Search terms saved.", "success");
+  refreshAppState();
+}
+
+// --- Job sources window ----------------------------------------------------------
+// Job sites up front with one "Check now"; background tasks and external tools
+// wait under Advanced. The server says which is which and the shortest interval
+// each may use (an hour on a shared server).
+const EVERY_CHOICES = [[0, "off"], [5, "every 5 minutes"], [15, "every 15 minutes"], [30, "every 30 minutes"], [60, "every hour"],
+  [120, "every 2 hours"], [360, "every 6 hours"], [720, "every 12 hours"], [1440, "once a day"]];
+let sourceSites = [], sourcesNeedTerms = false, checkingSources = false;
+
+function everyLabel(minutes) {
+  const choice = EVERY_CHOICES.find(([m]) => m === minutes);
+  return choice ? choice[1] : `every ${minutes} minutes`;
+}
+
+// agoWords says how long ago in words: "5 minutes ago".
+function agoWords(dateString) {
+  const count = (n, unit) => `${n} ${unit}${n === 1 ? "" : "s"} ago`;
+  const min = Math.floor((Date.now() - new Date(dateString)) / 60000);
+  if (!(min >= 1)) return "just now";
+  if (min < 60) return count(min, "minute");
+  if (min < 1440) return count(Math.floor(min / 60), "hour");
+  return count(Math.floor(min / 1440), "day");
+}
+
+function sourceRow(sc, health, labelText) {
+  const site = sc.builtin && !sc.task;
+  const failed = health && health.lastError;
+  const state = !health || !health.lastRun ? (site ? "Not checked yet" : "Hasn't run yet")
+    : failed ? (site ? "The last check didn't work" : `⚠️ ${health.lastError}`)
+    : `${site ? "Last checked" : "Last ran"} ${agoWords(health.lastRun)}`;
+  const choices = EVERY_CHOICES.filter(([m]) => m === 0 || m >= sc.min_every_minutes);
+  if (!choices.some(([m]) => m === sc.every_minutes)) choices.push([sc.every_minutes, everyLabel(sc.every_minutes)]);
+  const unset = !sc.builtin && !sc.configured;
+  const select = el("select", { class: "text-input source-every", "aria-label": `${sc.name}: ${labelText}`, onchange: () => changeSchedule(sc, select) },
+    unset ? el("option", { value: "", selected: true, disabled: true }, "not set") : null,
+    choices.map(([m, label]) => el("option", { value: m, selected: !unset && m === sc.every_minutes }, label)));
+  return el("div", { class: "source-row" },
+    el("div", {}, el("strong", {}, sc.name), el("div", { class: "source-state" + (failed ? " bad" : "") }, state)),
+    el("label", { class: "source-every-label" }, labelText + " ", select));
+}
 
 async function renderSources() {
-  const list = document.getElementById("sourcesList");
-  const [scheds, status] = await Promise.all([APIClient.getCrawlSchedule(), APIClient.getCrawlStatus()]);
+  const [scheds, status, kw] = await Promise.all([APIClient.getCrawlSchedule(), APIClient.getCrawlStatus(), APIClient.getKeywords()]);
   const health = {};
   ((status && status.sources) || []).forEach(s => { health[s.name] = s; });
-  list.innerHTML = scheds.map(sc => {
-    const h = health[sc.source];
-    const state = !h ? "never run" : h.healthy ? `ok · ${h.count} new today` : `⚠️ ${h.lastError || "no recent run"}`;
-    // Built-ins hit someone else's server: no 5-minute option.
-    const choices = EVERY_CHOICES.filter(([m]) => !(sc.builtin && m > 0 && m < 15));
-    if (!choices.some(([m]) => m === sc.every_minutes)) choices.push([sc.every_minutes, `Every ${sc.every_minutes} min`]);
-    const options = choices.map(([m, label]) =>
-      `<option value="${m}" ${m === sc.every_minutes ? "selected" : ""}>${esc(label)}</option>`).join("");
-    const unset = !sc.builtin && !sc.configured ? `<option value="" selected disabled>Not set (tool's own default)</option>` : "";
-    return `
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
-        <div>
-          <strong>${esc(sc.source)}</strong>
-          <div style="font-size: 12px; color: var(--muted);">${sc.builtin ? "built-in" : "own tool"} · ${esc(state)}</div>
-        </div>
-        <div style="display: flex; gap: 6px; align-items: center;">
-          <select class="text-input" style="width: auto; padding: 4px 8px; font-size: 12px;"
-                  onchange="changeSchedule(${jsArg(sc.source)}, this)">${unset}${options}</select>
-          ${sc.builtin ? `<button class="btn-secondary btn-sm" onclick="crawlNow(${jsArg(sc.source)}, this)">Crawl now</button>` : ""}
-        </div>
-      </div>`;
-  }).join("");
+  sourceSites = scheds.filter(sc => sc.builtin && !sc.task);
+  sourcesNeedTerms = !(kw.search_queries && kw.search_queries.length);
+  const others = scheds.filter(sc => !sc.builtin || sc.task);
+  document.getElementById("sourcesList").replaceChildren(
+    ...sourceSites.map(sc => sourceRow(sc, health[sc.source], "Check for new jobs:")),
+    others.length ? el("details", { class: "pf-more" }, el("summary", {}, "Advanced"),
+      ...others.map(sc => sourceRow(sc, health[sc.source], "Runs:"))) : null);
+  renderCheckNow();
 }
 
-async function changeSchedule(source, select) {
-  try {
-    await APIClient.setCrawlSchedule(source, Number(select.value));
-    showToast(`${source}: ${select.options[select.selectedIndex].text.toLowerCase()}`, "success");
-  } catch (e) {
-    showToast(`Couldn't change the schedule: ${e.message}`, "error");
-  }
-  renderSources();
+// renderCheckNow shows the one action, or the one reason it can't run yet.
+function renderCheckNow() {
+  const on = sourceSites.some(sc => sc.every_minutes > 0);
+  const btn = document.getElementById("checkSourcesBtn");
+  btn.disabled = checkingSources || sourcesNeedTerms || !on;
+  btn.textContent = checkingSources ? "Checking…" : "Check now";
+  const addTerms = el("button", { type: "button", class: "btn-link", onclick: () => {
+    document.getElementById("sourcesModalOverlay").classList.remove("open");
+    openKeywords();
+  } }, "Add them");
+  document.getElementById("sourcesHint").replaceChildren(...(sourcesNeedTerms ? ["First tell us what jobs to look for. ", addTerms]
+    : on ? [] : ["All sites are off. Turn one on to check it."]));
 }
 
-async function crawlNow(source, btn) {
-  btn.disabled = true;
-  btn.textContent = "Crawling…";
+async function changeSchedule(sc, select) {
   try {
-    const r = await APIClient.retryCrawl(source);
-    showToast(r.message || "Done", r.ok === false ? "error" : "success");
+    await APIClient.setCrawlSchedule(sc.source, Number(select.value));
   } catch (e) {
-    showToast(`Crawl failed: ${e.message}`, "error");
+    showToast(`Couldn't change it: ${e.message}`, "error");
+    select.value = sc.configured || sc.builtin ? String(sc.every_minutes) : "";
+    return;
   }
-  renderSources();
+  // No redraw: arrow keys on this list must keep their place.
+  sc.every_minutes = Number(select.value);
+  sc.configured = true;
+  showToast(`${sc.name}: ${everyLabel(sc.every_minutes)}`, "success");
+  renderCheckNow();
+}
+
+// checkSources checks every site that's on. One crawl can take minutes, so
+// the window may close meanwhile.
+async function checkSources() {
+  const sites = sourceSites.filter(sc => sc.every_minutes > 0);
+  checkingSources = true;
+  renderCheckNow();
+  const runs = await Promise.allSettled(sites.map(sc => APIClient.retryCrawl(sc.source)));
+  checkingSources = false;
+  const added = runs.reduce((n, r) => n + ((r.value && r.value.result && r.value.result.added) || 0), 0);
+  // A site already being crawled (its schedule came up) is being checked.
+  const failed = sites.filter((sc, i) => {
+    const r = runs[i].value;
+    return !(r && (r.ok || /already being crawled/.test(r.error || "")));
+  }).map(sc => sc.name);
+  if (failed.length) showToast(`Couldn't check ${failed.join(" and ")}. Found ${added} new.`, "error");
+  else if (added) showToast(added === 1 ? "Found 1 new job." : `Found ${added} new jobs.`, "success");
+  else showToast("No new jobs right now.", "info");
+  await renderSources();
   refreshAppState();
 }
 

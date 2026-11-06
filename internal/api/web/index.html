@@ -115,31 +115,19 @@
     </div>
   </div>
 
-  <!-- Keywords Config Modal -->
+  <!-- Search terms window -->
   <div class="modal-overlay" id="keywordsModalOverlay">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Crawler Keywords Configuration">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Search terms">
       <div class="modal-header">
-        <h3 class="modal-title">Crawler Keywords Configuration</h3>
+        <h3 class="modal-title">Search terms</h3>
         <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <div id="keywordsForm">
-          <!-- Textareas for each crawler source dynamically loaded -->
-        </div>
-        
-        <div style="margin-top: var(--spacing-md); border-top: 1px solid var(--hairline); padding-top: var(--spacing-md);">
-          <h4 style="font-size: 14px; font-weight: 600; margin-bottom: var(--spacing-xs);">Keyword Change Match Preview</h4>
-          <p style="font-size: 12px; color: var(--muted); margin-bottom: var(--spacing-xs);">
-            Preview how your modified keywords would match current jobs in the database:
-          </p>
-          <div id="keywordsPreviewList" style="background: var(--surface-soft); padding: var(--spacing-sm); border-radius: var(--radius-sm); font-size: 12px; border: 1px dashed var(--border-strong); max-height: 150px; overflow-y: auto;">
-            No modified keywords to preview.
-          </div>
-        </div>
+        <div id="keywordsForm" class="profile-form"></div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary btn-sm modal-close-btn">Cancel</button>
-        <button class="btn-primary btn-sm" id="saveKeywordsBtn">Save all</button>
+        <button class="btn-primary btn-sm" id="saveKeywordsBtn">Save</button>
       </div>
     </div>
   </div>
@@ -211,15 +199,13 @@
         <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
-          How often each source looks for new jobs. Built-in crawlers run while this board is open and search
-          your <strong>Search queries</strong> keywords. Other sources (e.g. fb-watcher) run in their own tool,
-          which reads this setting.
-        </p>
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">We look for jobs on these sites.</p>
         <div id="sourcesList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        <p id="sourcesHint" style="font-size: 13px; margin: var(--spacing-sm) 0 0;"></p>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+        <button class="btn-primary btn-sm" id="checkSourcesBtn">Check now</button>
       </div>
     </div>
   </div>
@@ -256,18 +242,17 @@
         <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
-          Upload your CV once: a PDF, Word (.docx), Markdown (.md) or HTML file, up to 5 MB.
-          braveduck keeps the file on this computer to use when you apply, and copies its text into the
-          <strong>About me</strong> part of your profile, which jobs are rated and CVs are tailored against.
-        </p>
-        <div id="cvStatus" style="font-size: 13px; margin-bottom: var(--spacing-md);"></div>
-        <input type="file" id="cvFileInput" accept=".pdf,.docx,.md,.markdown,.html,.htm" style="font-size: 13px;">
-        <div id="cvResult" style="display: none; margin-top: var(--spacing-md); padding: 12px; border-radius: var(--radius-sm); font-size: 13px;"></div>
+        <div id="cvStatus" class="cv-status"></div>
+        <div id="cvDrop" class="cv-drop">
+          <input type="file" id="cvFileInput" accept=".pdf,.docx,.md,.markdown,.html,.htm" hidden>
+          <button class="btn-primary btn-sm" id="cvChooseBtn">Choose file</button>
+          <span class="cv-drop-text">or drop it here</span>
+          <div class="pf-hint" style="margin: 6px 0 0;">PDF or Word, up to 5 MB.</div>
+        </div>
+        <div id="cvResult" class="cv-error" role="alert" hidden></div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary btn-sm modal-close-btn">Close</button>
-        <button class="btn-primary btn-sm" id="cvUploadBtn">Upload</button>
       </div>
     </div>
   </div>
@@ -313,35 +298,38 @@
   </div>
 
   <div class="modal-overlay" id="ratingModalOverlay">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="AI Rating Configuration">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="How jobs get rated">
       <div class="modal-header">
-        <h3 class="modal-title">AI Rating Configuration</h3>
+        <h3 class="modal-title">How jobs get rated</h3>
         <button class="btn-close modal-close-btn" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: var(--spacing-md);">
-          <input type="checkbox" id="abModeCheckbox" style="width: 16px; height: 16px; accent-color: var(--primary);">
-          <label for="abModeCheckbox" style="cursor: pointer;">Enable A/B Rating Mode (Score using multiple models simultaneously)</label>
-        </div>
-        
-        <p style="font-size: 12px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
-          Raters are whichever AI you connect (e.g. Claude Code over MCP). Use the model id it reports
-          when it submits ratings.
-        </p>
-        <div class="form-group">
-          <label for="defaultModelInput">Default rater (owns the score badge)</label>
-          <input type="text" id="defaultModelInput" class="text-input" placeholder="e.g. claude-opus-5-5">
-        </div>
-
-        <div class="form-group" style="margin-top: var(--spacing-md);">
-          <label for="challengerModelsInput">Challenger raters (A/B mode, up to 2, comma-separated)</label>
-          <input type="text" id="challengerModelsInput" class="text-input" placeholder="e.g. gpt-sol-6-1, gemini-3-8">
-        </div>
-        <div id="ratingConfigError" style="display: none; color: var(--error); font-size: 12px; margin-top: 8px;"></div>
+        <p style="font-size: 13px; margin: 0 0 var(--spacing-md) 0;">Each job gets a grade from A to F, based on your profile.</p>
+        <details class="pf-more" id="ratingAdvanced">
+          <summary>Advanced</summary>
+          <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: var(--spacing-md);">
+            <input type="checkbox" id="abModeCheckbox" style="width: 16px; height: 16px; accent-color: var(--primary);">
+            <label for="abModeCheckbox" style="cursor: pointer;">Enable A/B Rating Mode (Score using multiple models simultaneously)</label>
+          </div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 var(--spacing-md) 0;">
+            Raters are whichever AI you connect (e.g. Claude Code over MCP). Use the model id it reports
+            when it submits ratings.
+          </p>
+          <div class="form-group">
+            <label for="defaultModelInput">Default rater (owns the score badge)</label>
+            <input type="text" id="defaultModelInput" class="text-input" placeholder="e.g. claude-opus-5-5">
+          </div>
+          <div class="form-group" style="margin-top: var(--spacing-md);">
+            <label for="challengerModelsInput">Challenger raters (A/B mode, up to 2, comma-separated)</label>
+            <input type="text" id="challengerModelsInput" class="text-input" placeholder="e.g. gpt-sol-6-1, gemini-3-8">
+          </div>
+          <div id="ratingConfigError" style="display: none; color: var(--error); font-size: 12px; margin-top: 8px;"></div>
+          <button class="btn-secondary btn-sm" id="saveRatingConfigBtn" style="margin-top: var(--spacing-sm);">Save</button>
+        </details>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary btn-sm modal-close-btn">Cancel</button>
-        <button class="btn-primary btn-sm" id="saveRatingConfigBtn">Save Configuration</button>
+        <button class="btn-secondary btn-sm modal-close-btn">Close</button>
+        <button class="btn-primary btn-sm" id="ratingProfileBtn">Edit my profile</button>
       </div>
     </div>
   </div>
@@ -361,7 +349,7 @@
   <!-- Scripts -->
   <!-- The board's script, in order: one global scope (classic scripts, no build step). -->
   <script src="core.js"></script>  <!-- API client, HTML safety, field adapters, app state -->
-  <script src="panels.js"></script>  <!-- settings windows: logins, location, sources -->
+  <script src="panels.js"></script>  <!-- settings windows: logins, location, search terms, sources -->
   <script src="widgets.js"></script>  <!-- refreshing state; header, Today, notifications -->
   <script src="board.js"></script>  <!-- the kanban board, cards and card details -->
   <script src="actions.js"></script>  <!-- card actions: ask your AI, setup, profile, CV, email, apply, drag and drop -->

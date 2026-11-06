@@ -496,7 +496,7 @@ func (s *Service) SetKeywords(ctx context.Context, sets keyword.Sets) (keyword.S
 func (s *Service) CrawlStatus(ctx context.Context) (store.CrawlStatusView, error) {
 	v, err := s.st.CrawlStatus(ctx, s.now(), s.builtinSources())
 	for i, src := range v.Sources {
-		v.Sources[i].Task = src.Name == TopCVSyncSource || src.Name == JevRateSource
+		v.Sources[i].Task = isTaskSource(src.Name)
 	}
 	return v, err
 }

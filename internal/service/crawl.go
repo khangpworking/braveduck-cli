@@ -12,6 +12,7 @@ import (
 	"github.com/khangpworking/braveduck-cli/internal/core/crawl"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
+	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 )
 
 // Crawling: braveduck's own crawlers (VietnamWorks…) fetch new jobs for the
@@ -251,10 +252,52 @@ func (s *Service) builtinSources() map[string]int {
 
 // SourceSchedule is one source's fetch setting.
 type SourceSchedule struct {
-	Source       string `json:"source"`
-	EveryMinutes int    `json:"every_minutes"` // 0 = off
-	Builtin      bool   `json:"builtin"`       // braveduck runs it; else an external tool reads the setting
-	Configured   bool   `json:"configured"`    // false = still on the default
+	Source          string `json:"source"`
+	Name            string `json:"name"`              // what the board calls it
+	EveryMinutes    int    `json:"every_minutes"`     // 0 = off
+	MinEveryMinutes int    `json:"min_every_minutes"` // the shortest interval allowed (other than off)
+	Builtin         bool   `json:"builtin"`           // braveduck runs it; else an external tool reads the setting
+	Task            bool   `json:"task"`              // a background task (rating, sync), not a job site
+	Configured      bool   `json:"configured"`        // false = still on the default
+}
+
+// isTaskSource reports whether source is a background task, not a job site.
+func isTaskSource(source string) bool {
+	return source == TopCVSyncSource || source == JevRateSource
+}
+
+// sourceName is a source's name for people: the site's own name when it's a
+// site braveduck knows, else its id (an external tool names itself).
+func sourceName(source string) string {
+	switch source {
+	case TopCVSyncSource:
+		return "TopCV application updates"
+	case JevRateSource:
+		return "Automatic job rating"
+	}
+	for _, site := range scrape.Sources {
+		if site.ID == source {
+			return site.Name
+		}
+	}
+	return source
+}
+
+// minEveryMinutes is the shortest interval a source may be set to.
+func (s *Service) minEveryMinutes(isBuiltin bool) int {
+	switch {
+	case !isBuiltin:
+		return MinEveryMinutes
+	case s.hosted != nil:
+		return HostedMinEveryMinutes // every user crawls the same sites, taking turns
+	default:
+		return MinBuiltinEveryMinutes
+	}
+}
+
+func (s *Service) sourceSchedule(source string, every int, isBuiltin, configured bool) SourceSchedule {
+	return SourceSchedule{Source: source, Name: sourceName(source), EveryMinutes: every, MinEveryMinutes: s.minEveryMinutes(isBuiltin),
+		Builtin: isBuiltin, Task: isTaskSource(source), Configured: configured}
 }
 
 // CrawlSchedules lists every known source: the built-in crawlers, plus any
@@ -284,7 +327,7 @@ func (s *Service) CrawlSchedules(ctx context.Context) ([]SourceSchedule, error) 
 		if !configured && isBuiltin {
 			every = def
 		}
-		out = append(out, SourceSchedule{Source: src, EveryMinutes: every, Builtin: isBuiltin, Configured: configured})
+		out = append(out, s.sourceSchedule(src, every, isBuiltin, configured))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Source < out[j].Source })
 	return out, nil
@@ -297,20 +340,14 @@ func (s *Service) SetCrawlSchedule(ctx context.Context, source string, everyMinu
 		return SourceSchedule{}, fmt.Errorf("%w: source %q: use lowercase letters, digits, - or _", ErrInvalid, source)
 	}
 	_, isBuiltin := s.builtinSources()[source]
-	min := MinEveryMinutes
-	if isBuiltin {
-		min = MinBuiltinEveryMinutes
-		if s.hosted != nil {
-			min = HostedMinEveryMinutes // every user crawls the same sites, taking turns
-		}
-	}
+	min := s.minEveryMinutes(isBuiltin)
 	if everyMinutes != 0 && (everyMinutes < min || everyMinutes > MaxEveryMinutes) {
 		return SourceSchedule{}, fmt.Errorf("%w: every %d min — use 0 (off) or %d to %d minutes", ErrInvalid, everyMinutes, min, MaxEveryMinutes)
 	}
 	if err := s.st.SetCrawlSchedule(ctx, source, everyMinutes); err != nil {
 		return SourceSchedule{}, err
 	}
-	return SourceSchedule{Source: source, EveryMinutes: everyMinutes, Builtin: isBuiltin, Configured: true}, nil
+	return s.sourceSchedule(source, everyMinutes, isBuiltin, true), nil
 }
 
 // RunScheduler crawls each built-in source when its interval has passed,

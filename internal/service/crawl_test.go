@@ -135,6 +135,20 @@ func TestCrawlSchedules(t *testing.T) {
 		t.Fatalf("jev-rate = %+v", jr)
 	}
 
+	// What the board's Job sources window goes by: names for people, which
+	// rows are job sites, and the shortest interval each may be set to.
+	if v := got["vietnamworks"]; v.Name != "VietnamWorks" || v.Task || v.MinEveryMinutes != MinBuiltinEveryMinutes {
+		t.Fatalf("vietnamworks = %+v", v)
+	}
+	if f := got["facebook"]; f.Name != "Facebook" || f.Task || f.MinEveryMinutes != MinEveryMinutes {
+		t.Fatalf("facebook = %+v", f)
+	}
+	for _, id := range []string{TopCVSyncSource, JevRateSource} {
+		if task := got[id]; !task.Task || task.Name == "" || task.Name == id {
+			t.Fatalf("%s = %+v", id, task)
+		}
+	}
+
 	for _, bad := range []struct {
 		src string
 		min int

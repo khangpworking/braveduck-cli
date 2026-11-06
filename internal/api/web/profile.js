@@ -19,16 +19,22 @@ function el(tag, attrs, ...kids) {
 }
 
 // tagsField: a list the user types into (Enter or comma adds), with
-// suggestions to tap.
-function tagsField(label, hint, list, suggestions) {
+// suggestions to tap. onChange (optional) runs after every change.
+function tagsField(label, hint, list, suggestions, onChange) {
   const box = el("div", { class: "pf-tags" });
   const input = el("input", { type: "text", class: "text-input pf-tag-input", "aria-label": label, placeholder: "Type and press Enter" });
   const sugg = el("div", { class: "pf-suggestions" });
+  // A key press on a button that goes away (detail 0: not a mouse or tap)
+  // moves on to the input, so keyboard users don't lose their place.
+  const refocus = e => { if (e.detail === 0) input.focus(); };
   const render = () => {
+    const typing = document.activeElement === input; // re-adding the input drops its focus
     box.replaceChildren(...list.map((v, i) => el("span", { class: "pf-tag" }, v,
-      el("button", { type: "button", class: "pf-tag-x", "aria-label": `Remove ${v}`, onclick: () => { list.splice(i, 1); render(); } }, "×"))), input);
+      el("button", { type: "button", class: "pf-tag-x", "aria-label": `Remove ${v}`, onclick: e => { list.splice(i, 1); render(); refocus(e); } }, "×"))), input);
+    if (typing) input.focus();
     sugg.replaceChildren(...(suggestions || []).filter(s => !list.some(v => v.toLowerCase() === s.toLowerCase()))
-      .map(s => el("button", { type: "button", class: "pf-suggestion", onclick: () => { list.push(s); render(); } }, "+ " + s)));
+      .map(s => el("button", { type: "button", class: "pf-suggestion", onclick: e => { list.push(s); render(); refocus(e); } }, "+ " + s)));
+    if (onChange) onChange();
   };
   const add = () => {
     for (const part of input.value.split(/[,;\n]/)) {
