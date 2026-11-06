@@ -174,7 +174,7 @@ func (s *Service) brief(ctx context.Context, js []jobs.Job) (RatingBrief, error)
 	if !p.Filled {
 		return RatingBrief{}, fmt.Errorf("%w — fill it in at %s, then rate again", ErrProfileEmpty, p.Path)
 	}
-	cfg, err := s.RatingConfig(ctx)
+	cfg, err := s.raterConfig(ctx)
 	if err != nil {
 		return RatingBrief{}, err
 	}
@@ -234,7 +234,7 @@ func (s *Service) RequestRating(ctx context.Context, id int64, model string) (Ra
 		// A Jev key lets a normal user rate without an agent, unless they
 		// already picked a different rater.
 		s.autoEnableJev(ctx)
-		cfg, err := s.RatingConfig(ctx)
+		cfg, err := s.raterConfig(ctx)
 		if err != nil {
 			return RatingRequest{}, err
 		}
@@ -281,7 +281,7 @@ func (s *Service) SubmitRating(ctx context.Context, v Verdict) (jobs.Job, error)
 	if err != nil {
 		return jobs.Job{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	cfg, err := s.RatingConfig(ctx)
+	cfg, err := s.raterConfig(ctx)
 	if err != nil {
 		return jobs.Job{}, err
 	}

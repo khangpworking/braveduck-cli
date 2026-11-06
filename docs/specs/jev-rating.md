@@ -53,9 +53,12 @@ write text, so CVs and emails stay with the user's own AI.
 - **Notice:** the board's rating window (⚙ Settings → Rating) says in one
   line that the profile and jobs are sent to TypeSafe's Jev to rate them.
 - **Opt-out:** in the same window, "Don't send my profile to Jev" stops Jev
-  for that user: no automatic rating and no Jev rating on demand. The choice
-  is saved in the user's own database, so on a shared server one user's
-  opt-out never affects another. Unticking it turns Jev back on.
+  for that user: no automatic rating and no Jev rating on demand. Jev is then
+  not their rater, so the Rate button asks their own AI instead (a rater Jev
+  kept as a challenger, else the out-of-box one), and that verdict owns the
+  grade. The choice is saved in the user's own database, so on a shared
+  server one user's opt-out never affects another. Unticking it turns Jev
+  back on.
 - **Key:** `TYPESAFE_API_KEY`, else the file `jev-route` uses
   (`~/.config/jev-route/typesafe.env`). It is read at call time, never
   printed, logged or stored, and redacted from errors (`Bearer ***`).

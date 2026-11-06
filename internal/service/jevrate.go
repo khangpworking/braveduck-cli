@@ -196,7 +196,7 @@ func (s *Service) JevRateQueue(ctx context.Context, limit int) (rated int, err e
 
 // jevIsDefault reports whether the board badge belongs to a Jev model.
 func (s *Service) jevIsDefault(ctx context.Context) bool {
-	c, err := s.RatingConfig(ctx)
+	c, err := s.raterConfig(ctx)
 	return err == nil && IsJevModel(c.DefaultModel)
 }
 
@@ -221,6 +221,26 @@ func (s *Service) SetJevOptOut(ctx context.Context, out bool) error {
 		v = "1"
 	}
 	return s.st.SetSetting(ctx, jevOptOutKey, v)
+}
+
+// raterConfig is the rater config this user's ratings follow. Once they opted
+// out of Jev, Jev isn't a rater for them: the raters it kept as challengers
+// (or the out-of-box rater) take over, so Rate asks their own AI instead.
+func (s *Service) raterConfig(ctx context.Context) (rating.Config, error) {
+	cfg, err := s.RatingConfig(ctx)
+	if err != nil || !IsJevModel(cfg.DefaultModel) {
+		return cfg, err
+	}
+	if out, err := s.JevOptedOut(ctx); err != nil || !out {
+		return cfg, err
+	}
+	var models []string
+	for _, m := range cfg.Models {
+		if !IsJevModel(m) {
+			models = append(models, m)
+		}
+	}
+	return rating.Normalize(rating.Config{ABEnabled: cfg.ABEnabled && len(models) > 1, Models: models}), nil
 }
 
 // JevAvailable reports whether a Jev key (or client) is there to rate with.

@@ -290,7 +290,14 @@ func TestJevOptOutStopsEnabledJev(t *testing.T) {
 	if res, err := s.Crawl(ctx, JevRateSource); err != nil || res.Added != 0 || fj.calls != 0 {
 		t.Fatalf("auto rate after opt-out = %+v, %v, %d calls", res, err, fj.calls)
 	}
-	if _, err := s.RequestRating(ctx, id, ""); !errors.Is(err, ErrJevOptedOut) || fj.calls != 0 {
-		t.Fatalf("Rate after opt-out = %v, %d calls", err, fj.calls)
+	// Rate falls back to the challenger Jev kept, through the "Ask your AI" prompt.
+	out, err := s.RequestRating(ctx, id, "")
+	if err != nil || out.Rated || out.Model != "claude-opus-5-5" || !strings.Contains(out.Prompt, `"claude-opus-5-5"`) || fj.calls != 0 {
+		t.Fatalf("Rate after opt-out = %+v, %v, %d Jev calls", out, err, fj.calls)
+	}
+	// That rater's verdict owns the grade.
+	j, err := s.SubmitRating(ctx, Verdict{JobID: id, Model: "claude-opus-5-5", Score: 4.2, Reasoning: "good Go match"})
+	if err != nil || j.ScoreStatus != "scored" || fj.calls != 0 {
+		t.Fatalf("fallback verdict = %+v, %v", j, err)
 	}
 }
