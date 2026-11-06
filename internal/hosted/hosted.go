@@ -78,7 +78,8 @@ type Options struct {
 type Server struct {
 	opts   Options
 	ctx    context.Context // ends every user's scheduler
-	logins *loginUsers     // nil: no users file to check
+	cancel context.CancelFunc
+	logins *loginUsers // nil: no users file to check
 
 	mu    sync.Mutex
 	users map[string]*tenant
@@ -98,7 +99,7 @@ var validUser = regexp.MustCompile(`^[a-z0-9][a-z0-9._@-]{0,63}$`)
 
 // New checks opts and opens the board of every user who already has a data
 // dir, so their crawls keep running after a restart even before they visit.
-// Cancelling ctx stops every scheduler; Close then closes the databases.
+// Cancelling ctx stops every scheduler; Close stops them and closes the databases.
 func New(ctx context.Context, opts Options) (*Server, error) {
 	switch {
 	case opts.Dir == "":
@@ -114,13 +115,14 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		return nil, err
 	}
 	_ = os.Chmod(opts.Dir, 0o700) // best effort: it may predate braveduck
-	s := &Server{opts: opts, ctx: ctx, users: map[string]*tenant{}}
-	if opts.UsersFile != "" {
-		s.logins = &loginUsers{path: opts.UsersFile}
-	}
 	entries, err := os.ReadDir(opts.Dir)
 	if err != nil {
 		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	s := &Server{opts: opts, ctx: ctx, cancel: cancel, users: map[string]*tenant{}}
+	if opts.UsersFile != "" {
+		s.logins = &loginUsers{path: opts.UsersFile}
 	}
 	for _, e := range entries {
 		if !e.IsDir() || !validUser.MatchString(e.Name()) {
@@ -292,9 +294,10 @@ func (s *Server) open(name string) (*tenant, error) {
 	return t, nil
 }
 
-// Close waits for the schedulers (cancel New's ctx first) and closes every
+// Close stops and waits for the schedulers and closes every
 // user's database.
 func (s *Server) Close() {
+	s.cancel()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for name, t := range s.users {
