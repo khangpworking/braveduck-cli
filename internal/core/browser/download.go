@@ -1,4 +1,4 @@
-// Package browser gives braveduck a built-in stealth browser so "Extract & Add"
+// Package browser gives braveduck a built-in stealth browser so "Add"
 // can render Cloudflare/JS-gated listings (TopCV, …) with zero external setup —
 // no Python, no pip, no manual browser install. It self-provisions CloakHQ's
 // patched Chromium (the same binary the CloakBrowser project ships, with its

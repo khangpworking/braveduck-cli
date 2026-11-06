@@ -1,5 +1,5 @@
 // JobPosting extraction: lift a listing's structured fields from its page so the
-// board's "Extract & Add" can ingest a URL with no AI. Job sites embed a
+// board's "Add" can ingest a URL with no AI. Job sites embed a
 // schema.org/JobPosting as <script type="application/ld+json">; that JSON is the
 // exact, authoritative source (title, company, salary, location, skills,
 // deadline), so we parse it rather than guess. Pasted free-text has no such

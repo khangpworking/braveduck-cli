@@ -213,7 +213,7 @@ on a normal desktop can; the browser's own cookie store has the same limit.
 Any Chromium (the built-in CloakBrowser included) needs `libnss3`, `libnspr4`
 and `libasound2`. Minimal WSL/Ubuntu images lack them:
 `sudo apt install -y libnss3 libasound2t64`. `doctor` checks for them and
-prints that command. This already affects today's "Extract & Add" browser
+prints that command. This already affects today's "Add" (paste a job) browser
 fallback.
 
 ## Out of scope

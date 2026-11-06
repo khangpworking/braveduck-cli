@@ -208,7 +208,7 @@ func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, list, err)
 }
 
-// createReq is the Extract & Add payload: a single pasted string that is either
+// createReq is the board's "Add" payload: a single pasted string that is either
 // a listing URL or free-text JD.
 type createReq struct {
 	Content string `json:"content"`
