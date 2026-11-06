@@ -18,7 +18,7 @@ if ! printf '%s' "$user" | grep -Eq '^[a-z0-9][a-z0-9._@-]{0,63}$'; then
 	exit 2
 fi
 db=${USERS_DB:-authelia/users_database.yml}
-if ! grep -q "^  $user:\$" "$db"; then
+if ! grep -Fqx "  $user:" "$db"; then
 	echo "$user isn't in $db" >&2
 	exit 1
 fi
