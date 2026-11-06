@@ -69,6 +69,22 @@ func TestStaleAfterFollowsSchedule(t *testing.T) {
 	}
 }
 
+// A source switched off isn't "stalled": it isn't meant to run. Only a
+// failed last run still shows.
+func TestSwitchedOffSourceIsNotStale(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	s.RecordCrawlRun(ctx, "careerlink", true, "", now)
+	s.SetCrawlSchedule(ctx, "careerlink", 0)
+	if src := source(t, s, now.Add(48*time.Hour), "careerlink"); !src.Healthy {
+		t.Fatal("a switched-off source flagged as stalled")
+	}
+	s.RecordCrawlRun(ctx, "careerlink", false, "HTTP 503", now)
+	if src := source(t, s, now.Add(time.Hour), "careerlink"); src.Healthy {
+		t.Fatal("a failed last run hidden because the source is off")
+	}
+}
+
 // A built-in on its default schedule (nothing stored) is judged by that
 // default: careerlink every 2 h isn't stalled 90 minutes after a run.
 func TestStaleAfterUsesDefaultSchedule(t *testing.T) {
