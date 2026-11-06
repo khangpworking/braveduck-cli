@@ -10,7 +10,8 @@ import (
 )
 
 // The profile form: the board's friendly editor for the profile, so nobody
-// has to write Markdown. The profile stays the Markdown file every rater
+// has to write Markdown. The board shows the fields that matter most for
+// ratings; the others are kept and still editable as text. The profile stays the Markdown file every rater
 // reads (profile_template.md); the form reads the lines it knows
 // ("- Minimum I'll accept: …" under "# Compensation", the "# Deal-breakers"
 // list, …) and writes only those back, in place. Anything else the user
@@ -64,10 +65,8 @@ type ProfileFormOptions struct {
 	JobTypes     []string `json:"job_types"`
 	Currencies   []string `json:"currencies"`
 	Periods      []string `json:"periods"`
-	DealBreakers []string `json:"deal_breakers"` // suggestions
-	Benefits     []string `json:"benefits"`
+	DealBreakers []string `json:"deal_breakers"` // suggestions: what the board also flags on job cards
 	Languages    []string `json:"languages"`
-	Values       []string `json:"values"`
 }
 
 // FormOptions is what the board offers in the profile form.
@@ -77,13 +76,10 @@ var FormOptions = ProfileFormOptions{
 	JobTypes:   []string{"Full-time", "Part-time", "Contract", "Freelance", "Internship"},
 	Currencies: []string{"VND", "USD"},
 	Periods:    []string{"month", "year", "hour"},
-	DealBreakers: []string{
-		"Working on Saturdays", "Night shifts", "Pay not stated (\"thỏa thuận\")",
-		"Commission-only pay", "Unpaid probation", "Too far from home", "Mostly sales / cold calling",
-	},
-	Benefits:  []string{"Social insurance (BHXH)", "13th-month salary", "Health insurance", "Laptop provided", "Training budget", "Flexible hours"},
-	Languages: []string{"Vietnamese", "English", "Japanese", "Korean", "Chinese"},
-	Values:    []string{"Growth", "Stability", "Good team", "Work-life balance", "Modern tech stack", "Mission"},
+	// Only what the board also spots in a job (core/jobs/dealbreakers.go);
+	// "too far" is the Location window's maximum commute.
+	DealBreakers: []string{"Working on Saturdays", "Pay not stated (\"thỏa thuận\")"},
+	Languages:    []string{"Vietnamese", "English", "Japanese", "Korean", "Chinese"},
 }
 
 // formLine ties a form field to its "- Label:" line in a section.
@@ -166,6 +162,9 @@ func WithProfileForm(text string, f ProfileForm) string {
 		case fl.list != nil:
 			v = joinList(*fl.list(&f))
 		case fl.money != nil:
+			if parseMoney(doc.lineValue(fl.section, fl.label)) == *fl.money(&f) {
+				continue // the same figure: keep it as the user wrote it
+			}
 			v = (*fl.money(&f)).String()
 		}
 		doc.setLine(fl.section, fl.label, v)
