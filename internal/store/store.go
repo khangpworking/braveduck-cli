@@ -259,12 +259,22 @@ func b2i(b bool) int {
 // already stored.
 var ErrDuplicateURL = errors.New("this job is already on the board")
 
+// ErrJobLimit means an insert would exceed the board's configured job cap.
+var ErrJobLimit = errors.New("the board is full")
+
 // Add inserts a new job and returns its id. now backfills any empty
 // SavedAt/CreatedAt/UpdatedAt with a single consistent ISO timestamp.
 //
 // A non-empty URL must be unique: the existence check and the insert are one
 // statement, so two concurrent adds of the same link can't both succeed.
 func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, error) {
+	return s.AddWithLimit(ctx, j, now, 0)
+}
+
+// AddWithLimit inserts only when the board has room. The capacity check and
+// insert are one write statement, including across separate database handles.
+// A non-positive limit leaves the board uncapped.
+func (s *Store) AddWithLimit(ctx context.Context, j jobs.Job, now time.Time, limit int) (int64, error) {
 	ts := now.UTC().Format(time.RFC3339)
 	if j.SavedAt == "" {
 		j.SavedAt = ts
@@ -279,18 +289,40 @@ func (s *Store) Add(ctx context.Context, j jobs.Job, now time.Time) (int64, erro
 
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(writeCols)), ",")
 	q := fmt.Sprintf(
-		"INSERT INTO jobs (%s) SELECT %s WHERE ? = '' OR NOT EXISTS (SELECT 1 FROM jobs WHERE url = ?)",
+		`INSERT INTO jobs (%s) SELECT %s
+		 WHERE (? = '' OR NOT EXISTS (SELECT 1 FROM jobs WHERE url = ?))
+		 AND (? <= 0 OR (SELECT COUNT(*) FROM jobs) < ?)`,
 		strings.Join(writeCols, ","), ph)
-	res, err := s.db.ExecContext(ctx, q, append(writeArgs(j), j.URL, j.URL)...)
+	// Keep the write lock until a rejected insert is classified, so a racing
+	// deletion cannot turn a full-board error into a duplicate error.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, q, append(writeArgs(j), j.URL, j.URL, limit, limit)...)
 	if err != nil {
 		return 0, err
 	}
 	if n, err := res.RowsAffected(); err != nil {
 		return 0, err
 	} else if n == 0 {
+		if limit > 0 {
+			var count int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs").Scan(&count); err != nil {
+				return 0, err
+			}
+			if count >= limit {
+				return 0, ErrJobLimit
+			}
+		}
 		return 0, ErrDuplicateURL
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
 }
 
 // Get returns the job with the given id, or sql.ErrNoRows when absent.

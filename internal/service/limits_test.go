@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/keyword"
+	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 func TestKeywordLimits(t *testing.T) {
@@ -42,6 +45,57 @@ func TestMaxJobs(t *testing.T) {
 	s.SetMaxJobs(0)
 	if _, err := s.AddJob(ctx, NewJob{Title: "Three", Company: "Duck Co"}); err != nil {
 		t.Fatalf("no cap: %v", err)
+	}
+}
+
+func TestMaxJobsConcurrentConnections(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "board.db")
+	var services []*Service
+	for range 2 {
+		st, err := store.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { st.Close() })
+		s := New(st)
+		s.SetMaxJobs(1)
+		services = append(services, s)
+	}
+	const writers = 32
+	start := make(chan struct{})
+	results := make(chan error, writers)
+	for i := range writers {
+		go func() {
+			<-start
+			_, err := services[i%len(services)].AddJob(ctx, NewJob{
+				Title: fmt.Sprintf("Position %d", i), Company: fmt.Sprintf("Employer %d", i),
+			})
+			results <- err
+		}()
+	}
+	close(start)
+	accepted := 0
+	for range writers {
+		err := <-results
+		if err == nil {
+			accepted++
+		} else if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "full") {
+			t.Errorf("concurrent add: %v", err)
+		}
+	}
+	list, err := services[0].ListJobs(ctx, ListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accepted != 1 || len(list) != 1 {
+		t.Fatalf("one-job cap: accepted %d requests, persisted %d jobs", accepted, len(list))
+	}
+	if _, err := services[0].DeleteJob(ctx, list[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := services[1].AddJob(ctx, NewJob{Title: "Replacement"}); err != nil {
+		t.Fatalf("capacity after deletion: %v", err)
 	}
 }
 
