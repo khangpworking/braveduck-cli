@@ -102,7 +102,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const saveRatingBtn = document.getElementById("saveRatingConfigBtn");
 
   ratingBtn.addEventListener("click", async () => {
-    const config = await APIClient.getRatingConfig();
+    // A second click while it's open (or still opening) must not reset it:
+    // that collapsed "Advanced" over whatever the user was doing.
+    if (ratingModal.classList.contains("open") || ratingModal.dataset.opening) return;
+    ratingModal.dataset.opening = "1";
+    let config;
+    try {
+      config = await APIClient.getRatingConfig();
+    } finally {
+      delete ratingModal.dataset.opening;
+    }
     document.getElementById("abModeCheckbox").checked = config.ab_mode;
     document.getElementById("defaultModelInput").value = config.default_model;
     document.getElementById("challengerModelsInput").value =
