@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -184,5 +185,35 @@ func TestDocBriefsNeedAProfile(t *testing.T) {
 	j, _ := s.AddJob(context.Background(), NewJob{Title: "X"})
 	if _, err := s.CVBrief(context.Background(), j.ID); !errors.Is(err, ErrProfileEmpty) {
 		t.Fatalf("empty profile = %v", err)
+	}
+}
+
+// Deleting a job deletes its tailored CVs, and only its own.
+func TestDeleteJobRemovesItsCVs(t *testing.T) {
+	s, id := docSvc(t)
+	ctx := context.Background()
+	other, _ := s.AddJob(ctx, NewJob{Title: "Other", Company: "Duck Co"})
+	cv := "# Alice\n\nGo developer with five years of building backend services."
+	for _, job := range []int64{id, id, other.ID} {
+		if _, err := s.SubmitCV(ctx, job, cv); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := filepath.Join(filepath.Dir(s.profilePath), "cvs")
+	os.WriteFile(filepath.Join(dir, fmt.Sprintf("job-%d-v1.pdf", id)), []byte("%PDF"), 0o600)
+	os.WriteFile(filepath.Join(dir, fmt.Sprintf("job-%d1-v1.md", id)), []byte("job #"+fmt.Sprint(id)+"1's"), 0o600)
+	if _, err := s.DeleteJob(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := filepath.Glob(filepath.Join(dir, "*"))
+	var names []string
+	for _, f := range left {
+		names = append(names, filepath.Base(f))
+	}
+	want := []string{fmt.Sprintf("job-%d-v1.md", other.ID), fmt.Sprintf("job-%d1-v1.md", id)}
+	slices.Sort(want)
+	slices.Sort(names)
+	if !slices.Equal(names, want) {
+		t.Fatalf("left in cvs/: %v, want %v", names, want)
 	}
 }

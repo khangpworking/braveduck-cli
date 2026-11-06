@@ -73,7 +73,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "set_status", "Move a job to a lane: saved, waiting, applied, interview, offer or closed.", idempotentWrite, t.setStatus)
 	add(srv, "pin_job", "Toggle a job's pin (pinned jobs sort first in their lane).", write, t.pinJob)
 	add(srv, "keep_job", "Toggle a job's keep flag (kept jobs are exempt from auto-clear).", write, t.keepJob)
-	add(srv, "delete_job", "Permanently delete a job and its ratings.", destructive, t.deleteJob)
+	add(srv, "delete_job", "Permanently delete a job, its ratings and its tailored CVs.", destructive, t.deleteJob)
 	add(srv, "get_profile", "The user's profile (CV + what they want) that jobs are rated against, its file path, and whether it has been filled in.", readOnly, t.getProfile)
 	add(srv, "upload_cv", "Upload the user's CV from a file on this computer (.pdf, .docx, .md or .html, up to 5 MB): it is kept for applying, and its text goes into the profile's \"About me\". If About me already has the user's own text this fails unless replace is true — ask the user first.", write, t.uploadCV)
 	add(srv, "update_profile", "Replace the user's profile (Markdown: \"# About me\", \"# What I'm looking for\", compensation, location, deal-breakers…) that jobs are rated against. Read it with get_profile first and keep the user's own words; only write what the user told you.", idempotentWrite, t.updateProfile)

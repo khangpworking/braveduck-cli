@@ -110,7 +110,7 @@ Also keep `authelia/users_database.yml`, `.env` and `secrets/`.
   nobody can see it. The board says so and offers neither. To apply through
   your accounts, run braveduck on your own computer.
 - **AI agents** connect over HTTPS to `https://BOARD_DOMAIN/mcp` with a key
-  each person makes on their board (**Ask your AI → Make a key for your
+  each person makes on their board (**⚙ Settings → 🤖 Connect your AI
   agent**), never their password. The board shows the command once, e.g.:
 
   ```bash

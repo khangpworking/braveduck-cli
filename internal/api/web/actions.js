@@ -20,7 +20,7 @@ async function askAI(kind, id, model) {
     return;
   }
   askState = { kind, id, req };
-  renderAgentConnect();
+  renderAskConnect();
   const titles = { rate: "Rate this job with your AI", cv: "Tailor your CV with your AI", draft: "Draft the email with your AI" };
   document.getElementById("askTitle").textContent = titles[kind];
   document.getElementById("askPrompt").textContent = req.prompt;
@@ -98,16 +98,28 @@ async function renderSetup() {
 }
 
 // On a shared server the agent reaches this board's MCP over HTTPS with a
-// key made here (shown once; the server keeps only its hash).
+// key made in the "Connect your AI agent" window (shown once; the server
+// keeps only its hash). Ask your AI points there; so does ⚙ Settings, so a
+// new user with an empty board can connect too.
+function renderAskConnect() {
+  document.getElementById("askConnect").hidden = !(AppState.setup && AppState.setup.hosted);
+}
+
+function openAgentModal() {
+  document.getElementById("askModalOverlay").classList.remove("open");
+  document.getElementById("agentModalOverlay").classList.add("open");
+  renderAgentConnect();
+}
+
 async function renderAgentConnect() {
-  const hosted = AppState.setup && AppState.setup.hosted;
-  document.getElementById("askConnect").hidden = !hosted;
-  if (!hosted) return;
-  document.getElementById("askConnectCmd").hidden = true;
+  document.getElementById("agentConnectCmd").hidden = true;
   try {
     const st = await APIClient.get("agent-key");
     document.getElementById("agentKeyRevoke").hidden = !st.exists;
     document.getElementById("agentKeyNew").textContent = st.exists ? "Make a new key (the old one stops working)" : "Make a key for your agent";
+    document.getElementById("agentConnectText").textContent = st.exists
+      ? "Your agent has a key. Make a new one if you lost it."
+      : "Make a key, then run the command it shows once in a terminal.";
   } catch {}
 }
 
@@ -119,10 +131,10 @@ async function newAgentKey() {
     showToast(e.message, "error");
     return;
   }
-  const cmd = document.getElementById("askConnectCmd");
+  const cmd = document.getElementById("agentConnectCmd");
   cmd.textContent = `claude mcp add --transport http braveduck ${location.origin}/mcp \\\n  --header "Authorization: Bearer ${res.key}"`;
   cmd.hidden = false;
-  document.getElementById("askConnectText").textContent = "Run this once in a terminal. The key is shown only now — copy it:";
+  document.getElementById("agentConnectText").textContent = "Run this once in a terminal. The key is shown only now — copy it:";
   document.getElementById("agentKeyRevoke").hidden = false;
 }
 
@@ -141,6 +153,7 @@ async function revokeAgentKey() {
 function renderHostedUser(hosted) {
   const el = document.getElementById("hostedUser");
   el.hidden = !hosted;
+  document.getElementById("agentBtn").hidden = !hosted;
   if (!hosted) return;
   el.innerHTML = `${esc(hosted.user)}${hosted.logout_url ? `<a href="${safeUrl(hosted.logout_url)}">Log out</a>` : ""}`;
 }

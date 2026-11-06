@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -365,8 +367,22 @@ func (s *Service) DeleteJob(ctx context.Context, id int64) (jobs.Job, error) {
 	if err := s.st.Delete(ctx, id); err != nil {
 		return jobs.Job{}, notFound(err)
 	}
+	s.removeJobFiles(id)
 	s.logEvent(ctx, "removed", fmt.Sprintf("Removed %q", j.Title))
 	return j, nil
+}
+
+// removeJobFiles deletes a deleted job's tailored CVs (cvs/job-<id>-v<n>.md
+// and the PDFs made from them). Best effort: the job is gone either way.
+func (s *Service) removeJobFiles(id int64) {
+	if s.profilePath == "" {
+		return
+	}
+	dir := filepath.Join(filepath.Dir(s.profilePath), "cvs")
+	files, _ := filepath.Glob(filepath.Join(dir, fmt.Sprintf("job-%d-v*", id)))
+	for _, f := range files {
+		_ = os.Remove(f)
+	}
 }
 
 // --- config, keywords, status feeds ---
