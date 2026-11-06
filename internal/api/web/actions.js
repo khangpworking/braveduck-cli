@@ -185,7 +185,7 @@ async function renderMyCV() {
     return;
   }
   status.replaceChildren(
-    el("span", { class: "cv-line" }, t("✓ {name}, added {time}", { name: out.cv.name, time: agoWords(out.cv.uploaded_at) })),
+    el("span", { class: "cv-line" }, t("✓ {name}, added {time}", { name: out.cv.name, time: I18N.lang === "en" ? agoWords(out.cv.uploaded_at) : timeAgo(out.cv.uploaded_at) })),
     el("button", { type: "button", class: "btn-link", onclick: downloadMyCV }, t("Download")));
 }
 
