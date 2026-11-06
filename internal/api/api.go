@@ -334,7 +334,7 @@ func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, ev, err)
 }
 
-// retryCrawl runs a built-in crawler now (the board's "Retry" / "Crawl now").
+// retryCrawl runs a built-in crawler now (the board's "Retry" / "Check now").
 // External sources run in their own tool, so there's nothing to start here;
 // that's a 501 with a clear message rather than a faked success.
 func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {

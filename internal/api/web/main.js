@@ -86,43 +86,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Keywords Config Modal
+  // Search terms window
   const keywordsModal = document.getElementById("keywordsModalOverlay");
-  const keywordsBtn = document.getElementById("keywordsBtn");
-  const saveKeywordsBtn = document.getElementById("saveKeywordsBtn");
-
-  keywordsBtn.addEventListener("click", async () => {
-    const kw = await APIClient.getKeywords();
-    const container = document.getElementById("keywordsForm");
-    
-    container.innerHTML = Object.keys(kw).map(source => `
-      <div class="form-group">
-        <label for="kw-${esc(source)}">${esc(KEYWORD_LABELS[source] || source)}</label>
-        <textarea id="kw-${esc(source)}" class="textarea-input" style="height: 60px;" oninput="previewKeywordMatches()">${esc(kw[source].join(", "))}</textarea>
-      </div>
-    `).join("");
-
-    previewKeywordMatches();
-    keywordsModal.classList.add("open");
-  });
-
-  saveKeywordsBtn.addEventListener("click", async () => {
-    const kw = {};
-    document.querySelectorAll("#keywordsForm textarea").forEach(ta => {
-      const source = ta.id.replace("kw-", "");
-      kw[source] = ta.value.split(",").map(w => w.trim()).filter(Boolean);
-    });
-    
-    try {
-      await APIClient.updateKeywords(kw);
-    } catch (e) {
-      showToast(`Couldn't save keywords: ${e.message}`, "error");
-      return;
-    }
-    keywordsModal.classList.remove("open");
-    showToast("Keywords saved.", "success");
-    refreshAppState();
-  });
+  document.getElementById("keywordsBtn").addEventListener("click", openKeywords);
+  document.getElementById("saveKeywordsBtn").addEventListener("click", saveKeywords);
 
   // Rating Config Modal
   const ratingModal = document.getElementById("ratingModalOverlay");
@@ -136,6 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("challengerModelsInput").value =
       config.models.filter(m => m !== config.default_model).join(", ");
     document.getElementById("ratingConfigError").style.display = "none";
+    document.getElementById("ratingAdvanced").open = false;
     ratingModal.classList.add("open");
   });
 
@@ -163,6 +131,11 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshAppState();
   });
 
+  document.getElementById("ratingProfileBtn").addEventListener("click", () => {
+    ratingModal.classList.remove("open");
+    openProfile();
+  });
+
 
   document.getElementById("locationBtn").addEventListener("click", openLocationWindow);
   document.getElementById("useMyLocationBtn").addEventListener("click", useMyLocation);
@@ -176,6 +149,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sourcesModal.classList.add("open");
     await renderSources();
   });
+  document.getElementById("checkSourcesBtn").addEventListener("click", checkSources);
 
   // Settings menu: one button for the less-used windows. A pick closes the
   // menu and opens its window (each item keeps its old id and listener).
@@ -264,11 +238,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const cvModal = document.getElementById("cvModalOverlay");
   document.getElementById("myCVBtn").addEventListener("click", async () => {
-    document.getElementById("cvResult").style.display = "none";
+    document.getElementById("cvResult").hidden = true;
     cvModal.classList.add("open");
     await renderMyCV();
   });
-  document.getElementById("cvUploadBtn").addEventListener("click", () => uploadMyCV(false));
+  wireCVUpload(cvModal);
 
   const platformsModal = document.getElementById("platformsModalOverlay");
   document.getElementById("platformsBtn").addEventListener("click", async () => {
@@ -318,37 +292,3 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initial load
   refreshAppState();
 });
-
-// Keywords Change Match Preview
-function previewKeywordMatches() {
-  const previewBox = document.getElementById("keywordsPreviewList");
-  const jobs = AppState.jobs;
-  
-  // Compile active keywords from textareas
-  const kwList = [];
-  document.querySelectorAll("#keywordsForm textarea").forEach(ta => {
-    const vals = ta.value.split(",").map(v => v.trim()).filter(Boolean);
-    kwList.push(...vals);
-  });
-
-  if (kwList.length === 0) {
-    previewBox.innerText = "No keywords entered. Match count: 0 jobs.";
-    return;
-  }
-
-  const matches = jobs.filter(j => {
-    const text = `${j.title} ${j.company} ${j.jd_full || ""}`.toLowerCase();
-    return kwList.some(kw => text.includes(kw.toLowerCase()));
-  });
-
-  if (matches.length === 0) {
-    previewBox.innerText = "0 matches found across current jobs database.";
-  } else {
-    previewBox.innerHTML = `
-      <strong>${matches.length} matching jobs found:</strong>
-      <ul style="margin: 4px 0 0 0; padding-left: 16px;">
-        ${matches.map(j => `<li>${esc(j.title)} at ${esc(j.company)} (${esc(j.discovery_source)})</li>`).join("")}
-      </ul>
-    `;
-  }
-}
