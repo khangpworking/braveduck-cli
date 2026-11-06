@@ -1298,3 +1298,51 @@ a:hover {
     display: none;
   }
 }
+
+/* --- Profile form ---------------------------------------------------------- */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.profile-form { display: flex; flex-direction: column; gap: 14px; }
+.pf-section {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.pf-title { margin: 0 0 8px 0; font-size: 14px; }
+.pf-field { margin-bottom: 10px; }
+.pf-field:last-child { margin-bottom: 0; }
+.pf-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.pf-hint { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.pf-tags {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 6px;
+}
+.pf-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface-soft); border: 1px solid var(--hairline);
+  border-radius: 999px; padding: 4px 6px 4px 10px; font-size: 13px;
+}
+.pf-tag-x {
+  border: none; background: none; cursor: pointer; font-size: 16px; line-height: 1;
+  min-width: 24px; min-height: 24px; color: var(--muted);
+}
+.pf-tag-input { flex: 1; min-width: 140px; border: none !important; padding: 4px !important; }
+.pf-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pf-suggestion, .pf-choice {
+  border: 1px solid var(--hairline); background: #fff; border-radius: 999px;
+  padding: 6px 12px; font-size: 13px; cursor: pointer; min-height: 32px;
+}
+.pf-suggestion { color: var(--muted); }
+.pf-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.pf-choice.on { background: #111827; color: #fff; border-color: #111827; }
+.pf-money { display: flex; flex-wrap: wrap; gap: 6px; }
+.pf-amount { flex: 1 1 140px; }
+.pf-select { flex: 0 1 auto; width: auto; }
+.pf-more summary { cursor: pointer; font-size: 13px; font-weight: 600; margin-bottom: 8px; }

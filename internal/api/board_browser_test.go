@@ -1073,21 +1073,41 @@ func TestBoardGetStarted(t *testing.T) {
 		t.Fatalf("%d open steps on a fresh board, want 3", n)
 	}
 
-	// Step 2 opens the editor on the real profile template.
+	// Step 2 opens the profile form: no Markdown to write.
 	page.MustElement(`#setupSteps button[data-setup="wants"]`).MustEval(`() => this.click()`)
-	page.MustElementR("#profileStatus", "Still empty")
-	text := page.MustElement("#profileText")
-	if v := text.MustProperty("value").Str(); !strings.Contains(v, "# What I'm looking for") {
-		t.Fatalf("editor = %.80q, want the profile template", v)
+	page.MustElementR("#profileStatus", "Not filled in yet")
+	waitVisible(page, "#profileFormBody .pf-tag-input")
+	if page.MustEval(`() => document.getElementById("profileTextBody").hidden`).Bool() == false {
+		t.Fatal("the Markdown editor shows first")
 	}
-	page.MustEval(`() => { const t = document.getElementById("profileText");
-		t.value = t.value.replace("- Target roles / job titles:", "- Target roles / job titles: Marketing AI, AI automation")
-			.replace("# What I'm looking for", "Marketing executive, 3 years of AI automation with n8n.\n\n# What I'm looking for"); }`)
+	roles := page.MustElement(`#profileFormBody input[aria-label="Job titles"]`)
+	roles.MustInput("Marketing AI")
+	roles.MustType(input.Enter)
+	roles.MustInput("AI automation")
+	roles.MustType(input.Enter)
+	page.MustElementR("#profileFormBody .pf-choice", "^Remote$").MustEval(`() => this.click()`)
+	page.MustElementR("#profileFormBody .pf-suggestion", "Working on Saturdays").MustEval(`() => this.click()`)
+	page.MustElement(`#profileFormBody input[aria-label="The least you'd accept amount"]`).MustInput("15000000")
+	page.MustElement(`#profileFormBody textarea[aria-label="Your experience and skills"]`).MustInput("Marketing executive, 3 years of AI automation with n8n.")
 	clickID(page, "saveProfileBtn")
 	page.MustElementR("#profileStatus", "Filled in")
 	b, _ := os.ReadFile(filepath.Join(dir, "profile.md"))
-	if !strings.Contains(string(b), "Target roles / job titles: Marketing AI, AI automation") {
-		t.Fatalf("profile file not saved:\n%s", b)
+	for _, want := range []string{
+		"- Target roles / job titles: Marketing AI, AI automation\n",
+		"- Remote / hybrid / on-site preference: Remote\n",
+		"- Minimum I'll accept: 15,000,000 VND per month\n",
+		"- Working on Saturdays\n",
+		"Marketing executive, 3 years of AI automation with n8n.",
+	} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("profile file missing %q:\n%s", want, b)
+		}
+	}
+	// "Edit as text" still shows the whole file.
+	clickID(page, "profileModeBtn")
+	page.MustWait(`() => !document.getElementById("profileTextBody").hidden`)
+	if v := page.MustElement("#profileText").MustProperty("value").Str(); !strings.Contains(v, "Marketing AI, AI automation") {
+		t.Fatalf("text editor = %.200q", v)
 	}
 	page.MustElement(`#setupSteps li.done`)
 

@@ -71,6 +71,8 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
 	mux.HandleFunc("GET /api/profile", s.getProfile)
 	mux.HandleFunc("PUT /api/profile", s.putProfile)
+	mux.HandleFunc("GET /api/profile/form", s.getProfileForm)
+	mux.HandleFunc("PUT /api/profile/form", s.putProfileForm)
 	mux.HandleFunc("GET /api/setup", s.getSetup)
 	mux.HandleFunc("GET /api/today", s.getToday)
 	mux.HandleFunc("GET /api/export.csv", s.exportCSV)

@@ -244,13 +244,17 @@
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: var(--muted); margin: 0 0 var(--spacing-sm) 0;">
-          Every job is rated against this. Fill in what applies to you, in any language: what you're looking for,
-          your minimum pay, where you can work, and your deal-breakers. Lines inside <code>&lt;!-- --&gt;</code> are hints and are ignored.
+          Every job is rated against this. Fill in what applies to you, in any language — skip anything you're unsure about.
         </p>
         <div id="profileStatus" style="font-size: 13px; margin-bottom: var(--spacing-sm);"></div>
-        <textarea id="profileText" class="textarea-input profile-editor" spellcheck="false" aria-label="Profile (Markdown)"></textarea>
+        <div id="profileFormBody" class="profile-form"></div>
+        <div id="profileTextBody" hidden>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 6px 0;">The whole profile as text (Markdown). Lines inside <code>&lt;!-- --&gt;</code> are hints and are ignored.</p>
+          <textarea id="profileText" class="textarea-input profile-editor" spellcheck="false" aria-label="Profile (Markdown)"></textarea>
+        </div>
       </div>
       <div class="modal-footer">
+        <button class="btn-link btn-sm" id="profileModeBtn" style="margin-right:auto;">Edit as text instead</button>
         <button class="btn-secondary btn-sm modal-close-btn">Close</button>
         <button class="btn-primary btn-sm" id="saveProfileBtn">Save</button>
       </div>
@@ -372,6 +376,7 @@
   <script src="widgets.js"></script>  <!-- refreshing state; header, Today, crawl panel, filters, notifications -->
   <script src="board.js"></script>  <!-- the kanban board, cards and card details -->
   <script src="actions.js"></script>  <!-- card actions: ask your AI, setup, profile, CV, email, apply, drag and drop -->
+  <script src="profile.js"></script>  <!-- the profile form -->
   <script src="live.js"></script>  <!-- live updates, toasts, the activity strip, time helpers -->
   <script src="main.js"></script>  <!-- start-up: wires every button and window -->
 </body>

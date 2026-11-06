@@ -260,6 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const profileModal = document.getElementById("profileModalOverlay");
   document.getElementById("profileBtn").addEventListener("click", openProfile);
   document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
+  document.getElementById("profileModeBtn").addEventListener("click", toggleProfileMode);
 
   const cvModal = document.getElementById("cvModalOverlay");
   document.getElementById("myCVBtn").addEventListener("click", async () => {
