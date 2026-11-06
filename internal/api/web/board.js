@@ -436,13 +436,20 @@ function primaryAction(job) {
   if (job.apply_state === "confirm") return "";
   const apply = applyButton(job, job.cv_status === "ready");
   if (apply) return apply;
-  if (job.apply_method !== "on-site" && job.draft_email && job.draft_status !== "sent") {
+  if (draftIsPrimary(job)) {
     return `<button class="btn-primary card-primary" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>`;
   }
   if (job.url) {
     return `<a class="btn-primary card-primary" href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer">Open the job ↗</a>`;
   }
   return move("I applied", "Applied");
+}
+
+// draftIsPrimary: the card's main button sends the unsent email draft.
+function draftIsPrimary(job) {
+  return (job.status === "Saved" || job.status === "Waiting to apply") &&
+    job.apply_state !== "confirm" && !applyButton(job, job.cv_status === "ready") &&
+    job.apply_method !== "on-site" && !!job.draft_email && job.draft_status !== "sent";
 }
 
 // Render expanded card detail panel contents
@@ -624,7 +631,7 @@ function renderCardDetailContents(job, detailContainer) {
             ${isSent
               ? `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">✓ Sent (you confirmed sending it).</p>`
               : `<div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
-                   ${job.status === "Applied" ? `<button class="btn-secondary btn-sm" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>` : ""}
+                   ${!draftIsPrimary(job) ? `<button class="btn-secondary btn-sm" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>` : ""}
                    <button class="btn-secondary btn-sm" onclick="askAI('draft', '${job.id}')">Re-draft</button>
                    <button class="btn-danger btn-sm" style="padding: 6px 12px; font-size:12px;" onclick="rejectEmailDraft('${job.id}')">Discard</button>
                  </div>

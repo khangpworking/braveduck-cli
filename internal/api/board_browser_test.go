@@ -1435,6 +1435,9 @@ func TestBoardApplyOnAnySite(t *testing.T) {
 	st.SaveSession(ctx, store.PlatformSession{Platform: "vietnamworks", Enc: []byte{1}, CreatedAt: "x", FPSeed: "1", Status: store.SessionConnected})
 	ready, _ := svc.AddJob(ctx, service.NewJob{Title: "Growth Marketer", URL: "https://www.vietnamworks.com/growth-marketer-1-jv"})
 	svc.SubmitCV(ctx, ready.ID, "# A\n\n## Experience\n- Growth marketing with SQL and Python for five years")
+	if _, err := svc.SubmitDraft(ctx, ready.ID, service.Draft{To: "hr@example.com", Subject: "Growth Marketer", Body: "Hello, I'd like to apply; my CV is attached."}); err != nil {
+		t.Fatal(err)
+	}
 	asked, _ := svc.AddJob(ctx, service.NewJob{Title: "Data Analyst", URL: "https://www.vietnamworks.com/data-analyst-2-jv"})
 	st.SetApplyState(ctx, asked.ID, "confirm", "did you submit it on VietnamWorks?", time.Now())
 	noLogin, _ := svc.AddJob(ctx, service.NewJob{Title: "On JobOKO", URL: "https://vn.joboko.com/viec-lam-x-xvi1"})
@@ -1453,6 +1456,12 @@ func TestBoardApplyOnAnySite(t *testing.T) {
 	}, "no Apply on VietnamWorks button")
 	if page.MustEval(`() => [...document.querySelectorAll("button")].some(b => /Apply on (JobOKO|TopCV)/.test(b.textContent))`).Bool() {
 		t.Fatal("an Apply button for a site without a login")
+	}
+	// Applying on the site is the main action, so the draft's send button
+	// stays in the email editor under More.
+	page.MustElement(fmt.Sprintf("#detail-%d .card-more > summary", ready.ID)).MustEval(`() => this.click()`)
+	if !page.MustEval(`id => [...document.querySelectorAll("#detail-" + id + " .card-more button")].some(b => b.textContent === "Send from my mail app")`, ready.ID).Bool() {
+		t.Fatal("no way to send the draft when Apply on the site is the main action")
 	}
 
 	page.MustElementR(".apply-confirm", "Did you submit it on VietnamWorks").MustElementR("button", "Yes, I applied").MustEval(`() => this.click()`)
