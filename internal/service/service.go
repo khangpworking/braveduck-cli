@@ -141,7 +141,7 @@ func (s *Service) AddJob(ctx context.Context, in NewJob) (jobs.Job, error) {
 	return s.add(ctx, j, true)
 }
 
-// AddFromContent is "Extract & Add", done without any AI: content is a link
+// AddFromContent is the board's "Add", done without any AI: content is a link
 // from a supported site (scrape.Sources), optionally followed by the job's
 // text, or a pasted JD on its own. Job-site links are fetched and their
 // schema.org JobPosting lifted verbatim; a Facebook link is never fetched, so

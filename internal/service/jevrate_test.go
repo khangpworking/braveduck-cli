@@ -129,3 +129,175 @@ func TestJevErrorsStopAndReport(t *testing.T) {
 		t.Fatal("scored despite the error")
 	}
 }
+
+// A board with a Jev key but no rater picked yet starts rating with Jev, so a
+// normal user never has to copy a prompt into an agent.
+func TestAutoEnableJevWhenKeyPresent(t *testing.T) {
+	s, _ := newRatingSvc(t)
+	ctx := context.Background()
+	old := loadJevKey
+	t.Cleanup(func() { loadJevKey = old })
+	loadJevKey = func() (string, string, error) { return "test-key", "test", nil }
+
+	if !s.autoEnableJev(ctx) {
+		t.Fatal("Jev not enabled with a key and no chosen rater")
+	}
+	cfg, err := s.RatingConfig(ctx)
+	if err != nil || !IsJevModel(cfg.DefaultModel) {
+		t.Fatalf("rater = %+v, %v; want Jev", cfg, err)
+	}
+	if chosen, err := s.st.RatingConfigChosen(ctx); err != nil || !chosen {
+		t.Fatalf("choice not saved: %v, %v", chosen, err)
+	}
+	// A second call is stable and doesn't add models.
+	before := cfg
+	if !s.autoEnableJev(ctx) {
+		t.Fatal("second auto-enable lost Jev")
+	}
+	if after, _ := s.RatingConfig(ctx); len(after.Models) != len(before.Models) || after.DefaultModel != before.DefaultModel {
+		t.Fatalf("config changed: %+v -> %+v", before, after)
+	}
+}
+
+// Without a key nothing changes: the out-of-box default rater stays.
+func TestAutoEnableJevNeedsKey(t *testing.T) {
+	s, _ := newRatingSvc(t)
+	ctx := context.Background()
+	if s.autoEnableJev(ctx) {
+		t.Fatal("enabled Jev without a key")
+	}
+	if cfg, _ := s.RatingConfig(ctx); IsJevModel(cfg.DefaultModel) {
+		t.Fatalf("rater changed without a key: %+v", cfg)
+	}
+	if chosen, _ := s.st.RatingConfigChosen(ctx); chosen {
+		t.Fatal("a rater choice was saved without a key")
+	}
+}
+
+// Once the user picks a rater, a Jev key must not take over.
+func TestAutoEnableJevLeavesChosenRater(t *testing.T) {
+	s, _ := newRatingSvc(t)
+	ctx := context.Background()
+	if _, err := s.SetRatingConfig(ctx, rating.Config{Models: []string{"claude-opus-5-5"}, DefaultModel: "claude-opus-5-5"}); err != nil {
+		t.Fatal(err)
+	}
+	old := loadJevKey
+	t.Cleanup(func() { loadJevKey = old })
+	loadJevKey = func() (string, string, error) { return "test-key", "test", nil }
+
+	if s.autoEnableJev(ctx) {
+		t.Fatal("overrode the user's chosen rater")
+	}
+	if cfg, _ := s.RatingConfig(ctx); cfg.DefaultModel != "claude-opus-5-5" {
+		t.Fatalf("rater = %+v, want the chosen one", cfg)
+	}
+}
+
+// The board's Rate button uses Jev at once when it is available and unchosen.
+func TestRequestRatingAutoUsesJev(t *testing.T) {
+	s, id := docSvc(t) // filled profile, one job
+	fj := &fakeJev{}
+	s.SetJev(fj)
+	out, err := s.RequestRating(context.Background(), id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Rated || out.Job == nil || out.Job.ScoreStatus != "scored" || fj.calls != 1 {
+		t.Fatalf("rate = %+v after %d Jev calls", out, fj.calls)
+	}
+	if cfg, _ := s.RatingConfig(context.Background()); !IsJevModel(cfg.DefaultModel) {
+		t.Fatalf("rater = %+v, want Jev", cfg)
+	}
+}
+
+// The scheduled job also turns Jev on for a keyed, unchosen board.
+func TestRunJevRateAutoEnables(t *testing.T) {
+	s, id := docSvc(t)
+	fj := &fakeJev{}
+	s.SetJev(fj)
+	res, err := s.Crawl(context.Background(), JevRateSource)
+	if err != nil || res.Added != 1 || fj.calls != 1 {
+		t.Fatalf("auto rate = %+v, %v, %d calls", res, err, fj.calls)
+	}
+	if j, _ := s.GetJob(context.Background(), id); j.ScoreStatus != "scored" {
+		t.Fatalf("job not scored: %+v", j)
+	}
+	if cfg, _ := s.RatingConfig(context.Background()); !IsJevModel(cfg.DefaultModel) {
+		t.Fatalf("rater = %+v, want Jev", cfg)
+	}
+}
+
+// Opting out stops automatic Jev rating for that user only: on a shared
+// server each user has their own database, so another user's board keeps
+// rating with Jev.
+func TestJevOptOutIsPerUser(t *testing.T) {
+	ctx := context.Background()
+	alice, aliceID := docSvc(t)
+	alice.SetHosted(HostedInfo{User: "alice"})
+	aliceJev := &fakeJev{}
+	alice.SetJev(aliceJev)
+	bob, bobID := docSvc(t)
+	bob.SetHosted(HostedInfo{User: "bob"})
+	bobJev := &fakeJev{}
+	bob.SetJev(bobJev)
+
+	if err := alice.SetJevOptOut(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := alice.JevOptedOut(ctx); err != nil || !out {
+		t.Fatalf("alice opt-out not remembered: %v, %v", out, err)
+	}
+	if out, _ := bob.JevOptedOut(ctx); out {
+		t.Fatal("alice's opt-out leaked to bob")
+	}
+
+	if res, err := alice.Crawl(ctx, JevRateSource); err != nil || res.Added != 0 || aliceJev.calls != 0 {
+		t.Fatalf("opted-out auto rate = %+v, %v, %d calls", res, err, aliceJev.calls)
+	}
+	if j, _ := alice.GetJob(ctx, aliceID); j.ScoreStatus == "scored" {
+		t.Fatal("opted-out job was scored by Jev")
+	}
+	if cfg, _ := alice.RatingConfig(ctx); IsJevModel(cfg.DefaultModel) {
+		t.Fatalf("opt-out still made Jev the rater: %+v", cfg)
+	}
+	if _, err := alice.JevRate(ctx, aliceID); !errors.Is(err, ErrJevOptedOut) || aliceJev.calls != 0 {
+		t.Fatalf("JevRate after opt-out = %v, %d calls", err, aliceJev.calls)
+	}
+
+	if res, err := bob.Crawl(ctx, JevRateSource); err != nil || res.Added != 1 || bobJev.calls != 1 {
+		t.Fatalf("bob auto rate = %+v, %v, %d calls", res, err, bobJev.calls)
+	}
+	if j, _ := bob.GetJob(ctx, bobID); j.ScoreStatus != "scored" {
+		t.Fatalf("bob's job not scored: %+v", j)
+	}
+
+	// Turning it back on lets Jev rate alice's jobs again.
+	if err := alice.SetJevOptOut(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := alice.Crawl(ctx, JevRateSource); err != nil || res.Added != 1 || aliceJev.calls != 1 {
+		t.Fatalf("opted back in auto rate = %+v, %v, %d calls", res, err, aliceJev.calls)
+	}
+}
+
+// Opting out also stops a board where Jev is already the rater.
+func TestJevOptOutStopsEnabledJev(t *testing.T) {
+	s, fj, id := jevSvc(t)
+	ctx := context.Background()
+	if err := s.SetJevOptOut(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := s.Crawl(ctx, JevRateSource); err != nil || res.Added != 0 || fj.calls != 0 {
+		t.Fatalf("auto rate after opt-out = %+v, %v, %d calls", res, err, fj.calls)
+	}
+	// Rate falls back to the challenger Jev kept, through the "Ask your AI" prompt.
+	out, err := s.RequestRating(ctx, id, "")
+	if err != nil || out.Rated || out.Model != "claude-opus-5-5" || !strings.Contains(out.Prompt, `"claude-opus-5-5"`) || fj.calls != 0 {
+		t.Fatalf("Rate after opt-out = %+v, %v, %d Jev calls", out, err, fj.calls)
+	}
+	// That rater's verdict owns the grade.
+	j, err := s.SubmitRating(ctx, Verdict{JobID: id, Model: "claude-opus-5-5", Score: 4.2, Reasoning: "good Go match"})
+	if err != nil || j.ScoreStatus != "scored" || fj.calls != 0 {
+		t.Fatalf("fallback verdict = %+v, %v", j, err)
+	}
+}

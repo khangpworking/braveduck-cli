@@ -400,8 +400,8 @@ func (s *Service) runDue(ctx context.Context) {
 		if sc.Source == TopCVSyncSource && !s.platformConnected(ctx, "topcv") {
 			continue // nothing to sync without a login; don't flag it as failing
 		}
-		if sc.Source == JevRateSource && !s.jevIsDefault(ctx) {
-			continue // Jev isn't the rater; nothing to do
+		if sc.Source == JevRateSource && !s.autoEnableJev(ctx) {
+			continue // no Jev key, the user picked another rater, or opted out of Jev
 		}
 		if t, ok := last[sc.Source]; ok && s.now().Sub(t) < time.Duration(sc.EveryMinutes)*time.Minute {
 			continue

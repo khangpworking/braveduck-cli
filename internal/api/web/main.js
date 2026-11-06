@@ -32,16 +32,21 @@ document.addEventListener("DOMContentLoaded", () => {
   closeBtn.addEventListener("click", closeDrawer);
   overlay.addEventListener("click", closeDrawer);
 
-  // Extract & Add Job Button Event
+  // Add Job Button Event
   const extractBtn = document.getElementById("extractAddBtn");
   const pasteTextarea = document.getElementById("pasteJDTextarea");
   const extractResultBanner = document.getElementById("extractResultBanner");
 
   extractBtn.addEventListener("click", async () => {
     const content = pasteTextarea.value;
+    if (!content.trim()) {
+      showToast("Paste a link or the job text first", "info");
+      pasteTextarea.focus();
+      return;
+    }
     try {
       extractBtn.disabled = true;
-      extractBtn.innerText = "Extracting details...";
+      extractBtn.innerText = "Adding…";
       
       const newJob = await APIClient.addJob(content);
       if (newJob.group) { // a Facebook group's link: following it
@@ -63,7 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.backgroundColor = "#dcfce7";
       extractResultBanner.style.color = "#166534";
       extractResultBanner.style.border = "1px solid #bbf7d0";
-      extractResultBanner.innerHTML = `✨ <strong>Job Added Successfully (#${newJob.id})</strong><br>Extracted: ${esc(newJob.title)} at ${esc(newJob.company)}.`;
+      extractResultBanner.innerHTML = `✅ <strong>Job added</strong><br>${esc(newJob.title)}` +
+        (newJob.company ? ` at ${esc(newJob.company)}` : "");
       extractResultBanner.style.display = "block";
       pasteTextarea.value = "";
       
@@ -87,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
       extractResultBanner.style.display = "block";
     } finally {
       extractBtn.disabled = false;
-      extractBtn.innerText = "Extract & Add";
+      extractBtn.innerText = "Add";
     }
   });
 
@@ -118,7 +124,24 @@ document.addEventListener("DOMContentLoaded", () => {
       config.models.filter(m => m !== config.default_model).join(", ");
     document.getElementById("ratingConfigError").style.display = "none";
     document.getElementById("ratingAdvanced").open = false;
+    showJev(await APIClient.getJev().catch(() => ({ available: false, opt_out: false })));
     ratingModal.classList.add("open");
+  });
+
+  // Jev: a short notice that the profile is sent, and a per-user opt-out.
+  const jevOptOut = document.getElementById("jevOptOutCheckbox");
+  function showJev(j) {
+    document.getElementById("jevBlock").hidden = !(j.available || j.opt_out);
+    document.getElementById("jevNotice").hidden = j.opt_out;
+    jevOptOut.checked = j.opt_out;
+  }
+  jevOptOut.addEventListener("change", async () => {
+    try {
+      showJev(await APIClient.setJevOptOut(jevOptOut.checked));
+    } catch (e) {
+      jevOptOut.checked = !jevOptOut.checked;
+      showToast(e.message, "error");
+    }
   });
 
   saveRatingBtn.addEventListener("click", async () => {
