@@ -200,7 +200,7 @@ async function openKeywords() {
   document.getElementById("keywordsForm").replaceChildren(
     tagsField(t("What jobs should we look for?"), t("Job titles or skills, e.g. Kế toán, n8n."), queries, [], updateCount),
     count,
-    el("details", { class: "pf-more" }, el("summary", {}, inUse ? t("More ({n} in use)", {n: inUse.toLocaleString(I18N.lang)}) : t("More")), ...filters));
+    el("details", { class: "pf-more" }, el("summary", {}, inUse ? t("More filters ({n} in use)", {n: inUse.toLocaleString(I18N.lang)}) : t("More filters")), ...filters));
   updateCount();
   document.getElementById("keywordsModalOverlay").classList.add("open");
 }

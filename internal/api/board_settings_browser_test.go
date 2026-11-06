@@ -105,7 +105,7 @@ func TestSearchTermsWindow(t *testing.T) {
 
 	openModal(t, page, "keywordsBtn", "keywordsModalOverlay")
 	text := onScreen(page, "#keywordsModalOverlay")
-	assertSays(t, "the window", text, "What jobs should we look for?", "More (1 in use)")
+	assertSays(t, "the window", text, "What jobs should we look for?", "More filters (1 in use)")
 	assertNotSays(t, "the window", text, "crawler", "comma", "Hide jobs", "preview", "Bad Co")
 
 	in := page.MustElement(`#keywordsForm input[aria-label="What jobs should we look for?"]`)
