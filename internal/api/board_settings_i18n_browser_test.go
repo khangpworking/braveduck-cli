@@ -129,7 +129,7 @@ func TestSettingsVietnamese(t *testing.T) {
 	page.MustElement("#placeSearch").MustInput("Landmark 81")
 	page.Keyboard.MustType(input.Enter)
 	page.MustElementR("#placeResults button", "Bình Thạnh").MustClick()
-	assertSays(t, "picked location", onScreen(page, "#locationPicked"), "Vị trí chọn:", "10,79490", "106,72190")
+	assertSays(t, "picked location", onScreen(page, "#locationPicked"), "Vị trí chọn:", "10,79490; 106,72190")
 	page.MustElement("#saveLocationBtn").MustClick()
 	page.MustElementR("#toastContainer", "Đã lưu vị trí")
 
