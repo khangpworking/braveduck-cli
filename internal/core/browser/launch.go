@@ -175,20 +175,22 @@ func launchRemote(ctx context.Context, svc string, o launchOpts) (*rod.Browser, 
 	redact := func(err error) error {
 		return fmt.Errorf("browser: the browser service at %s: %s", svc, strings.ReplaceAll(err.Error(), addr, svc))
 	}
-	l, err := launcher.NewManaged(addr)
+	client, disconnect, err := connectService(ctx, addr, o.Seed)
 	if err != nil {
-		return nil, nil, redact(err)
-	}
-	l = withFlags(l.Context(ctx).Headless(true).Leakless(true), o.Seed)
-	client, err := l.Client()
-	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, fmt.Errorf("browser: connect to the browser service: %w", ctx.Err())
+		}
 		return nil, nil, redact(err)
 	}
 	b := rod.New().Client(client).Context(ctx)
 	if err := b.Connect(); err != nil {
+		disconnect()
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		return nil, nil, fmt.Errorf("browser: connect to the browser service: %w", err)
 	}
-	return b, func() { _ = b.Close() }, nil
+	return b, func() { _ = b.Close(); disconnect() }, nil
 }
 
 // LibsHint explains the most common launch failure on minimal Linux (WSL,
