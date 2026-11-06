@@ -97,3 +97,26 @@ var fbPostParams = []string{"story_fbid", "id", "fbid", "v"}
 
 // fbGroupRE matches a bare group link: /groups/<id>/.
 var fbGroupRE = regexp.MustCompile(`^/groups/([^/]+)/?$`)
+
+// FacebookGroup reports whether raw is a link to a Facebook group itself
+// (not one of its posts), and returns the group's key (its id or name, as
+// in facebook.com/groups/<key>) and its canonical link.
+func FacebookGroup(raw string) (key, link string, ok bool) {
+	src, canonical, ok := SupportedLink(raw)
+	if !ok || src.ID != "facebook" {
+		return "", "", false
+	}
+	u, err := url.Parse(canonical)
+	if err != nil || u.RawQuery != "" {
+		return "", "", false
+	}
+	m := fbGroupRE.FindStringSubmatch(u.Path)
+	if m == nil || !fbGroupKeyRE.MatchString(m[1]) {
+		return "", "", false
+	}
+	key = strings.ToLower(m[1])
+	return key, "https://www.facebook.com/groups/" + key + "/", true
+}
+
+// fbGroupKeyRE is what a group's id or name may look like.
+var fbGroupKeyRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)

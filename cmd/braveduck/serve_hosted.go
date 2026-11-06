@@ -38,6 +38,8 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	maxUsers := fs.Int("max-users", 50, "most users the server holds")
 	maxBrowsers := fs.Int("max-browsers", 2, "most browsers (crawls, page fetches, PDFs) running at once, for all users together")
 	logout := fs.String("logout-url", "", "the login service's log-out page, linked from the board")
+	scannerAddr := fs.String("scanner-addr", "", "listen address for the Facebook scanner (fb-watcher); off when empty — never expose it publicly")
+	scannerKeyFile := fs.String("scanner-key-file", "", "file holding the scanner's key (required with --scanner-addr)")
 	usersFile := fs.String("login-users-file", "", "the login service's users file (Authelia's users_database.yml): agent keys of users removed or disabled there stop working")
 	maxJobs := fs.Int("max-jobs-per-user", 5000, "jobs each user's board holds (0 = no limit)")
 	jevDaily := fs.Int("jev-daily-limit", 50, "Jev ratings per user per day, paid by the server's key (0 = no limit)")
@@ -70,6 +72,12 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	}
 	defer func() { cancel(); h.Close() }()
 
+	if *scannerAddr != "" {
+		if err := serveScanner(ctx, h, *scannerAddr, *scannerKeyFile); err != nil {
+			return err
+		}
+	}
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", *addr, err)
@@ -89,5 +97,32 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	return nil
+}
+
+// serveScanner starts the Facebook scanner's API on its own listener.
+func serveScanner(ctx context.Context, h *hosted.Server, addr, keyFile string) error {
+	if keyFile == "" {
+		return errors.New("--scanner-addr needs --scanner-key-file")
+	}
+	b, err := os.ReadFile(keyFile)
+	if err != nil {
+		return fmt.Errorf("read the scanner key: %w", err)
+	}
+	key := strings.TrimSpace(string(b))
+	if len(key) < 32 {
+		return errors.New("the scanner key must be at least 32 characters")
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", addr, err)
+	}
+	srv := &http.Server{Handler: h.Scanner(key), ReadHeaderTimeout: 10 * time.Second}
+	go func() {
+		<-ctx.Done()
+		_ = srv.Close()
+	}()
+	go func() { _ = srv.Serve(ln) }()
+	fmt.Printf("Facebook scanner API on %s\n", ln.Addr())
 	return nil
 }

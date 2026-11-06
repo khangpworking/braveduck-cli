@@ -13,6 +13,7 @@ import (
 
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
+	"github.com/khangpworking/braveduck-cli/internal/core/scrape"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 )
 
@@ -50,6 +51,11 @@ func cmdAdd(ctx context.Context, svc *service.Service, args []string) error {
 // addFromContent is `braveduck add <link> [text…]`: the board's paste box.
 // A "-" argument reads that part from stdin (for a long post).
 func addFromContent(ctx context.Context, svc *service.Service, args []string) error {
+	if len(args) == 1 {
+		if _, _, ok := scrape.FacebookGroup(args[0]); ok { // a group's link: follow it
+			return cmdFacebook(ctx, svc, []string{"follow", args[0]})
+		}
+	}
 	parts := make([]string, len(args))
 	for i, a := range args {
 		if a == "-" {

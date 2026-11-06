@@ -58,7 +58,12 @@ every browser runs in the browser service (`braveduck browser-service`:
 go-rod's launcher manager behind a key, its own container in
 `deploy/hosted`) instead of beside the users' data. Agent keys stop working
 when their user is disabled or removed in Authelia's users file
-(`--login-users-file`). Setup and an end-to-end test of the
+(`--login-users-file`). Facebook groups: a pasted group link is followed
+(`service/facebook.go`, table `fb_groups`); a scanner (fb-watcher) uses the
+scanner API (`--scanner-addr`, its own key and network) to list followed
+groups, report each one's name and visibility, and hand over public groups'
+posts, which each follower's board filters by its own search terms. On one
+computer the same contract is `braveduck facebook status|ingest`. Setup and an end-to-end test of the
 chain: `deploy/hosted`.
 
 **Tests.** `go test ./...` (unit; CI adds `-race` and staticcheck) and

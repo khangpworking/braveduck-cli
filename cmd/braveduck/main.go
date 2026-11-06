@@ -32,6 +32,10 @@ Jobs
              Facebook link; text after the link is the post or JD ("-" reads
              it from stdin). Job text on its own works too.
   add --title ...   add a job field by field (--company, --url, --salary, --source, --jd)
+  facebook follow <group link> | groups | unfollow <key>
+             follow Facebook groups (also: add <group link>); a public
+             group's matching posts come in through a scanner (fb-watcher):
+             facebook status <key> --visibility … and facebook ingest <key>
   today      what to act on now: best matches, deadlines this week, follow-ups
   export [--json] [--out file]   every job as CSV (or full JSON records)
   backup [file]   copy the database now (default: ~/.braveduck/backups/, where
@@ -160,6 +164,8 @@ func run(args []string) error {
 	switch cmd {
 	case "add":
 		return cmdAdd(ctx, svc, rest)
+	case "facebook", "fb":
+		return cmdFacebook(ctx, svc, rest)
 	case "today":
 		return cmdToday(ctx, svc)
 	case "backup":

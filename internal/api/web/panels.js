@@ -252,3 +252,39 @@ async function disconnectPlatform(id) {
   }
   renderPlatforms();
 }
+
+// --- Facebook groups (in the Add Job drawer) ----------------------------------
+const FB_GROUP_STATUS = {
+  checking: ["⏳ Checking whether it's public…", "var(--muted)"],
+  public: ["🌐 Public — its job posts come to your board", "var(--success-border)"],
+  private: ["🔒 Private — only members see its posts. Paste the posts you want (link + text).", "#b45309"],
+  unavailable: ["⚠️ Can't be read right now", "var(--error)"],
+};
+
+async function renderFBGroups() {
+  const block = document.getElementById("fbGroupsBlock");
+  let groups = [];
+  try {
+    groups = await APIClient.get("facebook-groups");
+  } catch {
+    return;
+  }
+  block.hidden = groups.length === 0;
+  document.getElementById("fbGroupsList").innerHTML = groups.map(g => {
+    const [label, color] = FB_GROUP_STATUS[g.visibility] || [g.visibility, "var(--muted)"];
+    return `<li style="display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--hairline);">
+      <span><a href="${safeUrl(g.url)}" target="_blank" rel="noopener noreferrer">${esc(g.name || g.url)}</a>
+        <span style="display:block; font-size:12px; color:${color};">${esc(label)}${g.note ? " — " + esc(g.note) : ""}</span></span>
+      <button class="btn-secondary btn-sm" onclick="unfollowFBGroup(${jsArg(g.key)})">Unfollow</button></li>`;
+  }).join("");
+}
+
+async function unfollowFBGroup(key) {
+  try {
+    await APIClient.del(`facebook-groups/${encodeURIComponent(key)}`);
+  } catch (e) {
+    showToast(e.message, "error");
+    return;
+  }
+  renderFBGroups();
+}

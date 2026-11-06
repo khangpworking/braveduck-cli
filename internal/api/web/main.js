@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function openDrawer() {
     drawer.classList.add("open");
     overlay.classList.add("open");
+    renderFBGroups();
   }
 
   function closeDrawer() {
@@ -36,7 +37,21 @@ document.addEventListener("DOMContentLoaded", () => {
       extractBtn.innerText = "Extracting details...";
       
       const newJob = await APIClient.addJob(content);
-      
+      if (newJob.group) { // a Facebook group's link: following it
+        const g = newJob.group;
+        extractResultBanner.className = "success";
+        extractResultBanner.style.backgroundColor = "#dcfce7";
+        extractResultBanner.style.color = "#166534";
+        extractResultBanner.style.border = "1px solid #bbf7d0";
+        extractResultBanner.innerHTML = newJob.added
+          ? `📘 <strong>Following this Facebook group.</strong><br>braveduck checks whether it's public; if it is, job posts that match your search terms come to your board by themselves.`
+          : `📘 You already follow this group.`;
+        extractResultBanner.style.display = "block";
+        pasteTextarea.value = "";
+        renderFBGroups();
+        return;
+      }
+
       extractResultBanner.className = "success";
       extractResultBanner.style.backgroundColor = "#dcfce7";
       extractResultBanner.style.color = "#166534";
