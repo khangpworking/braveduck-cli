@@ -22,8 +22,8 @@ const childEnv = "BRAVEDUCK_PDF_TEXT_CHILD"
 
 // Child limits.
 const (
-	childMemory  = 1 << 30 // address space, bytes
-	childTime    = 30 * time.Second
+	childMemory  = 512 << 20 // writable memory, bytes (a CV needs far less)
+	childTime    = 15 * time.Second
 	childMaxText = 4 << 20 // bytes of text read back
 )
 
