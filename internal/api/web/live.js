@@ -83,30 +83,58 @@ function showToast(message, type = "success") {
   }, 3000);
 }
 
-// Activity Logs Feed Render
+// Recent activity: hidden until the 🔔 button opens it.
 function renderActivityLog() {
   const feed = document.getElementById("logFeed");
   const activity = AppState.activity;
 
   if (activity.length === 0) {
-    feed.innerHTML = `<div class="log-item"><span class="log-time">—</span> <span>No system activity logged yet.</span></div>`;
+    feed.innerHTML = `<li class="log-item">Nothing yet.</li>`;
     return;
   }
 
-  feed.innerHTML = activity.slice(0, 5).map(act => {
+  feed.innerHTML = activity.slice(0, 20).map(act => {
     let icon = "✅";
     if (act.type === "error") icon = "❌";
     if (act.type === "info") icon = "🔄";
-    
+
     return `
-      <div class="log-item">
-        <span class="log-time">${esc(act.timestamp)}</span>
+      <li class="log-item">
         <span class="log-icon">${icon}</span>
-        <span>${esc(act.message)}</span>
-      </div>
+        <span class="log-message">${esc(act.message)}</span>
+        <span class="log-time">${esc(act.timestamp)}</span>
+      </li>
     `;
   }).join("");
 }
+
+function setActivityOpen(open) {
+  document.getElementById("activityPanel").hidden = !open;
+  document.getElementById("activityBtn").setAttribute("aria-expanded", String(open));
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("activityBtn");
+  const panel = document.getElementById("activityPanel");
+  const closeBtn = document.getElementById("activityCloseBtn");
+  btn.addEventListener("click", () => {
+    setActivityOpen(panel.hidden);
+    if (!panel.hidden) closeBtn.focus();
+  });
+  closeBtn.addEventListener("click", () => {
+    setActivityOpen(false);
+    btn.focus();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !panel.hidden) {
+      setActivityOpen(false);
+      btn.focus();
+    }
+  });
+  document.addEventListener("click", e => {
+    if (!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target)) setActivityOpen(false);
+  });
+});
 
 // Helpers
 function timeAgo(dateString) {

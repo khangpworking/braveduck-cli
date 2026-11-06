@@ -202,7 +202,7 @@ GET    /api/keywords                crawler keyword lists
 PUT    /api/keywords
 
 GET    /api/events                  SSE stream (mirrors current live-update behavior)
-GET    /api/activity                recent activity log (for the log strip)
+GET    /api/activity                recent activity log (for the 🔔 panel)
 ```
 
 Response shapes mirror the fields already enumerated in

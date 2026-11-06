@@ -25,73 +25,79 @@ function payUndisclosed(salary) {
   return !s || /thoa thuan|thuong luong|canh tranh|negotiable|competitive/.test(s);
 }
 
+// How many cards a lane shows before "Show N more".
+const LANE_PAGE = 10;
+// Lanes opened with "Show N more", cards revealed from elsewhere (a Today item,
+// a duplicate paste) that stay shown past the cut, and which <details> are
+// open: a refresh rebuilds every card, and none of these should reset.
+const fullLanes = new Set();
+const revealedCards = new Set();
+const openDetails = new Set();
+
+const SORT_RATED = "Best rated first";
+const SORT_NEWEST = "Newest first";
+
+function isRated(job) {
+  return job.score_status === "scored";
+}
+
+// savedSort: the user's choice, else best rated as soon as anything is rated.
+function savedSort(jobs) {
+  return AppState.sorting.Saved || (jobs.some(isRated) ? SORT_RATED : SORT_NEWEST);
+}
+
+function matchesSearch(job) {
+  const hay = foldText([job.title, job.company, job.location, job.skills, job.salary, job.notes, job.discovery_source].join(" "));
+  return foldText(AppState.filters.query).split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
+
 function renderBoard() {
   const columns = ["Saved", "Waiting to apply", "Applied", "Interview", "Offer", "Closed"];
   const container = document.getElementById("kanbanBoard");
+  const focus = boardFocus();
   container.innerHTML = "";
 
-  // Apply filters
-  let filteredJobs = AppState.jobs;
-  if (AppState.filters.platform !== "All") {
-    filteredJobs = filteredJobs.filter(j => j.discovery_source === AppState.filters.platform);
-  }
-  const words = foldText(AppState.filters.query).split(/\s+/).filter(Boolean);
-  if (words.length) {
-    filteredJobs = filteredJobs.filter(j => {
-      const hay = foldText([j.title, j.company, j.location, j.skills, j.salary, j.notes, j.discovery_source].join(" "));
-      return words.every(w => hay.includes(w));
-    });
-  }
+  const filteredJobs = AppState.jobs.filter(matchesSearch);
 
   columns.forEach(colName => {
     let colJobs = filteredJobs.filter(j => j.status === colName);
-
-    // Apply sorting for Saved lane
-    if (colName === "Saved") {
-      const sortMethod = AppState.sorting.Saved;
-      colJobs.sort((a, b) => {
-        // Pin stays at the top always
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-
-        // Sub sorting within pinned and unpinned groups
-        if (sortMethod === "Highest score") {
-          return b.score - a.score;
-        } else {
-          // Most recent
-          return new Date(b.saved_at) - new Date(a.saved_at);
-        }
-      });
-    } else {
-      // General sorting: Pinned first, then by date saved
-      colJobs.sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.saved_at) - new Date(a.saved_at);
-      });
-    }
+    const newest = (a, b) => new Date(b.saved_at) - new Date(a.saved_at);
+    const sortMethod = colName === "Saved" ? savedSort(colJobs) : SORT_NEWEST;
+    colJobs.sort((a, b) => {
+      // Pin stays at the top always
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      if (sortMethod === SORT_RATED) {
+        // Unrated jobs go after every rated one, however low it scored.
+        const rank = j => isRated(j) ? Number(j.score) : -1;
+        return rank(b) - rank(a) || newest(a, b);
+      }
+      return newest(a, b);
+    });
 
     const isCollapsed = localStorage.getItem(`col_collapsed_${colName}`) === "true";
     const folded = isLaneFolded(colName, colJobs.length);
+    const isDesktop = window.innerWidth > 768;
 
     const colEl = document.createElement("div");
-    colEl.className = `column ${isCollapsed ? "" : "expanded"}${folded ? " folded" : ""}`;
+    colEl.className = `column ${isCollapsed ? "" : "expanded"}${folded ? " folded" : ""}${colJobs.length ? "" : " empty"}`;
     colEl.id = `col-${colName.replace(/\s+/g, "-")}`;
     colEl.setAttribute("data-status", colName);
 
     // Column Header
     let sortSelectorHtml = "";
-    if (colName === "Saved") {
+    if (colName === "Saved" && colJobs.some(isRated) && colJobs.length > 1) {
       sortSelectorHtml = `
-        <div class="column-sort" onclick="toggleSavedSort(event)">
-          ${AppState.sorting.Saved} ▾
-        </div>
+        <button class="column-sort" title="Change the order" data-sort="${sortMethod}" onclick="toggleSavedSort(event)">
+          ${sortMethod} ▾
+        </button>
       `;
     }
 
     colEl.innerHTML = `
-      <div class="column-header" onclick="toggleColumnCollapse('${colName}')"
-           title="${window.innerWidth > 768 ? (folded ? `Show ${colName}` : `Fold ${colName} away`) : ""}">
+      <div class="column-header" role="button" tabindex="0" aria-expanded="${isDesktop ? !folded : !isCollapsed}"
+           onclick="toggleColumnCollapse('${colName}')" onkeydown="laneHeaderKey(event, '${colName}')"
+           title="${isDesktop ? (folded ? `Show ${colName}` : `Fold ${colName} away`) : ""}">
         <h2 class="column-title">${colName}</h2>
         <span class="column-count">${colJobs.length}</span>
       </div>
@@ -101,26 +107,20 @@ function renderBoard() {
 
     const cardsContainer = colEl.querySelector(".column-cards");
 
-    // Implement Divider for Saved Column
-    if (colName === "Saved") {
-      const pinnedJobs = colJobs.filter(j => j.pinned);
-      const unpinnedJobs = colJobs.filter(j => !j.pinned);
-
-      // Render Pinned
-      pinnedJobs.forEach(job => renderJobCard(job, cardsContainer));
-
-      // Render Divider if both exist
-      if (pinnedJobs.length > 0 && unpinnedJobs.length > 0) {
-        const divider = document.createElement("div");
-        divider.className = "divider";
-        divider.innerHTML = `<span>${unpinnedJobs.length} more unpinned</span>`;
-        cardsContainer.appendChild(divider);
-      }
-
-      // Render Unpinned
-      unpinnedJobs.forEach(job => renderJobCard(job, cardsContainer));
-    } else {
-      colJobs.forEach(job => renderJobCard(job, cardsContainer));
+    // A long lane shows its first cards and a button for the rest.
+    const showAll = fullLanes.has(colName);
+    const shown = showAll ? colJobs : colJobs.filter((j, i) => i < LANE_PAGE || j.pinned || revealedCards.has(j.id));
+    shown.forEach(job => renderJobCard(job, cardsContainer));
+    const hidden = colJobs.length - shown.length;
+    if (hidden > 0 || (showAll && colJobs.length > LANE_PAGE)) {
+      const more = document.createElement("button");
+      more.className = "btn-secondary btn-sm lane-more";
+      more.textContent = hidden > 0 ? `Show ${hidden} more` : "Show fewer";
+      more.addEventListener("click", () => {
+        if (hidden > 0) fullLanes.add(colName); else fullLanes.delete(colName);
+        renderBoard();
+      });
+      cardsContainer.appendChild(more);
     }
 
     // Set up column drag events
@@ -128,12 +128,41 @@ function renderBoard() {
 
     container.appendChild(colEl);
   });
+  restoreBoardFocus(focus);
+}
+
+// Rebuilding the board drops keyboard focus: remember where it was, and put
+// it back on the same control of the same card or lane.
+const FOCUSABLE = "a, button, input, select, textarea, summary";
+
+function boardFocus() {
+  const el = document.activeElement;
+  if (!el || !el.closest || !el.closest("#kanbanBoard")) return null;
+  const card = el.closest(".card");
+  if (card) return { card: card.dataset.id, index: [...card.querySelectorAll(FOCUSABLE)].indexOf(el) };
+  const col = el.closest(".column");
+  const part = ["column-header", "column-sort", "lane-more"].find(c => el.classList.contains(c));
+  return col && part ? { selector: `#${col.id} .${part}` } : null;
+}
+
+function restoreBoardFocus(focus) {
+  if (!focus) return;
+  const el = focus.selector
+    ? document.querySelector(focus.selector)
+    : document.querySelector(`.card[data-id="${CSS.escape(focus.card)}"]`)?.querySelectorAll(FOCUSABLE)[focus.index];
+  if (el) el.focus({ preventScroll: true });
 }
 
 function toggleSavedSort(e) {
   e.stopPropagation();
-  AppState.sorting.Saved = AppState.sorting.Saved === "Most recent" ? "Highest score" : "Most recent";
+  AppState.sorting.Saved = e.currentTarget.dataset.sort === SORT_RATED ? SORT_NEWEST : SORT_RATED;
   renderBoard();
+}
+
+function laneHeaderKey(e, colName) {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  toggleColumnCollapse(colName);
 }
 
 // Desktop lanes fold into a narrow strip (name and count) so six lanes fit:
@@ -160,14 +189,64 @@ function toggleColumnCollapse(colName) {
   renderBoard();
 }
 
+function setCardDetailsOpen(key, open) {
+  if (open) openDetails.add(key); else openDetails.delete(key);
+}
+
+// clockBadge shows the job's clock from the server (jobs.ClockOf, the same
+// rules as the hourly sweep): an open job's deadline, or the silence since
+// applying. Kept or pinned cards never move, so they get no countdown.
+// Red and amber are warnings; grey is only information.
+function clockBadge(job) {
+  const badge = (level, text, why) => ({ level, html: `<span class="expiry-badge ${level}"${why ? ` title="${esc(why)}"` : ""}>${text}</span>` });
+  const toClosed = (days, why) => badge("red", `⛔ to Closed in ${days > 0 ? days : 0}d`, `${why} Turn on Keep or pin it to stop that.`);
+  const clock = job.clock;
+  if (clock && clock.kind === "deadline") {
+    if (job.keep) return badge("grey", "🛟 kept");
+    if (job.pinned) return clock.state === "expired" ? badge("red", "⛔ closed") : badge("amber", "📅 deadline");
+    if (clock.state === "expired") return toClosed(clock.closes_in, "The posting has closed: this card moves to Closed 7 days after its deadline.");
+    if (clock.state === "warning") return badge("amber", `⚠ ${clock.days}d left`);
+    return badge("grey", new Date(`${clock.date}T00:00:00`).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' }), "Closing date");
+  }
+  if (clock && clock.kind === "applied") {
+    if (job.keep) return badge("grey", "🛟 kept");
+    const waiting = badge("grey", `📮 ${clock.days}d`, "Days since you applied");
+    if (job.pinned) return clock.state === "silent" ? waiting : badge("grey", "⛔ no reply");
+    if (clock.state !== "silent") return toClosed(clock.closes_in, "No answer yet: this card moves to Closed 27 days after applying.");
+    return waiting;
+  }
+  return null;
+}
+
+// Dealbreakers come with the job, computed once by the server
+// (jobs.Dealbreakers: Saturday work, unstated pay, too far, a new company).
+function dealbreakerPill(text, title) {
+  return `<span class="badge dealbreaker"${title ? ` title="${esc(title)}"` : ""}>⛔ ${esc(text)}</span>`;
+}
+
+// cardWarning is the one warning a closed card has room for: a clock about to
+// close it, then a dealbreaker (the others in its tooltip), then a near deadline.
+function cardWarning(job) {
+  const clock = clockBadge(job);
+  if (clock && clock.level === "red") return clock.html;
+  const dealbreakers = job.dealbreakers || [];
+  if (dealbreakers.length) {
+    const extra = dealbreakers.length > 1 ? ` +${dealbreakers.length - 1}` : "";
+    return dealbreakerPill(dealbreakers[0] + extra, dealbreakers.length > 1 ? dealbreakers.join(", ") : "");
+  }
+  return clock && clock.level === "amber" ? clock.html : "";
+}
+
 // Render Job Card Component
 function renderJobCard(job, container) {
   const cardEl = document.createElement("div");
+  const isOpen = AppState.expandedCards.has(job.id);
   // Visual border accents
   let extraClass = "";
   if (job.pinned) extraClass += " pinned";
   if (job.apply_state === "sent") extraClass += " has-sent";
-  
+  if (isOpen) extraClass += " open";
+
   cardEl.className = `card${extraClass}`;
   cardEl.setAttribute("draggable", "true");
   cardEl.setAttribute("data-id", job.id);
@@ -180,140 +259,33 @@ function renderJobCard(job, container) {
   cardEl.addEventListener("dragend", () => {
     cardEl.classList.remove("dragging");
   });
+  // Anywhere on the card that isn't a control opens it.
+  cardEl.addEventListener("click", (e) => {
+    if (!e.target.closest(`${FOCUSABLE}, label, .card-detail`)) toggleCardDetail(job.id);
+  });
 
-  // Dealbreakers come with the job, computed once by the server
-  // (jobs.Dealbreakers: Saturday work, unstated pay, too far, a new company).
-  const dealbreakers = (job.dealbreakers || []).map(d => `⛔ ${esc(d)}`);
-
-  const dealbreakersHtml = dealbreakers
-    .map(db => `<span class="badge dealbreaker">${db}</span>`)
-    .join("");
-
-  // Score Badge
-  let scoreClass = "score-pending";
-  if (job.score_status === "scored") {
-    if (job.score_letter === "A") scoreClass = "score-a";
-    else if (job.score_letter === "B") scoreClass = "score-b";
-    else if (job.score_letter === "C") scoreClass = "score-c";
-    else scoreClass = "score-f";
-  }
+  // Score Badge: only once there is something to say (a bare "—" on every
+  // unrated card said nothing).
+  let scoreClass = "score-f";
+  if (job.score_letter === "A") scoreClass = "score-a";
+  else if (job.score_letter === "B") scoreClass = "score-b";
+  else if (job.score_letter === "C") scoreClass = "score-c";
 
   let scoreHtml = "";
   if (job.score_status === "scoring") {
-    scoreHtml = `<span class="score-badge score-pending" style="font-size:11px">scoring…</span>`;
+    scoreHtml = `<span class="score-badge score-pending" style="font-size:11px" title="Your AI is rating this job">rating…</span>`;
   } else if (job.score_status === "failed") {
-    scoreHtml = `<span class="score-badge score-f" style="font-size:11px; cursor:pointer;" onclick="retryScoring('${job.id}')" title="Scoring failed. Click to retry.">✕ failed</span>`;
+    scoreHtml = `<button class="score-badge score-f score-retry" onclick="retryScoring('${job.id}')" title="Rating failed. Click to try again.">Rating failed</button>`;
   } else if (job.score_status === "stuck") {
-    scoreHtml = `<span class="score-badge score-f" style="font-size:11px; cursor:pointer;" onclick="retryScoring('${job.id}')" title="Scoring hung. Click to force retry.">stuck·retry</span>`;
-  } else if (job.score_status === "scored") {
-    scoreHtml = `<span class="score-badge ${scoreClass}">${esc(job.score_letter)} ${esc(job.score)}</span>`;
-  } else {
-    // Not rated yet: no number to show (a bare "0" read as a terrible score).
-    scoreHtml = `<span class="score-badge score-pending" title="Not rated yet">—</span>`;
-  }
-
-  // Compare Badges (A/B mode on Saved/Waiting cards)
-  let compareBadgesHtml = "";
-  if (AppState.ratingConfig.ab_mode && (job.status === "Saved" || job.status === "Waiting to apply")) {
-    AppState.ratingConfig.models.forEach(model => {
-      if (model !== AppState.ratingConfig.default_model) {
-        const rating = job.ratings && job.ratings[model];
-        if (rating) {
-          if (rating.letter === "...") {
-            compareBadgesHtml += `<span class="score-badge score-pending" style="font-size:10px; opacity:0.8;" title="${esc(model)}">${esc(model.substring(0,3))}:…</span>`;
-          } else if (rating.letter === "✕") {
-            compareBadgesHtml += `<span class="score-badge score-f" style="font-size:10px; opacity:0.8;" title="${esc(model)} failed">${esc(model.substring(0,3))}:✕</span>`;
-          } else {
-            let modelClass = rating.letter === "A" ? "score-a" : (rating.letter === "B" ? "score-b" : "score-c");
-            compareBadgesHtml += `<span class="score-badge ${modelClass}" style="font-size:10px; opacity:0.8;" title="${esc(model)}">${esc(model.substring(0,3))}: ${esc(rating.letter)} ${esc(rating.score)}</span>`;
-          }
-        }
-      }
-    });
+    scoreHtml = `<button class="score-badge score-f score-retry" onclick="retryScoring('${job.id}')" title="Rating got stuck. Click to try again.">Rating stuck</button>`;
+  } else if (isRated(job)) {
+    scoreHtml = `<span class="score-badge ${scoreClass}" title="How well this job fits you">${esc(job.score_letter)} ${esc(job.score)}</span>`;
   }
 
   // Salary chip
   const salaryHtml = job.salary && !payUndisclosed(job.salary) ? `<span class="salary-chip" title="${esc(job.salary)}">💰 ${esc(formatSalary(job.salary))}</span>` : "";
 
-  // Company active date (masothue link)
-  let masothueHtml = "";
-  if (job.company_active_date) {
-    if (job.company_active_date === "🏢 …") {
-      masothueHtml = `<span class="intel-badge">🏢 …</span>`;
-    } else if (job.company_active_date === "🏢 Unknown") {
-      masothueHtml = `<span class="intel-badge">🏢 Unknown</span>`;
-    } else {
-      const year = new Date(job.company_active_date).getFullYear();
-      masothueHtml = `<a href="https://masothue.com/Search/?q=${encodeURIComponent(job.company)}" target="_blank" class="intel-badge" onclick="event.stopPropagation()">📅 ${year}</a>`;
-    }
-  }
-
-  // Distance badge: ✅ within your maximum commute, 🔴 beyond it.
-  let distanceHtml = "";
-  const locSet = AppState.location && AppState.location.set;
-  if (job.company_geo_status === "ok" && typeof job.company_distance_km === "number") {
-    const km = job.company_distance_km;
-    const icon = km <= ((AppState.location && AppState.location.max_km) || 10) ? "✅" : "🔴";
-    distanceHtml = `<span class="intel-badge">${icon} ${km < 10 ? km.toFixed(1) : Math.round(km)} km</span>`;
-  } else if (!locSet) {
-    // No location yet: nothing to measure from, so no badge (📍 Location sets it).
-  } else if (job.company_geo_status === "geocode_failed") {
-    distanceHtml = `<span class="intel-badge" title="This job's address couldn't be found on the map.">📍 unknown</span>`;
-  } else if (job.company_geo_status === "no_address") {
-    distanceHtml = `<span class="intel-badge" title="This job has no address. Add one under Edit details.">📍 no address</span>`;
-  } else {
-    distanceHtml = `<span class="intel-badge" title="Looking up this address…">📍 …</span>`;
-  }
-
-  // Platform badges
-  let platformStatusHtml = "";
-  if (job.topcv_status) {
-    // Codes written by the TopCV status sync (internal/core/topcv).
-    const labels = {
-      sent: "📨 TopCV: sent",
-      seen: "👁 TopCV: CV viewed",
-      suitable: "✅ TopCV: suitable",
-      rejected: "❌ TopCV: not suitable"
-    };
-    platformStatusHtml = `<span class="apply-badge" title="${esc(job.apply_detail)}">${esc(labels[job.topcv_status] || job.topcv_status)}</span>`;
-  } else if (job.discovery_source === "VietnamWorks" && job.vnw_status) {
-    platformStatusHtml = `<span class="apply-badge">${job.vnw_status === "seen" ? "👁 seen" : esc(job.vnw_status)}</span>`;
-  }
-
-  // Age and expiry badge calculation
-  const ageStr = timeAgo(job.saved_at);
-  let expiryHtml = "";
-  // Expiry badges show the job's clock from the server (jobs.ClockOf, the
-  // same rules as the hourly sweep): an open job's deadline, or the silence
-  // since applying. Kept or pinned cards never move, so they get no countdown.
-  const toClosed = (days, why) =>
-    `<span class="expiry-badge red" title="${esc(why)} Keep 🛟 or pin it to stop that.">⛔ to Closed in ${days > 0 ? days : 0}d</span>`;
-  const clock = job.clock;
-  if (clock && clock.kind === "deadline") {
-    if (job.keep) {
-      expiryHtml = `<span class="expiry-badge grey">🛟 kept</span>`;
-    } else if (job.pinned) {
-      expiryHtml = clock.state === "expired" ? `<span class="expiry-badge red">⛔ closed</span>` : `<span class="expiry-badge amber">📅 deadline</span>`;
-    } else if (clock.state === "expired") {
-      expiryHtml = toClosed(clock.closes_in, "The posting has closed: this card moves to Closed 7 days after its deadline.");
-    } else if (clock.state === "warning") {
-      expiryHtml = `<span class="expiry-badge amber">⚠ ${clock.days}d left</span>`;
-    } else {
-      expiryHtml = `<span class="expiry-badge grey">${new Date(`${clock.date}T00:00:00`).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })}</span>`;
-    }
-  } else if (clock && clock.kind === "applied") {
-    if (job.keep) {
-      expiryHtml = `<span class="expiry-badge grey">🛟 kept</span>`;
-    } else if (job.pinned) {
-      expiryHtml = clock.state === "silent" ? `<span class="expiry-badge grey">📮 ${clock.days}d</span>` : `<span class="expiry-badge grey">⛔ no reply</span>`;
-    } else if (clock.state !== "silent") {
-      expiryHtml = toClosed(clock.closes_in, "No answer yet: this card moves to Closed 27 days after applying.");
-    } else {
-      expiryHtml = `<span class="expiry-badge grey">📮 ${clock.days}d</span>`;
-    }
-  }
-
-  // Tickers/Automation state badge
+  // Work in progress, and the questions a closed card must still ask.
   let automationHtml = "";
   if (job.status === "Waiting to apply") {
     if (job.cv_status === "tailoring") {
@@ -338,28 +310,7 @@ function renderJobCard(job, container) {
   }
 
   if (job.apply_state === "failed") {
-    automationHtml = `<span class="apply-badge failed" onclick="retryApply('${job.id}')" title="Platform apply failed. Click to retry.">✕ failed·retry</span>`;
-  }
-
-  // Sent markers
-  let sentMarkersHtml = "";
-  if (job.apply_state === "sent") {
-    sentMarkersHtml = `<span class="apply-badge sent">✓ sent</span>`;
-  } else if (job.apply_state === "replied") {
-    sentMarkersHtml = `<span class="apply-badge sent">✓ replied</span>`;
-  }
-  if (job.followup_sent_at) {
-    sentMarkersHtml += `<span class="apply-badge sent">📨 followup</span>`;
-  }
-
-  // Quick action buttons
-  const isPinned = job.pinned;
-  const pinTitle = isPinned ? "Unpin" : "Pin";
-  const pinIcon = isPinned ? "📌" : "📍";
-  
-  let pinBtnHtml = "";
-  if (job.status === "Saved") {
-    pinBtnHtml = `<button class="icon-btn-sm" title="${pinTitle}" aria-label="${pinTitle}: ${esc(job.title)}" aria-pressed="${isPinned}" onclick="togglePin('${job.id}')">${pinIcon}</button>`;
+    automationHtml = `<button class="apply-badge failed" onclick="retryApply('${job.id}')" title="Applying on the site failed. Click to try again.">✕ Apply failed: try again</button>`;
   }
 
   // Move-to dropdown items
@@ -368,8 +319,9 @@ function renderJobCard(job, container) {
     .map(st => `<option value="${st}" ${job.status === st ? "selected" : ""}>${st}</option>`)
     .join("");
 
-  const isOpen = AppState.expandedCards.has(job.id);
-  
+  // An open card lists every warning itself; a failed apply is warning enough.
+  const warningHtml = isOpen || job.apply_state === "failed" ? "" : cardWarning(job);
+
   cardEl.innerHTML = `
     <div class="card-header">
       <div class="card-top-row">
@@ -378,42 +330,26 @@ function renderJobCard(job, container) {
           <div class="card-company">${esc(job.company)}</div>
         </div>
         <div class="card-actions-group">
-          <div style="display: flex; gap: 4px; align-items: center;">
-            ${compareBadgesHtml}
-            ${scoreHtml}
-          </div>
-          <div class="quick-actions">
-            <a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="icon-btn-sm" title="Open original link" aria-label="Open the listing: ${esc(job.title)}" onclick="event.stopPropagation()">↗</a>
-            ${pinBtnHtml}
-            <button class="icon-btn-sm" title="Delete job" aria-label="Delete job: ${esc(job.title)}" style="color:var(--error);" onclick="deleteJobCard('${job.id}')">✕</button>
-          </div>
+          ${job.pinned ? `<span class="card-pin" role="img" aria-label="Pinned" title="Pinned: stays at the top">📌</span>` : ""}
+          ${scoreHtml}
         </div>
       </div>
     </div>
-    
-    <div class="card-meta">
-      ${salaryHtml}
-      ${masothueHtml}
-      ${distanceHtml}
-      ${dealbreakersHtml}
-    </div>
-    
+
+    ${salaryHtml || warningHtml ? `<div class="card-meta">${salaryHtml}${warningHtml}</div>` : ""}
+    ${automationHtml ? `<div class="card-status">${automationHtml}</div>` : ""}
+
     <div class="card-footer">
-      <div class="footer-left">
-        <span class="age-label">${esc(ageStr)} · ${esc(job.discovery_source)}</span>
-        ${expiryHtml}
-        ${automationHtml}
-        ${sentMarkersHtml}
-        ${platformStatusHtml}
-        
-        <!-- Quick stage jump dropdown (accessible alternative to drag) -->
-        <select class="move-select" onchange="moveStageDropdown('${job.id}', this)" onclick="event.stopPropagation()">
-          ${selectOptions}
-        </select>
+      <!-- Quick stage jump dropdown (accessible alternative to drag) -->
+      <select class="move-select" title="Move this job to another stage" aria-label="Stage: ${esc(job.title)}" onchange="moveStageDropdown('${job.id}', this)" onclick="event.stopPropagation()">
+        ${selectOptions}
+      </select>
+      <div class="card-footer-actions">
+        ${job.url ? `<a href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="card-link" title="Open the job on its site" aria-label="Open the job: ${esc(job.title)}" onclick="event.stopPropagation()">Open ↗</a>` : ""}
+        <button class="card-link expand-btn" title="${isOpen ? "Hide the details" : "Show the details"}" aria-label="Details: ${esc(job.title)}" aria-expanded="${isOpen}" onclick="toggleCardDetail('${job.id}')">${isOpen ? "Hide ▴" : "Details ▾"}</button>
       </div>
-      <button class="icon-btn expand-btn" title="Toggle Details" aria-label="Details: ${esc(job.title)}" aria-expanded="${isOpen}" onclick="toggleCardDetail('${job.id}')">${isOpen ? "▴" : "▾"}</button>
     </div>
-    
+
     <!-- Expanded Detail Panel -->
     <div class="card-detail ${isOpen ? "open" : ""}" id="detail-${job.id}">
       <!-- Details panel elements injected here -->
@@ -428,34 +364,117 @@ function renderJobCard(job, container) {
   container.appendChild(cardEl);
 }
 
-// Render expanded card detail panel contents
-function renderCardDetailContents(job, detailContainer) {
-  // 1. AI Assessment
-  const rateAction = `<button class="btn-secondary btn-sm" onclick="askAI('rate', '${job.id}')">${job.score_status === "scored" ? "Rate again" : "Rate"}</button>`;
-  let assessmentHtml = `<div class="detail-section">
-    <div class="detail-title">AI Assessment (${esc(AppState.ratingConfig.default_model)})</div>
-    ${rateAction}
-  </div>`;
-  if (job.score_reasoning) {
-    // Raters answer "point • point • point" (see the rubric); older entries
-    // used one point per line. Accept both.
-    const listItems = job.score_reasoning
-      .split(/\n|\s+•\s+/)
-      .map(line => line.trim().replace(/^•\s*/, ""))
-      .filter(Boolean)
-      .map(item => `<li>${esc(item)}</li>`)
-      .join("");
-    
-    assessmentHtml = `
-      <div class="detail-section">
-        <div class="detail-title">AI Assessment (${esc(AppState.ratingConfig.default_model)})</div>
-        <ul class="assessment-list">${listItems}</ul>
-        ${rateAction}
-      </div>
-    `;
+// cardFacts: what a closed card leaves out to stay short.
+function cardFacts(job) {
+  const facts = [];
+  const clock = clockBadge(job);
+  if (clock) facts.push(clock.html);
+  (job.dealbreakers || []).forEach(d => facts.push(dealbreakerPill(d)));
+
+  // Distance badge: ✅ within your maximum commute, 🔴 beyond it.
+  const locSet = AppState.location && AppState.location.set;
+  if (job.company_geo_status === "ok" && typeof job.company_distance_km === "number") {
+    const km = job.company_distance_km;
+    const icon = km <= ((AppState.location && AppState.location.max_km) || 10) ? "✅" : "🔴";
+    facts.push(`<span class="intel-badge" title="Distance from your location">${icon} ${km < 10 ? km.toFixed(1) : Math.round(km)} km</span>`);
+  } else if (!locSet) {
+    // No location yet: nothing to measure from, so no badge (📍 Location sets it).
+  } else if (job.company_geo_status === "geocode_failed") {
+    facts.push(`<span class="intel-badge" title="This job's address couldn't be found on the map.">📍 unknown</span>`);
+  } else if (job.company_geo_status === "no_address") {
+    facts.push(`<span class="intel-badge" title="This job has no address. Add one under Edit details.">📍 no address</span>`);
+  } else {
+    facts.push(`<span class="intel-badge" title="Looking up this address…">📍 …</span>`);
   }
 
-  // 2. Challenger Models list
+  // Company active date (masothue link)
+  if (job.company_active_date === "🏢 …" || job.company_active_date === "🏢 Unknown") {
+    facts.push(`<span class="intel-badge" title="When the company started">${esc(job.company_active_date)}</span>`);
+  } else if (job.company_active_date) {
+    const year = new Date(job.company_active_date).getFullYear();
+    facts.push(`<a href="https://masothue.com/Search/?q=${encodeURIComponent(job.company)}" target="_blank" rel="noopener noreferrer" class="intel-badge" title="The year the company started" onclick="event.stopPropagation()">📅 ${year}</a>`);
+  }
+
+  // Platform badges
+  if (job.topcv_status) {
+    // Codes written by the TopCV status sync (internal/core/topcv).
+    const labels = {
+      sent: "📨 TopCV: sent",
+      seen: "👁 TopCV: CV viewed",
+      suitable: "✅ TopCV: suitable",
+      rejected: "❌ TopCV: not suitable"
+    };
+    facts.push(`<span class="apply-badge" title="${esc(job.apply_detail)}">${esc(labels[job.topcv_status] || job.topcv_status)}</span>`);
+  } else if (job.discovery_source === "VietnamWorks" && job.vnw_status) {
+    facts.push(`<span class="apply-badge">${job.vnw_status === "seen" ? "👁 seen" : esc(job.vnw_status)}</span>`);
+  }
+
+  // Sent markers
+  if (job.apply_state === "sent") {
+    facts.push(`<span class="apply-badge sent">✓ sent</span>`);
+  } else if (job.apply_state === "replied") {
+    facts.push(`<span class="apply-badge sent">✓ replied</span>`);
+  }
+  if (job.followup_sent_at) {
+    facts.push(`<span class="apply-badge sent">📨 followup</span>`);
+  }
+
+  facts.push(`<span class="age-label" title="When it was found, and where">${esc(timeAgo(job.saved_at))} · ${esc(sourceName(job.discovery_source))}</span>`);
+  return facts.join("");
+}
+
+// primaryAction is the one obvious next step for the job's stage.
+function primaryAction(job) {
+  const move = (label, to) => `<button class="btn-primary card-primary" onclick="transitionCardStatus('${job.id}', '${to}')">${label}</button>`;
+  switch (job.status) {
+    case "Applied": return move("Got an interview", "Interview");
+    case "Interview": return move("Got an offer", "Offer");
+    case "Offer": return move("Close this job", "Closed");
+    case "Closed": return move("Back to Saved", "Saved");
+  }
+  // The card is already asking "did you submit it?".
+  if (job.apply_state === "confirm") return "";
+  const apply = applyButton(job, job.cv_status === "ready");
+  if (apply) return apply;
+  if (draftIsPrimary(job)) {
+    return `<button class="btn-primary card-primary" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>`;
+  }
+  if (job.url) {
+    return `<a class="btn-primary card-primary" href="${safeUrl(job.url)}" target="_blank" rel="noopener noreferrer">Open the job ↗</a>`;
+  }
+  return move("I applied", "Applied");
+}
+
+// draftIsPrimary: the card's main button sends the unsent email draft.
+function draftIsPrimary(job) {
+  return (job.status === "Saved" || job.status === "Waiting to apply") &&
+    job.apply_state !== "confirm" && !applyButton(job, job.cv_status === "ready") &&
+    job.apply_method !== "on-site" && !!job.draft_email && job.draft_status !== "sent";
+}
+
+// Render expanded card detail panel contents
+function renderCardDetailContents(job, detailContainer) {
+  // 1. Why this rating: the first points show; the rest wait under More.
+  const reasons = (job.score_reasoning || "")
+    // Raters answer "point • point • point" (see the rubric); older entries
+    // used one point per line. Accept both.
+    .split(/\n|\s+•\s+/)
+    .map(line => line.trim().replace(/^•\s*/, ""))
+    .filter(Boolean)
+    .map(item => `<li>${esc(item)}</li>`);
+  const whyHtml = reasons.length ? `
+    <div class="detail-section">
+      <div class="detail-title">Why this rating</div>
+      <ul class="assessment-list">${reasons.slice(0, 3).join("")}</ul>
+    </div>` : "";
+  const ratingHtml = `
+    <div class="detail-section">
+      <div class="detail-title">Rating</div>
+      ${reasons.length > 3 ? `<ul class="assessment-list">${reasons.slice(3).join("")}</ul>` : ""}
+      <button class="btn-secondary btn-sm" style="align-self:flex-start;" onclick="askAI('rate', '${job.id}')">${isRated(job) ? "Rate again" : "Rate"}</button>
+    </div>`;
+
+  // 2. Other raters, for those who turned on comparing them in Settings.
   let otherModelsHtml = "";
   if (AppState.ratingConfig.ab_mode) {
     let list = "";
@@ -494,8 +513,8 @@ function renderCardDetailContents(job, detailContainer) {
 
     otherModelsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">Challenger Ratings</div>
-        ${list || '<div style="font-size:12px; color:var(--muted)">No challenger models have rated this job yet.</div>'}
+        <div class="detail-title">Other AI ratings</div>
+        ${list || '<div style="font-size:12px; color:var(--muted)">No other AI has rated this job yet.</div>'}
         ${askSelectHtml}
       </div>
     `;
@@ -507,7 +526,7 @@ function renderCardDetailContents(job, detailContainer) {
     const pills = job.skills.map(s => `<span class="skill-pill">${esc(s)}</span>`).join("");
     skillsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">Skills Extracted</div>
+        <div class="detail-title">Skills</div>
         <div class="skills-list">${pills}</div>
       </div>
     `;
@@ -519,10 +538,10 @@ function renderCardDetailContents(job, detailContainer) {
     const content = job.jd_ai_summary
       ? job.jd_ai_summary.split("\n").map(l => `<li>${esc(l.trim().replace(/^•\s*/, ""))}</li>`).join("")
       : `<li>${esc(job.jd_summary)}</li>`;
-    
+
     summaryHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">AI Summary</div>
+        <div class="detail-title">Summary</div>
         <ul class="assessment-list">${content}</ul>
       </div>
     `;
@@ -530,9 +549,9 @@ function renderCardDetailContents(job, detailContainer) {
 
   // 5. Notes block
   const notesHtml = `
-    <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-      <div class="detail-title">My Notes (Auto-saves)</div>
-      <textarea class="textarea-input" style="height: 60px; font-size: 12px;" placeholder="Add custom notes..." oninput="saveJobNotes('${job.id}', this)">${esc(job.notes)}</textarea>
+    <div class="detail-section">
+      <div class="detail-title">My notes (saved as you type)</div>
+      <textarea class="textarea-input" style="height: 60px; font-size: 12px;" aria-label="My notes" placeholder="Add custom notes..." oninput="saveJobNotes('${job.id}', this)">${esc(job.notes)}</textarea>
     </div>
   `;
 
@@ -541,7 +560,7 @@ function renderCardDetailContents(job, detailContainer) {
       <label style="font-size:11px; font-weight:600; color:var(--muted)">${label}</label>
       <input type="text" class="text-input" id="edit-${key}-${job.id}" value="${esc(value)}" style="font-size:12px; padding: 4px 8px; margin-bottom: 4px;">`;
   const editHtml = `
-    <details class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
+    <details class="detail-section edit-details" style="border-top: 1px solid var(--hairline); padding-top: 8px;" ${openDetails.has(`edit-${job.id}`) ? "open" : ""} ontoggle="setCardDetailsOpen('edit-${job.id}', this.open)">
       <summary class="detail-title" style="cursor:pointer;">Edit details</summary>
       <div style="display:flex; flex-direction:column; margin-top:6px;">
         ${field("title", "Title", job.title)}
@@ -555,64 +574,64 @@ function renderCardDetailContents(job, detailContainer) {
 
   // 6. Application Method Block
   let applyBlockHtml = "";
-  
+
   // Apply block only displays in Saved, Waiting, Applied lanes (in closed/interview we hide it except interview reply draft editor)
   const showApply = ["Saved", "Waiting to apply", "Applied"].includes(job.status);
-  
+
   if (showApply) {
     if (job.apply_method === "on-site") {
       // Platform apply UI
       let btnLabel = "Approve CV — mark applied";
       let btnAction = `approveOnSiteApply('${job.id}')`;
       let undoBtn = "";
-      
+
       if (job.status === "Applied") {
-        btnLabel = "Application Submitted (Undo)";
+        btnLabel = "Undo: I haven't applied";
         btnAction = `undoOnSiteApply('${job.id}')`;
-        undoBtn = `<p style="font-size:12px; margin: 4px 0 0 0; color: var(--success-border)">✓ CV Approved and forwarded to the apply engine.</p>`;
+        undoBtn = `<p style="font-size:12px; margin: 4px 0 0 0; color: var(--success-border)">✓ You applied on the site.</p>`;
       }
-      
+
       applyBlockHtml = `
         <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-          <div class="detail-title">🌐 On-Site Application (${esc(job.discovery_source)})</div>
+          <div class="detail-title">🌐 Apply on ${esc(sourceName(job.discovery_source))}</div>
           <div style="margin-top: 6px;">
-            <button class="btn-primary btn-sm" onclick="${btnAction}">${btnLabel}</button>
+            <button class="btn-secondary btn-sm" onclick="${btnAction}">${btnLabel}</button>
             ${undoBtn}
           </div>
         </div>
       `;
     } else {
       // Email application: your AI writes the draft (Ask AI), you review and
-      // edit it here, and "Send" opens it in your own mail app — braveduck
-      // never sends email and holds no mail password.
+      // edit it here, and the card's main button opens it in your own mail app
+      // — braveduck never sends email and holds no mail password.
       const draft = job.draft_email;
       const isSent = job.draft_status === "sent";
       let emailEditorHtml;
       if (!draft) {
         emailEditorHtml = `
           <p style="font-size:12px; color:var(--muted); margin: 4px 0;">No draft yet.</p>
-          <textarea class="textarea-input" id="draftNotes-${job.id}" style="height:40px; font-size:12px;" placeholder="Optional notes for your AI (tone, what to stress)…">${esc(job.draft_notes)}</textarea>
-          <button class="btn-secondary btn-sm" style="margin-top:6px;" onclick="askAI('draft', '${job.id}')">Ask your AI to draft it</button>`;
+          <textarea class="textarea-input" id="draftNotes-${job.id}" style="height:40px; font-size:12px;" aria-label="Notes for your AI" placeholder="Optional notes for your AI (tone, what to stress)…">${esc(job.draft_notes)}</textarea>
+          <button class="btn-secondary btn-sm" style="margin-top:6px; align-self:flex-start;" onclick="askAI('draft', '${job.id}')">Ask your AI to draft it</button>`;
       } else {
         const ro = isSent ? "readonly" : "";
         emailEditorHtml = `
           <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
             <div>
-              <label style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
+              <label for="draftTo-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">Recipient</label>
               <input type="text" id="draftTo-${job.id}" class="text-input" value="${esc(draft.to)}" ${ro} style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
             </div>
             <div>
-              <label style="font-size:11px; font-weight:600; color:var(--muted)">Subject</label>
+              <label for="draftSubject-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">Subject</label>
               <input type="text" id="draftSubject-${job.id}" class="text-input" value="${esc(draft.subject)}" ${ro} style="font-size:12px; padding: 4px 8px;">
             </div>
             <div>
-              <label style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
+              <label for="draftBody-${job.id}" style="font-size:11px; font-weight:600; color:var(--muted)">Email Body</label>
               <textarea id="draftBody-${job.id}" class="textarea-input" style="height: 140px; font-size: 12px;" ${ro}>${esc(draft.body)}</textarea>
             </div>
             ${isSent
               ? `<p style="font-size:12px; color: var(--success-border); font-weight: 500; margin-top: 6px;">✓ Sent (you confirmed sending it).</p>`
               : `<div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
-                   <button class="btn-primary btn-sm" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>
+                   ${!draftIsPrimary(job) ? `<button class="btn-secondary btn-sm" onclick="sendEmailDraft('${job.id}')">Send from my mail app</button>` : ""}
                    <button class="btn-secondary btn-sm" onclick="askAI('draft', '${job.id}')">Re-draft</button>
                    <button class="btn-danger btn-sm" style="padding: 6px 12px; font-size:12px;" onclick="rejectEmailDraft('${job.id}')">Discard</button>
                  </div>
@@ -622,7 +641,7 @@ function renderCardDetailContents(job, detailContainer) {
 
       applyBlockHtml = `
         <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
-          <div class="detail-title">✉ Email Application</div>
+          <div class="detail-title">✉ Email</div>
           ${emailEditorHtml}
         </div>
       `;
@@ -633,8 +652,8 @@ function renderCardDetailContents(job, detailContainer) {
       <div class="detail-section" style="border-top: 1px dashed var(--border-strong); padding-top: 12px; margin-top: 4px;">
         <div class="detail-title">📨 Reply to the recruiter</div>
         <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
-          <input type="text" id="replyTo-${job.id}" class="text-input" value="${esc((job.draft_email && job.draft_email.to) || job.contact_email)}" style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
-          <textarea id="replyBody-${job.id}" class="textarea-input" style="height: 80px; font-size: 12px;" placeholder="Your reply…"></textarea>
+          <input type="text" id="replyTo-${job.id}" class="text-input" aria-label="Recruiter's email" value="${esc((job.draft_email && job.draft_email.to) || job.contact_email)}" style="font-size:12px; padding: 4px 8px;" placeholder="recruiter@company.com">
+          <textarea id="replyBody-${job.id}" class="textarea-input" aria-label="Your reply" style="height: 80px; font-size: 12px;" placeholder="Your reply…"></textarea>
           <button class="btn-primary btn-sm" style="align-self:flex-start;" onclick="sendInterviewReply('${job.id}')">Open in my mail app</button>
         </div>
       </div>
@@ -648,42 +667,47 @@ function renderCardDetailContents(job, detailContainer) {
     const when = ready && job.cv_generated_at ? new Date(job.cv_generated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "";
     cvControlsHtml = `
       <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div class="detail-title">Tailored CV</div>
+        <div class="detail-title">CV for this job</div>
         <p style="font-size:12px; margin: 2px 0 6px 0; color: var(--body);">${ready ? `Version ${esc(job.cv_version)} · ${esc(when)}` : "Not written yet."}</p>
         <div style="display: flex; gap: var(--spacing-xs); flex-wrap: wrap;">
           ${ready ? `<button class="btn-secondary btn-sm" onclick="downloadCV('${job.id}')">Download CV.pdf</button>` : ""}
-          ${applyButton(job, ready)}
           <button class="btn-secondary btn-sm" onclick="askAI('cv', '${job.id}')">${ready ? "Ask your AI to improve it" : "Ask your AI to tailor it"}</button>
         </div>
       </div>
     `;
   }
 
-  // 8. Keep exemption button (exposes the escape hatch to auto-clear)
-  let keepButtonHtml = "";
-  if (job.expires_at || job.status === "Applied" || job.status === "Interview") {
-    keepButtonHtml = `
-      <div class="detail-section" style="border-top: 1px solid var(--hairline); padding-top: 8px;">
-        <div style="display:flex; justify-content: space-between; align-items: center;">
-          <span style="font-size:12px; color:var(--muted)">Auto-clear exemption</span>
-          <button class="btn-secondary btn-sm" onclick="toggleKeepExemption('${job.id}')">
-            ${job.keep ? "🛟 Kept (Exempt)" : "Exempt Card from Auto-delete"}
-          </button>
-        </div>
-      </div>
-    `;
-  }
+  // 8. Quick actions: Keep (the escape hatch from moving to Closed by itself),
+  // "I applied", Pin and Delete.
+  const canKeep = job.expires_at || job.status === "Applied" || job.status === "Interview";
+  const canMarkApplied = (job.status === "Saved" || job.status === "Waiting to apply") && job.url && job.apply_state !== "confirm";
+  const quickHtml = `
+    <div class="card-quick">
+      ${canKeep ? `<button class="keep-toggle" role="switch" aria-checked="${Boolean(job.keep)}" title="Keep this job: it won't move to Closed by itself" onclick="toggleKeepExemption('${job.id}')"><span class="keep-track" aria-hidden="true"></span>Keep</button>` : ""}
+      ${canMarkApplied ? `<button class="btn-secondary btn-sm" onclick="transitionCardStatus('${job.id}', 'Applied')">I applied</button>` : ""}
+      ${job.status === "Saved" ? `<button class="btn-secondary btn-sm" title="${job.pinned ? "Stop keeping it at the top" : "Keep it at the top of the lane"}" aria-pressed="${Boolean(job.pinned)}" onclick="togglePin('${job.id}')">📌 ${job.pinned ? "Unpin" : "Pin"}</button>` : ""}
+      <button class="btn-secondary btn-sm card-delete" title="Delete this job" aria-label="Delete job: ${esc(job.title)}" onclick="deleteJobCard('${job.id}')">🗑 Delete</button>
+    </div>
+  `;
 
   detailContainer.innerHTML = `
-    ${assessmentHtml}
-    ${otherModelsHtml}
-    ${skillsHtml}
-    ${summaryHtml}
-    ${notesHtml}
-    ${editHtml}
-    ${cvControlsHtml}
-    ${applyBlockHtml}
-    ${keepButtonHtml}
+    <div class="card-facts">${cardFacts(job)}</div>
+    ${whyHtml}
+    ${primaryAction(job)}
+    <details class="card-more" ${openDetails.has(`more-${job.id}`) ? "open" : ""} ontoggle="setCardDetailsOpen('more-${job.id}', this.open)">
+      <summary>More</summary>
+      <div class="card-more-body">
+        ${quickHtml}
+        ${notesHtml}
+        ${cvControlsHtml}
+        ${applyBlockHtml}
+        ${ratingHtml}
+        ${otherModelsHtml}
+        ${skillsHtml}
+        ${summaryHtml}
+        ${editHtml}
+      </div>
+    </details>
   `;
 }
 
@@ -706,15 +730,14 @@ function showJobCard(id) {
     showToast(`Job #${id} is no longer on the board`, "info");
     return;
   }
-  // A direct link to a job must reveal it even when the current filters or
-  // mobile accordion hide it. Keep matching filters as they are.
+  // A direct link to a job must reveal it even when the search, "Show N more"
+  // or the mobile accordion hide it. Keep a matching search as it is.
   const selector = `.card[data-id="${CSS.escape(id)}"]`;
-  if (!document.querySelector(selector)) {
-    AppState.filters.platform = "All";
+  if (!matchesSearch(job)) {
     AppState.filters.query = "";
     document.getElementById("jobSearch").value = "";
-    renderPlatformFilters();
   }
+  revealedCards.add(id);
   if (window.innerWidth <= 768) {
     localStorage.setItem(`col_collapsed_${job.status}`, "false");
   } else if (isLaneFolded(job.status, 1)) {

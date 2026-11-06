@@ -121,11 +121,10 @@ const AppState = {
   platforms: [],
   activity: [],
   filters: {
-    platform: "All",
     query: "" // the search box
   },
   sorting: {
-    Saved: "Most recent" // or "Highest score"
+    Saved: null // the user's choice; null follows savedSort() in board.js
   },
   expandedCards: new Set() // stores expanded card IDs
 };
