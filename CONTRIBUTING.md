@@ -12,6 +12,11 @@ braveduck is one Go binary with three faces over one core:
 - `internal/store`: SQLite. Schema changes are **new entries** appended to
   `migrations` in `store.go`. Never edit a shipped migration.
 - `internal/core/*`: pure logic plus the browser, vault and platform registry.
+- `web/`: the new board (React, TypeScript, Tailwind and shadcn/ui
+  components), replacing `internal/api/web` step by step. It talks to the same
+  REST API. `npm run build` writes it to `internal/api/app`, which is
+  committed: the Go binary embeds it and serves it at `/app/`, so building
+  braveduck needs no Node.
 
 Design specs live in `docs/specs/`. If a change alters a spec, update the spec
 in the same PR.
@@ -29,6 +34,21 @@ go mod tidy && git diff --exit-code go.mod go.sum
 for f in internal/api/web/*.js; do node --check "$f"; done   # board JS still parses
 go test -race ./...                           # unit tests (race needs cgo)
 ```
+
+The new board (Node 22):
+
+```bash
+cd web && npm ci
+npm run typecheck && npm run lint && npm test   # types, oxlint, unit tests (vitest)
+npm run build                                   # then commit internal/api/app with the change
+npm run dev   # live-reloading board against a running braveduck (BRAVEDUCK_URL, default :8097)
+```
+
+CI rebuilds it and fails when the committed `internal/api/app` doesn't match
+the source. Text on the board is written in English and translated in
+`web/src/locales/vi.json`; `src/lib/i18n.test.ts` fails on a missing or
+unused translation. Use `t("…")` in components and `N_("…")` for text kept in
+data and translated where it's shown.
 
 Real-browser tests drive Chromium against a fake job site and the embedded
 board:
