@@ -140,7 +140,9 @@ func TestAppApplyAndSkip(t *testing.T) {
 	page.MustElement("section[aria-label='Cashier']")
 	page.MustElementR("button", "Not a fit, skip it").MustEval(`() => this.click()`)
 	waitUntil(t, func() bool { return jobStatus(t, st, "Cashier") == "closed" }, "skipping didn't close the job")
-	page.MustElementR("button", "Undo").MustEval(`() => this.click()`)
+	// The Undo of this move: the toast from applying may still be showing,
+	// with an Undo of its own.
+	page.MustElementR("[data-sonner-toast]", "Moved to Closed").MustElementR("button", "Undo").MustEval(`() => this.click()`)
 	waitUntil(t, func() bool { return jobStatus(t, st, "Cashier") == "saved" }, "Undo didn't bring the job back")
 }
 
