@@ -81,6 +81,11 @@ type Options struct {
 	// API, shared and rate-limited by it); nil leaves it off.
 	FBWatcher *fbwatcher.Client
 
+	// Owner is the user whose computer this is (when the server runs on
+	// someone's own machine): job-site logins, assisted apply and CV files
+	// by path stay on for them. "" for a server nobody sits at.
+	Owner string
+
 	// Tick is how often each user's scheduler looks for due work (crawls,
 	// rating, sweeps, backups); 0 turns schedulers off (tests).
 	Tick time.Duration
@@ -292,7 +297,7 @@ func (s *Server) open(name string) (*tenant, error) {
 	}
 	svc := service.New(st)
 	svc.SetDataDir(dir)
-	svc.SetHosted(service.HostedInfo{User: name, LogoutURL: s.opts.LogoutURL})
+	svc.SetHosted(service.HostedInfo{User: name, LogoutURL: s.opts.LogoutURL, Owner: name == strings.ToLower(strings.TrimSpace(s.opts.Owner))})
 	svc.SetJevDailyLimit(s.opts.JevDaily)
 	svc.SetMaxJobs(s.opts.MaxJobs)
 	svc.SetFBWatcher(s.opts.FBWatcher)

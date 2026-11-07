@@ -46,6 +46,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	jevDaily := fs.Int("jev-daily-limit", 50, "Jev ratings per user per day, paid by the server's key (0 = no limit)")
 	accessTeam := fs.String("access-team", "", "log in with Cloudflare Access instead of a proxy: the team's address, https://TEAM.cloudflareaccess.com (see deploy/cloudflare)")
 	accessAUD := fs.String("access-aud", "", "with --access-team: the Access application's audience (AUD) tag")
+	owner := fs.String("owner", "", "the user (login name or email) whose computer this is: job-site logins and assisted apply stay on for them")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	h, err := hosted.New(srvCtx, hosted.Options{
 		Dir: *users, UserHeader: *header, Secret: secret,
 		MaxUsers: *maxUsers, LogoutURL: *logout, JevDaily: *jevDaily, MaxJobs: *maxJobs, UsersFile: *usersFile, Tick: time.Minute,
-		AccessTeam: *accessTeam, AccessAUD: *accessAUD, FBWatcher: fbw,
+		AccessTeam: *accessTeam, AccessAUD: *accessAUD, FBWatcher: fbw, Owner: *owner,
 	})
 	if err != nil {
 		return err
