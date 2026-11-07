@@ -21,11 +21,21 @@ var ErrHosted = fmt.Errorf("%w: %w", ErrInvalid,
 type HostedInfo struct {
 	User      string `json:"user"`
 	LogoutURL string `json:"logout_url,omitempty"`
+	// Owner is the user whose computer the shared server runs on: windows
+	// open on their own screen and paths are their own files, so what a
+	// shared server turns off (logins to job sites, assisted apply, CV
+	// files by path) stays on for them.
+	Owner bool `json:"owner,omitempty"`
 }
 
 // SetHosted marks s as one user's service on a shared server. Call it after
 // SetDataDir and before the service is used.
 func (s *Service) SetHosted(info HostedInfo) { s.hosted = &info }
+
+// OnOwnComputer reports whether braveduck runs on this user's own computer
+// (alone, or as the owner of a shared server), so a window it opens is on
+// their screen and a file path is theirs.
+func (s *Service) OnOwnComputer() bool { return s.hosted == nil || s.hosted.Owner }
 
 // Hosted is the shared-server info, nil on the user's own computer.
 func (s *Service) Hosted() *HostedInfo { return s.hosted }

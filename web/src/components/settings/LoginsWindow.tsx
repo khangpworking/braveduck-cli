@@ -22,7 +22,10 @@ const STATUS: Record<Platform['status'], [string, string]> = {
 
 export function LoginsWindow(p: WinProps) {
   const { t } = useTranslation()
-  const hosted = !!hostedOf(useQuery({ queryKey: Q.setup, queryFn: S.setup }).data)
+  // On a shared server login windows would open on the server, except for
+  // its owner, whose computer it is.
+  const h = hostedOf(useQuery({ queryKey: Q.setup, queryFn: S.setup }).data)
+  const hosted = !!h && !h.owner
   return (
     <Win
       {...p}

@@ -118,7 +118,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	} {
 		addStub(srv, name)
 	}
-	if svc.Hosted() != nil {
+	if !svc.OnOwnComputer() {
 		srv.RemoveTools(localOnlyTools...)
 	}
 	return srv
@@ -420,7 +420,7 @@ type uploadCVIn struct {
 }
 
 func (t tools) uploadCV(ctx context.Context, in uploadCVIn) (service.BaseCV, error) {
-	if t.svc.Hosted() != nil { // never registered there; refuse all the same
+	if !t.svc.OnOwnComputer() { // never registered there; refuse all the same
 		return service.BaseCV{}, service.ErrHosted
 	}
 	fi, err := os.Stat(in.Path)

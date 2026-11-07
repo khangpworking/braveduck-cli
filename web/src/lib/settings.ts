@@ -12,6 +12,7 @@ export * from './windows'
 export interface Hosted {
   user: string
   logout_url?: string
+  owner?: boolean // the server runs on this user's computer
 }
 
 export const hostedOf = (s: Setup | undefined) => (s?.hosted as Hosted | undefined) ?? null

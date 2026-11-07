@@ -44,6 +44,10 @@ braveduck serve --users ~/braveduck-users --addr 127.0.0.1:8090 \
   --access-team https://TEAM.cloudflareaccess.com --access-aud AUD_TAG
 ```
 
+Add `--owner YOUR_EMAIL` when braveduck runs on your own computer: windows
+then open on your own screen, so logging in to job sites, assisted apply and
+CV files by path stay on for you (for everyone else they're off).
+
 Each person gets `~/braveduck-users/<their email>/` the first time they log
 in (`--max-users`, default 50, caps how many). The usual limits for a shared
 server apply: job-site logins and assisted apply are off (they open windows
@@ -58,7 +62,7 @@ Description=braveduck for friends (Cloudflare Tunnel + Access)
 After=network-online.target
 
 [Service]
-ExecStart=%h/go/bin/braveduck serve --users %h/braveduck-users --addr 127.0.0.1:8090 --access-team https://TEAM.cloudflareaccess.com --access-aud AUD_TAG
+ExecStart=%h/go/bin/braveduck serve --users %h/braveduck-users --addr 127.0.0.1:8090 --access-team https://TEAM.cloudflareaccess.com --access-aud AUD_TAG --owner YOUR_EMAIL
 Restart=on-failure
 
 [Install]

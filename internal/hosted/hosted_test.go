@@ -232,3 +232,28 @@ func TestJevBudgetPerUser(t *testing.T) {
 		t.Fatalf("alice's Jev limit = %d, want 7", got)
 	}
 }
+
+// The server's owner keeps the features that open windows on this machine;
+// everyone else's board says it's a shared server.
+func TestOwnerKeepsLocalFeatures(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TYPESAFE_API_KEY", "")
+	s, err := New(context.Background(), Options{Dir: t.TempDir(), UserHeader: "Remote-User", Secret: secret, MaxUsers: 3, Owner: "Alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	for user, owner := range map[string]bool{"alice": true, "bob": false} {
+		tok := tokenOf(t, s, user)
+		code, body := do(t, s, user, secret, "GET", "/api/setup", tok, "")
+		if code != http.StatusOK || strings.Contains(body, `"owner":true`) != owner {
+			t.Errorf("%s: setup = %d %s, want owner %v", user, code, body, owner)
+		}
+		// Assisted apply on a job that doesn't exist: the owner gets as far
+		// as looking it up; anyone else is stopped first.
+		code, body = do(t, s, user, secret, "POST", "/api/jobs/999/apply", tok, "")
+		if refused := strings.Contains(body, "shared server"); refused == owner {
+			t.Errorf("%s: assisted apply refused = %v (%d %s)", user, refused, code, body)
+		}
+	}
+}

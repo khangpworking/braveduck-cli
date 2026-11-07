@@ -136,7 +136,7 @@ type LoginHooks struct {
 // A re-login keeps the platform's fingerprint seed, so the account keeps
 // seeing one device.
 func (s *Service) Connect(ctx context.Context, id string, h LoginHooks) (PlatformStatus, error) {
-	if s.hosted != nil {
+	if !s.OnOwnComputer() {
 		return PlatformStatus{}, ErrHosted
 	}
 	reg, v, err := s.setup()
@@ -207,7 +207,7 @@ func (s *Service) connect(ctx context.Context, p platform.Platform, v *vault.Vau
 // requests can't wait minutes for a human). The outcome lands in the activity
 // feed; Platforms shows "connecting" meanwhile.
 func (s *Service) StartConnect(id string) (PlatformStatus, error) {
-	if s.hosted != nil {
+	if !s.OnOwnComputer() {
 		return PlatformStatus{}, ErrHosted
 	}
 	reg, v, err := s.setup()
