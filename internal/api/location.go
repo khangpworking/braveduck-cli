@@ -17,12 +17,7 @@ func (s *server) getLocation(w http.ResponseWriter, r *http.Request) {
 // a map click or a chosen search result) and resolves job addresses in the
 // background.
 func (s *server) putLocation(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Lat   float64 `json:"lat"`
-		Lng   float64 `json:"lng"`
-		Label string  `json:"label"`
-		MaxKM float64 `json:"max_km"`
-	}
+	var in LocationRequest
 	if !decode(w, r, &in) {
 		return
 	}

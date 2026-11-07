@@ -14,16 +14,8 @@ import (
 
 // The base CV ("📄 My CV"): upload once, its text fills the profile.
 
-type baseCVOut struct {
-	CV      *service.BaseCV `json:"cv"` // null before the first upload
-	Profile struct {
-		Path   string `json:"path"`
-		Filled bool   `json:"filled"`
-	} `json:"profile"`
-}
-
 func (s *server) getBaseCV(w http.ResponseWriter, r *http.Request) {
-	var out baseCVOut
+	var out BaseCVReply
 	cv, ok, err := s.svc.BaseCV(r.Context())
 	if err != nil {
 		reply(w, 0, nil, err)

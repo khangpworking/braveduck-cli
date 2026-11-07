@@ -46,6 +46,19 @@ npm run build:pages   # the public site for Cloudflare Pages (landing + 404) int
 CI rebuilds it and fails when the committed `internal/api/app` doesn't match
 the source.
 
+The board's TypeScript types for the API (`web/src/lib/gen/`) are written
+from the Go structs by [tygo](https://github.com/gzuidhof/tygo), so the two
+can't drift apart. After changing a struct the API sends or reads (the files
+listed in `tygo.yaml`, and the request/response shapes in
+`internal/api/wire.go`), regenerate and commit:
+
+```bash
+go run github.com/gzuidhof/tygo@v0.2.21 generate
+```
+
+CI fails when `web/src/lib/gen/` is stale. A Go string that only takes a few
+values can say so for TypeScript with a `tstype` tag (``tstype:"'a' | 'b'"``).
+
 The board's look is a small design system, and `npm run lint` holds code to
 it with [`@shadcn/lint`](https://github.com/shadcn-ui/lint) (`.oxlintrc.json`):
 - Big, readable controls are the components' defaults. Pick a size or a

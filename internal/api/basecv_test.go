@@ -33,7 +33,7 @@ func uploadCV(t *testing.T, url, name, content string, replace bool) *http.Respo
 
 func TestBaseCVUploadAndDownload(t *testing.T) {
 	ts, _ := newTestServer(t)
-	var got baseCVOut
+	var got BaseCVReply
 	json.NewDecoder(do(t, http.MethodGet, ts.URL+"/api/cv", "").Body).Decode(&got)
 	if got.CV != nil || got.Profile.Filled {
 		t.Fatalf("before upload = %+v", got)

@@ -35,6 +35,14 @@ jobs:
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
       - name: go mod tidy
         run: go mod tidy && git diff --exit-code go.mod go.sum
+      # The board's API types are written from the Go structs (tygo.yaml).
+      - name: the board's API types match the Go structs
+        run: |
+          go run github.com/gzuidhof/tygo@v0.2.21 generate
+          if [ -n "$(git status --porcelain web/src/lib/gen)" ]; then
+            echo "web/src/lib/gen is stale: run go run github.com/gzuidhof/tygo@v0.2.21 generate and commit it"
+            git status --short web/src/lib/gen; exit 1
+          fi
       - name: unit tests (race detector)
         run: go test -race -count=1 ./...
 

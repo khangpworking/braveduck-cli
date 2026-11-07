@@ -23,7 +23,7 @@ type TodayItem struct {
 
 // TodayGroup is one kind of action; empty groups are left out.
 type TodayGroup struct {
-	Kind  string      `json:"kind"` // best_matches, deadlines, follow_up
+	Kind  string      `json:"kind" tstype:"'best_matches' | 'deadlines' | 'follow_up'"`
 	Title string      `json:"title"`
 	Items []TodayItem `json:"items"`
 }

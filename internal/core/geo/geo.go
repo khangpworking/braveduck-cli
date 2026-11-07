@@ -41,7 +41,7 @@ func DistanceKM(a, b Point) float64 {
 
 // Place is one geocoding result.
 type Place struct {
-	Point
+	Point `tstype:",extends"`
 	Label string `json:"label"`
 }
 

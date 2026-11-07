@@ -6,16 +6,6 @@ import (
 	"time"
 )
 
-// CrawlSource is one crawler's health plus the jobs it contributed today.
-type CrawlSource struct {
-	Name      string `json:"name"`
-	Count     int    `json:"count"`          // jobs from this source saved today
-	Healthy   bool   `json:"healthy"`        // see CrawlStatus
-	LastRun   string `json:"lastRun"`        // ISO timestamp of the last run attempt
-	LastError string `json:"lastError"`      // why the last run failed ("" if it didn't)
-	Task      bool   `json:"task,omitempty"` // a background task (rating, sync), not a job source; set by the service
-}
-
 // StaleAfter is the shortest silence after which the board calls a reported
 // crawler stalled. A source with a schedule gets twice its interval instead,
 // if that is longer (a 6-hourly source isn't stalled after 61 minutes).
@@ -73,14 +63,6 @@ func (s *Store) RecordCrawlRun(ctx context.Context, name string, ok bool, errMsg
 		   last_success_date = COALESCE(excluded.last_success_date, crawl_runs.last_success_date)`,
 		name, ts, b2i(ok), errMsg, successAt, successDate)
 	return err
-}
-
-// CrawlStatusView is the board's crawl-widget payload: the day's total, a
-// display date, and per-source rows.
-type CrawlStatusView struct {
-	NewJobsToday int           `json:"newJobsToday"`
-	Date         string        `json:"date"`
-	Sources      []CrawlSource `json:"sources"`
 }
 
 // CrawlStatus reports per-source crawl health from crawl_runs, joined with the

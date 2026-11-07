@@ -27,7 +27,7 @@ type Job struct {
 	URL      string `json:"url"`
 	Location string `json:"location"`
 
-	Status string `json:"status"` // saved / waiting / applied / interview / offer / closed
+	Status string `json:"status" tstype:"Status"` // saved / waiting / applied / interview / offer / closed
 	Pinned bool   `json:"pinned"`
 	Keep   bool   `json:"keep"`
 	Notes  string `json:"notes"`

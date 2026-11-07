@@ -7,14 +7,8 @@ import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { locale } from '@/lib/i18n'
 import { N_ } from '@/lib/n'
+import type { Stats } from '@/lib/gen/service'
 
-interface Stats {
-  resolved: number
-  interviews: number
-  pending: number
-  interview_rate: number
-  morale: string
-}
 
 // The server's lines (internal/core/jobs/morale.go); the Vietnamese ones are
 // shown as written.

@@ -210,11 +210,11 @@ func IsAppliedClearable(raw string, now time.Time) bool {
 // open job, or the silence since applying for an applied one. ClosesIn is the
 // days until the sweep moves it to Closed (≤0: due), once it's counting down.
 type Clock struct {
-	Kind     string `json:"kind"`                // "deadline" or "applied"
-	State    string `json:"state"`               // deadline: ok/warning/expired; applied: silent/countdown/expired
-	Days     int    `json:"days"`                // deadline: days left (negative once past); applied: days since sent
-	Date     string `json:"date"`                // the deadline or the day it was sent
-	ClosesIn *int   `json:"closes_in,omitempty"` // see above
+	Kind     string `json:"kind" tstype:"'deadline' | 'applied'"` // "deadline" or "applied"
+	State    string `json:"state"`                                // deadline: ok/warning/expired; applied: silent/countdown/expired
+	Days     int    `json:"days"`                                 // deadline: days left (negative once past); applied: days since sent
+	Date     string `json:"date"`                                 // the deadline or the day it was sent
+	ClosesIn *int   `json:"closes_in,omitempty"`                  // see above
 }
 
 // ClockOf returns j's clock, or nil when it has none (no deadline, or a stage

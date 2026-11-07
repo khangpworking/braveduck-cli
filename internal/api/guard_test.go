@@ -176,7 +176,7 @@ func TestPinAndKeepToggle(t *testing.T) {
 func TestRatingConfigRoundTrip(t *testing.T) {
 	ts, _ := newTestServer(t)
 
-	var got ratingConfigJSON
+	var got RatingConfig
 	getJSON(t, ts.URL+"/api/rating-config", &got)
 	if got.DefaultModel == "" || len(got.Models) != 1 {
 		t.Fatalf("fresh config = %+v, want the single default rater", got)
@@ -249,7 +249,7 @@ func TestCVAndDraftAPI(t *testing.T) {
 	j, _ := svc.AddJob(ctx, service.NewJob{Title: "Go Engineer"})
 	base := fmt.Sprintf("%s/api/jobs/%d", ts.URL, j.ID)
 
-	var ask askOut
+	var ask AskReply
 	resp := do(t, http.MethodPost, base+"/cv", "")
 	json.NewDecoder(resp.Body).Decode(&ask)
 	if resp.StatusCode != 200 || !strings.Contains(ask.Prompt, "Using braveduck") || !strings.Contains(ask.Brief, "braveduck cv") {

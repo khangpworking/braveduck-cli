@@ -10,9 +10,7 @@ func (s *server) getProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) putProfile(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Text string `json:"text"`
-	}
+	var req ProfileText
 	if !decode(w, r, &req) {
 		return
 	}
