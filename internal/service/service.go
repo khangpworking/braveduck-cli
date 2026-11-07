@@ -341,6 +341,25 @@ func (s *Service) SetStatus(ctx context.Context, id int64, stage string) (jobs.J
 	return s.UpdateJob(ctx, id, Patch{Status: &stage})
 }
 
+// MarkFollowedUp records that the user asked the company about an
+// application (by email, Zalo, a call: braveduck sends nothing). Today then
+// stops asking them to, until another week passes without an answer.
+func (s *Service) MarkFollowedUp(ctx context.Context, id int64) (jobs.Job, error) {
+	j, err := s.GetJob(ctx, id)
+	if err != nil {
+		return jobs.Job{}, err
+	}
+	if j.Status != "applied" {
+		return jobs.Job{}, fmt.Errorf("%w: only an application still waiting for an answer can be followed up", ErrInvalid)
+	}
+	at := s.now().UTC().Format(time.RFC3339)
+	if err := s.st.Patch(ctx, id, Patch{FollowupSentAt: &at}, s.now()); err != nil {
+		return jobs.Job{}, notFound(err)
+	}
+	s.logEvent(ctx, "info", fmt.Sprintf("Followed up on %q", j.Title))
+	return s.GetJob(ctx, id)
+}
+
 // TogglePin flips pinned and returns the updated job.
 func (s *Service) TogglePin(ctx context.Context, id int64) (jobs.Job, error) {
 	return s.toggle(ctx, id, "pinned")

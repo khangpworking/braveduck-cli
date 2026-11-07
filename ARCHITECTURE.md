@@ -375,7 +375,7 @@ via the UI or an AI agent via MCP:
 ```
 list_jobs, get_job, add_job, update_job, delete_job,
 rate_job, ask_model, generate_cv, draft_email, approve_draft, reject_draft,
-apply_job, pin_job, keep_job,
+apply_job, pin_job, keep_job, mark_followed_up,
 get_stats, get_crawl_status, retry_crawl,
 list_platforms, connect_platform, disconnect_platform,
 get_rating_config, set_rating_config,

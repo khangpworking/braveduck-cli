@@ -46,6 +46,8 @@ Jobs
   status <id> <stage>   move a job to a lane (saved/waiting/applied/interview/offer/closed)
   pin <id>   toggle pin
   keep <id>  toggle keep (exempt from auto-clear)
+  followup <id>   you asked the company about an application: Today stops
+             reminding you until another week passes without an answer
   rm <id>    delete a job
 
 Rating (bring your own AI: braveduck stores no API keys)
@@ -184,6 +186,8 @@ func run(args []string) error {
 		return cmdToggle(ctx, svc, rest, "pin")
 	case "keep":
 		return cmdToggle(ctx, svc, rest, "keep")
+	case "followup":
+		return cmdFollowUp(ctx, svc, rest)
 	case "rm", "delete":
 		return cmdDelete(ctx, svc, rest)
 	case "location":

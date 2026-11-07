@@ -70,6 +70,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/apply/confirm", s.applyConfirm)
 	mux.HandleFunc("POST /api/jobs/{id}/pin", s.togglePin)
 	mux.HandleFunc("POST /api/jobs/{id}/keep", s.toggleKeep)
+	mux.HandleFunc("POST /api/jobs/{id}/followup", s.followedUp)
 	mux.HandleFunc("GET /api/profile", s.getProfile)
 	mux.HandleFunc("PUT /api/profile", s.putProfile)
 	mux.HandleFunc("GET /api/profile/form", s.getProfileForm)
@@ -246,6 +247,14 @@ func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusCreated, j, err)
+}
+
+// followedUp records that the user asked the company about an application.
+func (s *server) followedUp(w http.ResponseWriter, r *http.Request) {
+	if id, ok := pathID(w, r); ok {
+		j, err := s.svc.MarkFollowedUp(r.Context(), id)
+		reply(w, http.StatusOK, j, err)
+	}
 }
 
 func (s *server) getJob(w http.ResponseWriter, r *http.Request) {

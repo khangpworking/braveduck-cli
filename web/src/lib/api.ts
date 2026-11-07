@@ -2,7 +2,7 @@
 // the Go server writes into the page (internal/api/api.go renderIndex).
 
 export const token =
-  document.querySelector<HTMLMetaElement>('meta[name="braveduck-token"]')?.content ?? ''
+  globalThis.document?.querySelector<HTMLMetaElement>('meta[name="braveduck-token"]')?.content ?? ''
 
 export type Status = 'saved' | 'waiting' | 'applied' | 'interview' | 'offer' | 'closed'
 
@@ -36,10 +36,20 @@ export interface Job {
   score_reasoning: string
   dealbreakers?: string[]
   clock?: Clock
-  apply_state: string
+  ratings?: Record<string, { status: string; score: number; letter: string; reasoning: string }>
+  apply_method: string // platform / email
+  apply_state: string // "", filling, confirm, sent (queued/failed/replied: older values)
   apply_detail: string
-  cv_status: string
-  draft_status: string
+  cv_status: string // "" or ready
+  cv_version: number
+  cv_generated_at: string
+  draft_email: string // JSON {to, subject, body}, or ""
+  draft_status: string // ready-to-review / sent / rejected
+  draft_notes: string
+  contact_email: string
+  topcv_status: string // sent / seen / suitable / rejected
+  vnw_status: string
+  company_active_date: string
   expires_at: string
   followup_sent_at: string
   saved_at: string

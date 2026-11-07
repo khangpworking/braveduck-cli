@@ -103,13 +103,14 @@ export default function App() {
     onSuccess: () => qc.invalidateQueries(),
     onError: (e: Error) => toast.error(e.message),
   })
+  // Go on to the next job in the list, the way a person works through it.
+  const goNext = (job: Job) => {
+    const i = rows.findIndex(r => r.id === job.id)
+    setCur((rows[i + 1] ?? rows[i - 1])?.id ?? null)
+    if (phone) back()
+  }
   const move: Move = (job, to, opts) => {
-    if (opts?.next) {
-      // Go on to the next job in the list, the way a person works through it.
-      const i = rows.findIndex(r => r.id === job.id)
-      setCur((rows[i + 1] ?? rows[i - 1])?.id ?? null)
-      if (phone) back()
-    }
+    if (opts?.next) goNext(job)
     save.mutate(
       { id: job.id, status: to },
       {
@@ -242,7 +243,7 @@ export default function App() {
       )}
       {phone ? (
         phoneJob && current ? (
-          <JobDetail job={current} phone onBack={back} onMove={move} />
+          <JobDetail job={current} phone onBack={back} onMove={move} onDeleted={goNext} />
         ) : (
           <div className="min-h-dvh">
             <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-4 py-2.5">
@@ -259,7 +260,7 @@ export default function App() {
         <div className="flex h-dvh">
           {nav}
           {list}
-          <JobDetail job={current} phone={false} onBack={() => {}} onMove={move} />
+          <JobDetail job={current} phone={false} onBack={() => {}} onMove={move} onDeleted={goNext} />
         </div>
       )}
       <AddJob

@@ -71,6 +71,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 		"Fails if the URL is already on the board.", write, t.addJob)
 	add(srv, "update_job", "Change a job's lane, pinned/keep flags, notes, title, company, salary or location. Only the fields you pass change.", idempotentWrite, t.updateJob)
 	add(srv, "set_status", "Move a job to a lane: saved, waiting, applied, interview, offer or closed.", idempotentWrite, t.setStatus)
+	add(srv, "mark_followed_up", "Record that the user asked the company about an application (Applied lane only) — braveduck sends nothing itself. get_today then stops listing it until another week passes without an answer.", write, t.markFollowedUp)
 	add(srv, "pin_job", "Toggle a job's pin (pinned jobs sort first in their lane).", write, t.pinJob)
 	add(srv, "keep_job", "Toggle a job's keep flag (kept jobs are exempt from auto-clear).", write, t.keepJob)
 	add(srv, "delete_job", "Permanently delete a job, its ratings and its tailored CVs.", destructive, t.deleteJob)
@@ -383,6 +384,10 @@ func (t tools) updateJob(ctx context.Context, in updateIn) (jobs.Job, error) {
 
 func (t tools) setStatus(ctx context.Context, in statusIn) (jobs.Job, error) {
 	return t.svc.SetStatus(ctx, in.ID, in.Stage)
+}
+
+func (t tools) markFollowedUp(ctx context.Context, in idIn) (jobs.Job, error) {
+	return t.svc.MarkFollowedUp(ctx, in.ID)
 }
 
 func (t tools) pinJob(ctx context.Context, in idIn) (jobs.Job, error) {

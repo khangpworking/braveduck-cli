@@ -73,8 +73,15 @@ func todayGroups(all []jobs.Job, now time.Time) []TodayGroup {
 				deadlines = append(deadlines, ranked{job: j, key: -float64(d), why: closesIn(d)})
 			}
 		case e.Kind == jobs.KindApplied && j.Status == "applied":
-			if d, ok := days(e.Date); ok && -d >= todayFollowUpDays {
-				followUps = append(followUps, ranked{job: j, key: float64(-d), why: fmt.Sprintf("applied %d days ago", -d)})
+			// Counted from the last time the user asked, if they have.
+			d, ok := days(e.Date)
+			why := "applied %d days ago"
+			if t, err := time.Parse(time.RFC3339, j.FollowupSentAt); err == nil {
+				d, ok = days(t.In(now.Location()).Format("2006-01-02"))
+				why = "followed up %d days ago"
+			}
+			if ok && -d >= todayFollowUpDays {
+				followUps = append(followUps, ranked{job: j, key: float64(-d), why: fmt.Sprintf(why, -d)})
 			}
 		}
 	}
