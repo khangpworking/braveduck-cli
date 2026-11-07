@@ -32,6 +32,9 @@
     --color-info: var(--info);
     --color-info-muted: var(--info-muted);
     --color-info-border: var(--info-border);
+    --color-brand: var(--brand);
+    --color-brand-foreground: var(--brand-foreground);
+    --color-brand-muted: var(--brand-muted);
     --color-grade-a: var(--grade-a);
     --color-grade-b: var(--grade-b);
     --color-grade-c: var(--grade-c);
@@ -96,6 +99,10 @@
     --info: oklch(50% 0.134 242.749);
     --info-muted: oklch(97.7% 0.013 236.62);
     --info-border: oklch(90.1% 0.058 230.902);
+    /* braveduck itself: the duck's warm yellow, for the landing page. */
+    --brand: oklch(82.8% 0.189 84.429);
+    --brand-foreground: oklch(27.9% 0.077 45.635);
+    --brand-muted: oklch(98.7% 0.026 102.212);
     /* Grades A–F, as the letter badges show them. */
     --grade-a: oklch(59.6% 0.145 163.225);
     --grade-b: oklch(51.1% 0.096 186.391);
@@ -168,6 +175,15 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* The landing page's faint squared paper behind the hero. */
+@utility bg-grid {
+    background-image:
+        linear-gradient(to right, color-mix(in oklch, var(--foreground) 6%, transparent) 1px, transparent 1px),
+        linear-gradient(to bottom, color-mix(in oklch, var(--foreground) 6%, transparent) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
 }
 
 /* Rows that scroll sideways (the stage chips on a phone) without a bar. */

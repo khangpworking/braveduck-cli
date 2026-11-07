@@ -40,6 +40,7 @@ cd web && npm ci
 npm run typecheck && npm run lint && npm test   # types, oxlint + @shadcn/lint, unit tests (vitest)
 npm run build                                   # then commit internal/api/app with the change
 npm run dev   # live-reloading board against a running braveduck (BRAVEDUCK_URL, default :8097)
+npm run build:pages   # the public site for Cloudflare Pages (landing + 404) into web/dist-pages
 ```
 
 CI rebuilds it and fails when the committed `internal/api/app` doesn't match

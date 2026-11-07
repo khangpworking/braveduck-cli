@@ -92,6 +92,40 @@ func TestIndexCarriesTokenAndIsntCached(t *testing.T) {
 	}
 }
 
+// The landing page is public and in the board's language; an unknown
+// address gets the 404 page with status 404, and an unknown API path a JSON
+// error.
+func TestLandingAndNotFoundPages(t *testing.T) {
+	ts, _ := newTestServer(t)
+	for _, c := range []struct {
+		path, want string
+		code       int
+	}{
+		{"/welcome", "/assets/welcome-", http.StatusOK},
+		{"/deep/nope/here", "/assets/notfound-", http.StatusNotFound},
+		{"/assets/missing.js", "/assets/notfound-", http.StatusNotFound},
+		{"/api/nope", `"error"`, http.StatusNotFound},
+	} {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+c.path, nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != c.code {
+			t.Errorf("%s: status %d, want %d", c.path, resp.StatusCode, c.code)
+		}
+		if strings.Contains(string(body), "braveduck-token") {
+			t.Errorf("%s carries the token", c.path)
+		}
+		if !strings.Contains(string(body), c.want) {
+			t.Errorf("%s: the page doesn't have %q", c.path, c.want)
+		}
+	}
+}
+
 // The new board's scripts and styles are served from the embedded build.
 func TestAppServesItsAssets(t *testing.T) {
 	ts, _ := newTestServer(t)

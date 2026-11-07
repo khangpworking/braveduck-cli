@@ -1,0 +1,1 @@
+var e=`/welcome`;export{e as t};
