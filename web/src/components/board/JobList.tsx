@@ -23,14 +23,14 @@ export function JobRow({ job, current, onOpen }: { job: Job; current: boolean; o
     >
       <GradeBadge job={job} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 text-[1.06rem] leading-snug font-semibold">
+        <span className="flex items-center gap-1.5 text-body leading-snug font-semibold">
           {job.pinned && <Pin className="size-4 shrink-0 text-muted-foreground" aria-label={t('Pinned')} />}
           <span className="truncate">{job.title}</span>
         </span>
-        <span className="block truncate text-[0.95rem] text-muted-foreground">
+        <span className="block truncate text-small text-muted-foreground">
           <Company job={job} />
         </span>
-        <span className="block text-[0.98rem]">
+        <span className="block text-body">
           <PayKm job={job} />
         </span>
         <Warning job={job} />
@@ -75,14 +75,15 @@ export function TodayCard({ items, cap, onOpen, onAll }: {
   const text = useTodayText()
   if (!items.length) return null
   return (
-    <Card className="gap-0 border-amber-200 bg-amber-50/60 py-2" aria-label={t('Today')}>
+    <Card size="sm" tone="warning" aria-label={t('Today')}>
+      <div className="flex flex-col">
       <div className="flex items-center justify-between px-4 py-1.5">
-        <span className="flex items-center gap-2 text-[1.06rem] font-semibold">
-          <Sun className="size-5 text-amber-600" />
+        <span className="flex items-center gap-2 text-body font-semibold">
+          <Sun className="size-5 text-warning" />
           {t('Today')}
         </span>
         {items.length > cap && (
-          <Button variant="link" className="h-10 px-0 text-[0.95rem]" onClick={onAll}>
+          <Button variant="quiet" className="h-10" onClick={onAll}>
             {t('See all ({n})', { n: items.length })}
             <ChevronRight />
           </Button>
@@ -96,19 +97,20 @@ export function TodayCard({ items, cap, onOpen, onAll }: {
             type="button"
             key={it.job.id}
             onClick={() => onOpen(it.job)}
-            className="mx-1.5 flex min-h-14 items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-amber-100/70"
+            className="mx-1.5 flex min-h-14 items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-warning-border/30"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-xs">
-              <Icon className="size-5 text-amber-700" />
+              <Icon className="size-5 text-warning" />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-semibold">{title}</span>
-              <span className="block truncate text-[0.92rem] text-muted-foreground">{detail}</span>
+              <span className="block truncate text-small text-muted-foreground">{detail}</span>
             </span>
             <ChevronRight className="size-5 text-muted-foreground" />
           </button>
         )
       })}
+      </div>
     </Card>
   )
 }

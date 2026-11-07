@@ -50,8 +50,8 @@ function NextStep({ job, a }: { job: Job; a: JobActions }) {
     if (c.state !== 'silent' && !job.keep && !job.pinned) {
       // The sweep's countdown: no answer for weeks closes the application.
       return (
-        <Card className="gap-1 border-red-200 bg-red-50 px-5 py-4">
-          <Kicker tone="text-red-700">{t('No answer yet')}</Kicker>
+        <Card size="callout" tone="danger">
+          <Kicker tone="text-danger">{t('No answer yet')}</Kicker>
           <span className="text-lg font-semibold">
             {t('Moves to Closed in {n} days', { n: Math.max(0, c.closes_in ?? 0) })}
           </span>
@@ -66,8 +66,8 @@ function NextStep({ job, a }: { job: Job; a: JobActions }) {
       const sent = new Date(c.date).toLocaleDateString(locale(), { day: 'numeric', month: 'numeric' })
       const msg = t('Hello, I applied for the {title} position on {date}. I would be glad to talk more about it.', { title: job.title, date: sent })
       return (
-        <Card className="gap-2 border-amber-300 bg-amber-50 px-5 py-4">
-          <Kicker tone="text-amber-700">{t('Next step')}</Kicker>
+        <Card size="callout" tone="warning">
+          <Kicker tone="text-warning">{t('Next step')}</Kicker>
           <span className="text-xl font-semibold">{t('Ask the company for an answer')}</span>
           <span className="text-muted-foreground">
             {asked === null
@@ -76,11 +76,11 @@ function NextStep({ job, a }: { job: Job; a: JobActions }) {
           </span>
           <div className="rounded-lg border bg-white px-3.5 py-2.5">{msg}</div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Button variant="outline" className="h-11 text-base" onClick={() => void copy(msg, t)}>
+            <Button variant="outline" className="h-11" onClick={() => void copy(msg, t)}>
               <Copy />
               {t('Copy message')}
             </Button>
-            <Button variant="outline" className="h-11 text-base" disabled={a.followedUp.isPending} onClick={() => a.followedUp.mutate()}>
+            <Button variant="outline" className="h-11" disabled={a.followedUp.isPending} onClick={() => a.followedUp.mutate()}>
               <Check />
               {t('I’ve sent it')}
             </Button>
@@ -89,7 +89,7 @@ function NextStep({ job, a }: { job: Job; a: JobActions }) {
       )
     }
     return (
-      <Card className="gap-1 px-5 py-4">
+      <Card size="callout">
         <Kicker>{t('Next step')}</Kicker>
         <span className="text-lg font-semibold">{t('Wait for the company to answer')}</span>
         <span className="text-muted-foreground">
@@ -106,8 +106,8 @@ function NextStep({ job, a }: { job: Job; a: JobActions }) {
     const d = c.days
     const gone = d < 0
     return (
-      <Card className={cn('gap-1 px-5 py-4', gone ? 'border-red-200 bg-red-50' : 'border-amber-300 bg-amber-50')}>
-        <span className={cn('text-xl font-semibold', gone && 'text-red-800')}>
+      <Card size="callout" tone={gone ? 'danger' : 'warning'}>
+        <span className={cn('text-xl font-semibold', gone && 'text-danger')}>
           {gone
             ? t('This posting has closed')
             : d === 0
@@ -153,7 +153,7 @@ function Reasons({ job, a }: { job: Job; a: JobActions }) {
           <h3 className="mb-1 text-sm font-semibold text-muted-foreground">{t('Why this grade')}</h3>
           <ul className="divide-y">
             {list.map(w => (
-              <li key={w} className="flex items-start gap-2.5 py-2.5 text-[1.02rem]">
+              <li key={w} className="flex items-start gap-2.5 py-2.5 text-body">
                 <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
                 {w}
               </li>
@@ -162,8 +162,8 @@ function Reasons({ job, a }: { job: Job; a: JobActions }) {
         </div>
       )}
       <Button
-        variant="link"
-        className="h-9 px-0 text-muted-foreground"
+        variant="quiet"
+        className="h-9"
         disabled={a.askAI.isPending || job.score_status === 'pending'}
         onClick={() => a.askAI.mutate({ kind: 'rate' })}
       >
@@ -186,19 +186,19 @@ function Facts({ job }: { job: Job }) {
           : '–'
   return (
     <div className="grid grid-cols-2 gap-2.5">
-      <Card className="gap-0.5 px-4 py-3">
+      <Card size="fact">
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Wallet className="size-4" />
           {t('Pay')}
         </span>
-        <b className="text-[1.06rem]">{payUndisclosed(job.salary) ? t('Pay not given') : pay(job.salary, locale())}</b>
+        <b className="text-body">{payUndisclosed(job.salary) ? t('Pay not given') : pay(job.salary, locale())}</b>
       </Card>
-      <Card className="gap-0.5 px-4 py-3">
+      <Card size="fact">
         <span className="flex items-center gap-1.5 truncate text-sm text-muted-foreground">
           <MapPin className="size-4 shrink-0" />
           <span className="truncate">{job.location || t('Place not given')}</span>
         </span>
-        <b className="text-[1.06rem]">{where}</b>
+        <b className="text-body">{where}</b>
       </Card>
     </div>
   )
@@ -226,7 +226,7 @@ function MoveMenu({ job, onMove }: { job: Job; onMove: Move }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-10 text-muted-foreground">
+        <Button variant="quiet" className="h-10">
           {t('Move to…')}
           <ChevronDown />
         </Button>
@@ -235,7 +235,7 @@ function MoveMenu({ job, onMove }: { job: Job; onMove: Move }) {
         <DropdownMenuLabel>{t('Move this job to')}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={job.status} onValueChange={v => v !== job.status && onMove(job, v as Status)}>
           {STAGES.map(s => (
-            <DropdownMenuRadioItem key={s.id} value={s.id} className="h-10 text-base">
+            <DropdownMenuRadioItem key={s.id} value={s.id} className="h-10">
               {t(s.name)}
             </DropdownMenuRadioItem>
           ))}
@@ -261,10 +261,10 @@ function ApplySteps({ a }: { a: JobActions }) {
     <Dialog open={!!p} onOpenChange={o => !o && a.setPrep(null)}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-xl">{t('A {site} window is opening', { site: p?.site ?? '' })}</DialogTitle>
+          <DialogTitle>{t('A {site} window is opening', { site: p?.site ?? '' })}</DialogTitle>
           <DialogDescription>{t('You’re logged in there. You submit it yourself:')}</DialogDescription>
         </DialogHeader>
-        <ol className="list-decimal space-y-2 pl-6 text-[1.02rem]">
+        <ol className="list-decimal space-y-2 pl-6 text-body">
           {steps.map(s => (
             <li key={s} className="break-words">
               {s}
@@ -277,7 +277,7 @@ function ApplySteps({ a }: { a: JobActions }) {
             : t('When you close the window, braveduck asks whether you submitted it.')}
         </p>
         <DialogFooter>
-          <Button className="h-11 text-base" onClick={() => a.setPrep(null)}>
+          <Button className="h-11" onClick={() => a.setPrep(null)}>
             {t('OK')}
           </Button>
         </DialogFooter>
@@ -293,7 +293,6 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
   useEffect(() => setAsking(false), [job.id])
   const platforms = useQuery({ queryKey: ['platforms'], queryFn: getPlatforms })
   const setup = useQuery({ queryKey: ['setup'], queryFn: getSetup })
-  const big = 'h-auto min-h-14 w-full py-3 text-lg whitespace-normal'
   const url = postingUrl(job)
   const site = url ? applySite(job, platforms.data ?? []) : undefined
 
@@ -304,10 +303,10 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
           {site ? t('Did you submit it on {site}?', { site: site.name }) : t('Did you submit it?')}
         </p>
         <div className="flex gap-2">
-          <Button className="h-14 flex-1 text-lg" onClick={() => a.confirm.mutate(true)}>
+          <Button size="xl" className="flex-1" onClick={() => a.confirm.mutate(true)}>
             {t('Yes, I applied')}
           </Button>
-          <Button variant="outline" className="h-14 flex-1 text-lg" onClick={() => a.confirm.mutate(false)}>
+          <Button variant="outline" size="xl" className="flex-1" onClick={() => a.confirm.mutate(false)}>
             {t('Not yet')}
           </Button>
         </div>
@@ -317,7 +316,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
   if (isOpen(job)) {
     if (job.apply_state === 'filling') {
       return (
-        <Button className={big} disabled>
+        <Button size="xl" className="w-full" disabled>
           {t('Applying in the {site} window…', { site: site?.name ?? '' })}
         </Button>
       )
@@ -327,11 +326,11 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
         <div className="space-y-2 text-center">
           <p className="text-lg font-semibold">{t('Did you send your CV?')}</p>
           <div className="flex gap-2">
-            <Button className="h-14 flex-1 text-lg" onClick={() => onMove(job, 'applied', { next: true })}>
+            <Button size="xl" className="flex-1" onClick={() => onMove(job, 'applied', { next: true })}>
               {t('Yes, I applied')}
             </Button>
             {url && (
-              <Button variant="outline" className="h-14 flex-1 text-lg" onClick={() => setAsking(false)}>
+              <Button variant="outline" size="xl" className="flex-1" onClick={() => setAsking(false)}>
                 {t('Not yet')}
               </Button>
             )}
@@ -342,7 +341,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
     const canAssist = site && !job.topcv_status && (job.cv_status === 'ready' || setup.data?.cv)
     if (canAssist) {
       return (
-        <Button className={big} disabled={a.apply.isPending} onClick={() => a.apply.mutate()}>
+        <Button size="xl" className="w-full" disabled={a.apply.isPending} onClick={() => a.apply.mutate()}>
           {t('Apply on {site}', { site: site.name })}
         </Button>
       )
@@ -350,7 +349,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
     const d = draftOf(job)
     if (d && job.draft_status !== 'sent' && job.apply_method !== 'platform') {
       return (
-        <Button asChild className={big}>
+        <Button asChild size="xl" className="w-full">
           <a href={mailto(d)} onClick={() => setAsking(true)}>
             <Mail />
             {t('Send from my mail app')}
@@ -359,7 +358,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
       )
     }
     return (
-      <Button asChild className={big}>
+      <Button asChild size="xl" className="w-full">
         <a href={url} target="_blank" rel="noopener noreferrer" onClick={() => setAsking(true)}>
           {t('Open the posting to apply')}
           <ArrowUpRight />
@@ -376,7 +375,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
   const n = next[job.status]
   if (!n) return null
   return (
-    <Button className={big} onClick={() => onMove(job, n[0])}>
+    <Button size="xl" className="w-full" onClick={() => onMove(job, n[0])}>
       {t(n[1])}
     </Button>
   )
@@ -433,13 +432,13 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
       <div className="flex-1 space-y-4 overflow-auto px-5 py-6 md:px-8">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[1.75rem] leading-tight font-semibold tracking-tight">{job.title}</h1>
-            <p className="text-[1.02rem] text-muted-foreground">{job.company}</p>
+            <h1 className="text-title leading-tight font-semibold tracking-tight">{job.title}</h1>
+            <p className="text-body text-muted-foreground">{job.company}</p>
           </div>
           <MoreMenu job={job} a={a} onDeleted={() => onDeleted(job)} />
         </div>
         <NextStep job={job} a={a} />
-        {status.length > 0 && <p className="font-medium text-emerald-800">{status.join(' · ')}</p>}
+        {status.length > 0 && <p className="font-medium text-success">{status.join(' · ')}</p>}
         {early ? (
           <>
             <GradeCard job={job} />
@@ -457,14 +456,16 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
                   <ChevronRight className="ml-auto size-5 transition-transform group-data-[state=open]:rotate-90" />
                 </button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="pt-3">
-                <Reasons job={job} a={a} />
+              <CollapsibleContent>
+                <div className="pt-3">
+                  <Reasons job={job} a={a} />
+                </div>
               </CollapsibleContent>
             </Collapsible>
           </>
         )}
         {job.score_status === 'failed' && (
-          <p className="flex items-center gap-2 text-amber-800">
+          <p className="flex items-center gap-2 text-warning-strong">
             <CircleAlert className="size-4" />
             {t("Couldn't rate this job. braveduck tries again later.")}
           </p>
@@ -496,7 +497,7 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
         <MainAction job={job} a={a} onMove={onMove} />
         <div className="flex items-center justify-between">
           {job.status === 'saved' && job.apply_state !== 'confirm' ? (
-            <Button variant="link" className="h-10 px-0 text-muted-foreground" onClick={() => onMove(job, 'closed', { next: true })}>
+            <Button variant="quiet" className="h-10" onClick={() => onMove(job, 'closed', { next: true })}>
               {t('Not a fit, skip it')}
             </Button>
           ) : (

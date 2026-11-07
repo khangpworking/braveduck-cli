@@ -46,7 +46,7 @@ function NavItem({ active, onClick, label, count }: {
       onClick={onClick}
       aria-current={active || undefined}
       className={cn(
-        'flex h-11 items-center justify-between rounded-lg px-3 text-left text-[1.02rem] hover:bg-muted',
+        'flex h-11 items-center justify-between rounded-lg px-3 text-left text-body hover:bg-muted',
         active && 'bg-primary font-semibold text-primary-foreground hover:bg-primary/90',
       )}
     >
@@ -156,7 +156,7 @@ export default function App() {
   const nav = (
     <nav className="flex w-56 shrink-0 flex-col gap-0.5 border-r bg-muted/40 p-3" aria-label={t('Stages')}>
       <div className="flex items-center gap-2 px-2 pt-1 pb-3 text-lg font-bold">🦆 braveduck</div>
-      <Button className="mb-3 h-12 text-base" onClick={() => setAdding(true)}>
+      <Button className="mb-3 h-12" onClick={() => setAdding(true)}>
         <Plus />
         {t('Add job')}
       </Button>
@@ -197,27 +197,28 @@ export default function App() {
         onChange={e => setQuery(e.target.value)}
         placeholder={t('Search jobs')}
         aria-label={t('Search jobs')}
-        className="h-11 pl-9 text-base"
+        className="pl-9"
       />
     </label>
   )
 
   const list = (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col md:max-w-[34rem] md:border-r" aria-label={viewName}>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col md:max-w-xl md:border-r" aria-label={viewName}>
       <div className="space-y-3 px-4 pt-3 pb-2">
         <GetStarted />
         {view !== 'today' && (
           <TodayCard items={today} cap={phone ? 1 : 2} onOpen={j => open(j)} onAll={() => setView('today')} />
         )}
         {phone ? (
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" role="tablist">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 no-scrollbar" role="tablist">
             {stageList.map(s => (
               <Button
                 key={s.id}
                 role="tab"
                 aria-selected={view === s.id}
                 variant={view === s.id ? 'default' : 'outline'}
-                className="h-11 shrink-0 rounded-full px-4 text-base"
+                size="chip"
+                className="shrink-0"
                 onClick={() => setView(s.id)}
               >
                 {t(s.name)} <span className="opacity-70">{s.n}</span>
@@ -237,7 +238,7 @@ export default function App() {
         {jobsQ.isPending &&
           [0, 1, 2, 3].map(i => (
             <div key={i} className="flex items-center gap-4 border-b px-4 py-3.5">
-              <Skeleton className="size-12 rounded-xl" />
+              <Skeleton className="size-12" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-5 w-3/4" />
                 <Skeleton className="h-4 w-1/2" />
@@ -252,7 +253,7 @@ export default function App() {
             {query ? t('No job matches “{q}”.', { q: query }) : t('Nothing here yet.')}
           </p>
         )}
-        {jobsQ.isError && <p className="p-8 text-center text-red-700">{jobsQ.error.message}</p>}
+        {jobsQ.isError && <p className="p-8 text-center text-danger">{jobsQ.error.message}</p>}
       </div>
     </section>
   )
@@ -260,7 +261,7 @@ export default function App() {
   return (
     <>
       {stale && (
-        <div role="alert" className="flex items-center justify-center gap-3 bg-amber-100 px-4 py-2 text-amber-900">
+        <div role="alert" className="flex items-center justify-center gap-3 bg-warning-border/40 px-4 py-2 text-warning-strong">
           {t('braveduck restarted. Reload the page to carry on.')}
           <Button size="sm" variant="outline" onClick={() => location.reload()}>
             <RotateCw />
@@ -275,7 +276,7 @@ export default function App() {
           <div className="min-h-dvh">
             <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-4 py-2.5">
               <span className="flex-1 text-lg font-bold">🦆 braveduck</span>
-              <Button className="h-11 px-4 text-base" onClick={() => setAdding(true)}>
+              <Button onClick={() => setAdding(true)}>
                 <Plus />
                 {t('Add job')}
               </Button>

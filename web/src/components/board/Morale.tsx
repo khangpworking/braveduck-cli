@@ -28,10 +28,10 @@ export function Morale() {
   const n = (v: number) => v.toLocaleString(locale())
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-muted/40 px-4 py-3">
-      <TrendingUp className="size-5 shrink-0 text-emerald-700" />
+      <TrendingUp className="size-5 shrink-0 text-success" />
       <div className="min-w-0">
         <p className="font-semibold">
-          {s.resolved >= 3 && <span className="mr-2 text-emerald-700">{n(Math.round(s.interview_rate * 100))}%</span>}
+          {s.resolved >= 3 && <span className="mr-2 text-success">{n(Math.round(s.interview_rate * 100))}%</span>}
           {t('{n} interviews from {resolved} answered applications · {pending} waiting', {
             n: n(s.interviews),
             resolved: n(s.resolved),

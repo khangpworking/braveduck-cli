@@ -1,0 +1,53 @@
+{
+  "jsPlugins": [
+    "@shadcn/lint"
+  ],
+  "settings": {
+    "shadcn": {
+      "note": "Design rules: big, readable controls. Use the components' sizes and tones (Button size xl, Card tone) and the theme tokens in src/index.css."
+    }
+  },
+  "rules": {
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": [
+          "layout"
+        ],
+        "contracts": [
+          {
+            "pattern": "^Input$",
+            "allow": [
+              "layout",
+              "pl-*"
+            ]
+          },
+          {
+            "pattern": "^Skeleton$",
+            "allow": [
+              "layout",
+              "rounded-*"
+            ]
+          }
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": "error",
+    "shadcn/no-unknown-classes": "error",
+    "shadcn/require-static-classes": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/components/ui/**"
+      ],
+      "rules": {
+        "shadcn/no-arbitrary-values": "off",
+        "shadcn/no-inline-styles": "off",
+        "shadcn/no-unknown-classes": "off"
+      }
+    }
+  ]
+}

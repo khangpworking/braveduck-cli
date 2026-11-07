@@ -51,14 +51,14 @@ export function ConfirmHost() {
     <AlertDialog open={!!a} onOpenChange={o => !o && answer(false)}>
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-lg">{a?.title}</AlertDialogTitle>
-          {a?.body ? <AlertDialogDescription className="text-base">{a.body}</AlertDialogDescription> : <AlertDialogDescription className="sr-only">{a?.title}</AlertDialogDescription>}
+          <AlertDialogTitle>{a?.title}</AlertDialogTitle>
+          {a?.body ? <AlertDialogDescription>{a.body}</AlertDialogDescription> : <AlertDialogDescription className="sr-only">{a?.title}</AlertDialogDescription>}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="h-11 text-base" onClick={() => answer(false)}>
+          <AlertDialogCancel className="h-11" onClick={() => answer(false)}>
             {t('Cancel')}
           </AlertDialogCancel>
-          <AlertDialogAction variant={a?.danger ? 'destructive' : 'default'} className="h-11 text-base" onClick={() => answer(true)}>
+          <AlertDialogAction variant={a?.danger ? 'destructive' : 'default'} className="h-11" onClick={() => answer(true)}>
             {a?.ok}
           </AlertDialogAction>
         </AlertDialogFooter>

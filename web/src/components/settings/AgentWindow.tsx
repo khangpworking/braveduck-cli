@@ -71,7 +71,7 @@ function AgentBody() {
           </pre>
           <Button
             variant="outline"
-            className="h-11 text-base"
+            className="h-11"
             onClick={() =>
               navigator.clipboard.writeText(cmd).then(
                 () => toast.success(t('Copied.')),
@@ -85,11 +85,11 @@ function AgentBody() {
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button className="h-11 text-base whitespace-normal" disabled={make.isPending} onClick={() => make.mutate()}>
+        <Button className="h-11 whitespace-normal" disabled={make.isPending} onClick={() => make.mutate()}>
           {exists ? t('Make a new key (the old one stops working)') : t('Make a key for your agent')}
         </Button>
         {exists && (
-          <Button variant="outline" className="h-11 text-base" disabled={remove.isPending} onClick={() => remove.mutate()}>
+          <Button variant="outline" className="h-11" disabled={remove.isPending} onClick={() => remove.mutate()}>
             {t('Remove the key')}
           </Button>
         )}

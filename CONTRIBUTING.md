@@ -37,13 +37,28 @@ The board (Node 22):
 
 ```bash
 cd web && npm ci
-npm run typecheck && npm run lint && npm test   # types, oxlint, unit tests (vitest)
+npm run typecheck && npm run lint && npm test   # types, oxlint + @shadcn/lint, unit tests (vitest)
 npm run build                                   # then commit internal/api/app with the change
 npm run dev   # live-reloading board against a running braveduck (BRAVEDUCK_URL, default :8097)
 ```
 
 CI rebuilds it and fails when the committed `internal/api/app` doesn't match
-the source. Text on the board is written in English and translated in
+the source.
+
+The board's look is a small design system, and `npm run lint` holds code to
+it with [`@shadcn/lint`](https://github.com/shadcn-ui/lint) (`.oxlintrc.json`):
+- Big, readable controls are the components' defaults. Pick a size or a
+  variant instead of restyling: `<Button size="xl">` for a screen's one main
+  action, `size="row"` for a list row, `size="chip"`, `variant="quiet"` for a
+  small way out; `<Card size="callout" tone="warning">`; `<DialogContent
+  layout="panel">` with `<DialogHeader bar>` / `<DialogFooter bar>`.
+- Colours and text sizes come from the tokens in `src/index.css`: `success`,
+  `warning`, `danger`, `info`, `grade-a`…`grade-f`; `text-body`, `text-small`,
+  `text-title`. No raw palette colours (`bg-amber-50`) and no arbitrary
+  values (`text-[0.95rem]`).
+- Layout classes (`w-full`, `flex-1`, margins, grid) are fine on any
+  component. A new look belongs in the component (`src/components/ui/`) as a
+  variant, not in a `className` at one place. Text on the board is written in English and translated in
 `web/src/locales/vi.json`; `src/lib/i18n.test.ts` fails on a missing or
 unused translation. Use `t("…")` in components and `N_("…")` for text kept in
 data and translated where it's shown.

@@ -67,7 +67,7 @@ function KeywordsForm({ saved, close }: { saved: Keywords; close: () => void }) 
           value={lists.search_queries}
           onChange={set('search_queries')}
         />
-        <p className="-mt-2 text-[0.95rem] text-muted-foreground" role="status" data-count>
+        <p className="-mt-2 text-small text-muted-foreground" role="status" data-count>
           {!lists.search_queries.length
             ? ''
             : n === 0
@@ -78,23 +78,25 @@ function KeywordsForm({ saved, close }: { saved: Keywords; close: () => void }) 
         </p>
         <Collapsible>
           <CollapsibleTrigger asChild>
-            <Button variant="outline" className="group h-11 w-full justify-between text-base">
+            <Button variant="outline" className="group h-11 w-full justify-between">
               {inUse ? t('More filters ({n} in use)', { n: inUse }) : t('More filters')}
               <ChevronDown className="transition-transform group-data-[state=open]:rotate-180" />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-5 pt-4">
+          <CollapsibleContent>
+<div className="space-y-5 pt-4">
             {FILTERS.map(([key, label, hint]) => (
               <TagsField key={key} label={t(label)} hint={hint && t(hint)} value={lists[key]} onChange={set(key)} />
             ))}
-          </CollapsibleContent>
+          </div>
+</CollapsibleContent>
         </Collapsible>
       </Body>
       <Footer>
-        <Button variant="outline" className="h-11 text-base" onClick={close}>
+        <Button variant="outline" className="h-11" onClick={close}>
           {t('Cancel')}
         </Button>
-        <Button className="h-11 text-base" disabled={save.isPending} onClick={() => afterBlur(() => save.mutate(latest.current))}>
+        <Button className="h-11" disabled={save.isPending} onClick={() => afterBlur(() => save.mutate(latest.current))}>
           {save.isPending ? t('Saving…') : t('Save')}
         </Button>
       </Footer>

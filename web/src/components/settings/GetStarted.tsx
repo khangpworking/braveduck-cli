@@ -14,13 +14,14 @@ export function GetStarted() {
   const left = setup ? stepsLeft(setup) : []
   if (!left.length) return null
   return (
-    <Card className="gap-2 border-sky-200 bg-sky-50/70 px-3 py-3" aria-label={t('Get started')} data-get-started>
+    <Card size="sm" tone="info" aria-label={t('Get started')} data-get-started>
+      <div className="space-y-2 px-3">
       <div className="flex items-center justify-between gap-2 px-1">
-        <span className="flex items-center gap-2 text-[1.06rem] font-semibold">
-          <Rocket className="size-5 text-sky-700" />
+        <span className="flex items-center gap-2 text-body font-semibold">
+          <Rocket className="size-5 text-info" />
           {t('Get started')}
         </span>
-        <span className="text-[0.95rem] text-muted-foreground">
+        <span className="text-small text-muted-foreground">
           {left.length === 1 ? t('{n} step left', { n: 1 }) : t('{n} steps left', { n: left.length })}
         </span>
       </div>
@@ -29,7 +30,8 @@ export function GetStarted() {
           <li key={s.key}>
             <Button
               variant={i === 0 ? 'default' : 'outline'}
-              className="h-auto min-h-12 w-full justify-between py-2 text-left text-base whitespace-normal"
+              size="row"
+              className="w-full"
               onClick={() => openWindow(s.window)}
             >
               <span>
@@ -40,6 +42,7 @@ export function GetStarted() {
           </li>
         ))}
       </ol>
+      </div>
     </Card>
   )
 }

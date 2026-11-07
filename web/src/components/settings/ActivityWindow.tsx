@@ -35,9 +35,9 @@ function ActivityBody() {
           const Icon = a.type === 'error' ? CircleAlert : a.type === 'info' ? RefreshCw : CircleCheck
           return (
             <li key={i} className="flex gap-3 border-b py-2.5 last:border-b-0">
-              <Icon className={a.type === 'error' ? 'mt-0.5 size-5 shrink-0 text-red-700' : 'mt-0.5 size-5 shrink-0 text-muted-foreground'} />
-              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{activityText(a.message, (k, v) => t(k, v ?? {}), locale())}</span>
-              <time dateTime={a.timestamp} className="shrink-0 text-[0.9rem] text-muted-foreground">
+              <Icon className={a.type === 'error' ? 'mt-0.5 size-5 shrink-0 text-danger' : 'mt-0.5 size-5 shrink-0 text-muted-foreground'} />
+              <span className="min-w-0 flex-1 wrap-anywhere">{activityText(a.message, (k, v) => t(k, v ?? {}), locale())}</span>
+              <time dateTime={a.timestamp} className="shrink-0 text-small text-muted-foreground">
                 {msg(ago(a.timestamp))}
               </time>
             </li>

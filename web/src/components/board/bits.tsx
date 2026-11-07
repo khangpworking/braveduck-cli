@@ -43,7 +43,7 @@ export function Warning({ job, all = false }: { job: Job; all?: boolean }) {
       {(all ? list : list.slice(0, 1)).map(d => {
         const [key, vars] = dealbreakerText(d)
         return (
-          <span key={d} className="inline-flex items-center gap-1 text-[0.95rem] font-semibold text-red-700">
+          <span key={d} className="inline-flex items-center gap-1 text-small font-semibold text-danger">
             <Ban className="size-4" />
             {t(key, vars ?? {})}
           </span>

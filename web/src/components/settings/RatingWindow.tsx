@@ -34,7 +34,7 @@ function RatingBody({ close }: { close: () => void }) {
       </Body>
       <Footer>
         <CloseButton />
-        <Button className="h-11 text-base" onClick={() => openWindow('profile')}>
+        <Button className="h-11" onClick={() => openWindow('profile')}>
           {t('Edit my profile')}
         </Button>
       </Footer>
@@ -55,7 +55,7 @@ function JevBlock({ jev }: { jev: Jev }) {
   const out = set.isPending ? set.variables : jev.opt_out
   return (
     <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
-      {!out && <p className="text-[0.95rem] text-muted-foreground">{t("Your profile and jobs are sent to TypeSafe's Jev to rate them.")}</p>}
+      {!out && <p className="text-small text-muted-foreground">{t("Your profile and jobs are sent to TypeSafe's Jev to rate them.")}</p>}
       <label className="flex min-h-11 cursor-pointer items-center gap-3">
         <Checkbox className="size-5" checked={out} disabled={set.isPending} onCheckedChange={v => set.mutate(v === true)} />
         {t("Don't send my profile to Jev")}
@@ -87,30 +87,32 @@ function Raters({ saved, close }: { saved: RatingConfig; close: () => void }) {
   return (
     <Collapsible>
       <CollapsibleTrigger asChild>
-        <Button variant="outline" className="group h-11 w-full justify-between text-base">
+        <Button variant="outline" className="group h-11 w-full justify-between">
           {t('Advanced')}
           <ChevronDown className="transition-transform group-data-[state=open]:rotate-180" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-4 pt-4" data-advanced>
+      <CollapsibleContent data-advanced>
+<div className="space-y-4 pt-4">
         <label className="flex cursor-pointer items-start gap-3">
           <Checkbox className="mt-0.5 size-5" checked={ab} onCheckedChange={v => setAB(v === true)} />
           {t('Enable A/B Rating Mode (Score using multiple models simultaneously)')}
         </label>
-        <p className="text-[0.92rem] text-muted-foreground">
+        <p className="text-small text-muted-foreground">
           {t('Raters are whichever AI you connect (e.g. Claude Code over MCP). Use the model id it reports when it submits ratings.')}
         </p>
         <Field label={t('Default rater (owns the score badge)')} htmlFor="rater-default">
-          <Input id="rater-default" value={def} onChange={e => setDef(e.target.value)} placeholder={t('e.g. claude-opus-5-5')} className="h-11 text-base md:text-base" />
+          <Input id="rater-default" value={def} onChange={e => setDef(e.target.value)} placeholder={t('e.g. claude-opus-5-5')} className="h-11" />
         </Field>
         <Field label={t('Challenger raters (A/B mode, up to 2, comma-separated)')} htmlFor="rater-rivals">
-          <Input id="rater-rivals" value={rivals} onChange={e => setRivals(e.target.value)} placeholder={t('e.g. gpt-sol-6-1, gemini-3-8')} className="h-11 text-base md:text-base" />
+          <Input id="rater-rivals" value={rivals} onChange={e => setRivals(e.target.value)} placeholder={t('e.g. gpt-sol-6-1, gemini-3-8')} className="h-11" />
         </Field>
         {save.isError && <Problem>{err(save.error)}</Problem>}
-        <Button variant="secondary" className="h-11 text-base" disabled={save.isPending} onClick={() => save.mutate()}>
+        <Button variant="secondary" className="h-11" disabled={save.isPending} onClick={() => save.mutate()}>
           {save.isPending ? t('Saving…') : t('Save')}
         </Button>
-      </CollapsibleContent>
+      </div>
+</CollapsibleContent>
     </Collapsible>
   )
 }
