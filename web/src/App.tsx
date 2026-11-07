@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { LayoutGrid, Plus, RotateCw, Search, Sun } from 'lucide-react'
+import { LayoutGrid, Plus, RotateCw, Search, Settings as Gear, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getJobs, getToday, patchJob, setOnUnauthorized, type Job, type Status } from '@/lib/api'
@@ -15,6 +15,8 @@ import { N_ } from '@/lib/n'
 import { JobRow, TodayCard } from '@/components/board/JobList'
 import { JobDetail, type Move } from '@/components/board/JobDetail'
 import { AddJob } from '@/components/board/AddJob'
+import { Settings } from '@/components/settings/Settings'
+import { GetStarted } from '@/components/settings/GetStarted'
 
 type View = Status | 'today'
 
@@ -63,6 +65,7 @@ export default function App() {
   const [cur, setCur] = useState<number | null>(null)
   const [query, setQuery] = useState('')
   const [adding, setAdding] = useState(false)
+  const [settings, setSettings] = useState(false)
   const [phoneJob, setPhoneJob] = useState(false)
   const [stale, setStale] = useState(false)
   useEffect(() => setOnUnauthorized(() => setStale(true)), [])
@@ -152,6 +155,15 @@ export default function App() {
       ))}
       <div className="flex-1" />
       <NavItem
+        onClick={() => setSettings(true)}
+        label={
+          <>
+            <Gear className="size-4" />
+            {t('Settings')}
+          </>
+        }
+      />
+      <NavItem
         onClick={() => location.assign('/')}
         label={
           <>
@@ -180,6 +192,7 @@ export default function App() {
   const list = (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col md:max-w-[34rem] md:border-r" aria-label={viewName}>
       <div className="space-y-3 px-4 pt-3 pb-2">
+        <GetStarted />
         {view !== 'today' && (
           <TodayCard items={today} cap={phone ? 1 : 2} onOpen={j => open(j)} onAll={() => setView('today')} />
         )}
@@ -252,6 +265,9 @@ export default function App() {
                 <Plus />
                 {t('Add job')}
               </Button>
+              <Button variant="outline" size="icon" className="size-11" aria-label={t('Settings')} onClick={() => setSettings(true)}>
+                <Gear className="size-5" />
+              </Button>
             </header>
             {list}
           </div>
@@ -273,6 +289,14 @@ export default function App() {
             const j = qc.getQueryData<Job[]>(['jobs'])?.find(x => x.id === id)
             if (j) open(j)
           })
+        }}
+      />
+      <Settings
+        open={settings}
+        onOpenChange={setSettings}
+        onOpenJob={id => {
+          const j = jobs.find(x => x.id === id)
+          if (j) open(j)
         }}
       />
       <Toaster position="bottom-center" />
