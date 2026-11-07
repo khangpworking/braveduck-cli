@@ -127,11 +127,19 @@ func ParsePost(text string) JobPosting {
 	return parsePasted(text, false)
 }
 
+// minTitleRunes: a first phrase shorter than this is a tag, not a title.
+const minTitleRunes = 5
+
 func parsePasted(text string, lineTwoIsCompany bool) JobPosting {
 	phrases := split(text, phraseBreakRE)
 	jp := JobPosting{Description: cleanText(text)}
-	if len(phrases) > 0 {
-		jp.Title = truncate(phrases[0], 120)
+	// The first phrase is the title, unless it's only a tag like "HN" or
+	// "[HCM]" in front of it ("HN - Tuyển AI Engineer").
+	for i, p := range phrases {
+		if len([]rune(strings.Trim(p, "[]()#*:. "))) >= minTitleRunes || i == len(phrases)-1 {
+			jp.Title = truncate(p, 120)
+			break
+		}
 	}
 	jp.Company = pastedCompany(text, phrases, lineTwoIsCompany)
 	jp.Email = emailRE.FindString(text)

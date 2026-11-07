@@ -17,6 +17,7 @@ import (
 	"syscall"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/cvfile"
+	"github.com/khangpworking/braveduck-cli/internal/core/fbwatcher"
 	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -164,6 +165,11 @@ func run(args []string) error {
 	ctx := context.Background()
 	svc := service.New(st)
 	svc.SetDataDir(filepath.Dir(resolved))
+	if fbw, err := fbwatcher.FromEnv(); err != nil {
+		fmt.Fprintln(os.Stderr, "braveduck: fb-watcher is off:", err)
+	} else {
+		svc.SetFBWatcher(fbw)
+	}
 
 	switch cmd {
 	case "add":

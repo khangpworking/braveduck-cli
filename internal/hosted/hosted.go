@@ -44,6 +44,7 @@ import (
 
 	"github.com/khangpworking/braveduck-cli/internal/api"
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
+	"github.com/khangpworking/braveduck-cli/internal/core/fbwatcher"
 	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
@@ -75,6 +76,10 @@ type Options struct {
 	// audience tag. Then UserHeader and Secret aren't used.
 	AccessTeam string
 	AccessAUD  string
+
+	// FBWatcher reads Facebook posts and groups for every user (fb-watcher's
+	// API, shared and rate-limited by it); nil leaves it off.
+	FBWatcher *fbwatcher.Client
 
 	// Tick is how often each user's scheduler looks for due work (crawls,
 	// rating, sweeps, backups); 0 turns schedulers off (tests).
@@ -290,6 +295,7 @@ func (s *Server) open(name string) (*tenant, error) {
 	svc.SetHosted(service.HostedInfo{User: name, LogoutURL: s.opts.LogoutURL})
 	svc.SetJevDailyLimit(s.opts.JevDaily)
 	svc.SetMaxJobs(s.opts.MaxJobs)
+	svc.SetFBWatcher(s.opts.FBWatcher)
 
 	tok := make([]byte, 32)
 	if _, err := rand.Read(tok); err != nil {
