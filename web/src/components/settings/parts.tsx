@@ -46,12 +46,13 @@ export function Win({ open, onOpenChange, title, intro, wide, children, ...drop 
         // On a touch screen a focused field pops the keyboard over the window.
         onOpenAutoFocus={e => matchMedia('(pointer: coarse)').matches && e.preventDefault()}
         {...drop}
-        className={cn('flex max-h-[calc(100dvh-1.5rem)] flex-col gap-0 p-0 text-base', wide ? 'sm:max-w-2xl' : 'sm:max-w-lg')}
+        layout="panel"
+        className={wide ? 'sm:max-w-2xl' : 'sm:max-w-lg'}
       >
-        <DialogHeader className="border-b px-5 pt-4 pr-14 pb-3">
-          <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
+        <DialogHeader bar>
+          <DialogTitle>{title}</DialogTitle>
           {intro ? (
-            <DialogDescription className="text-[0.95rem]">{intro}</DialogDescription>
+            <DialogDescription>{intro}</DialogDescription>
           ) : (
             <DialogDescription className="sr-only">{title}</DialogDescription>
           )}
@@ -74,7 +75,7 @@ export const Body = ({ children }: { children: React.ReactNode }) => (
 
 export const Footer = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   // One row even on a phone, buttons sharing it, so the window keeps its room.
-  <DialogFooter className={cn('mx-0 mb-0 flex-row justify-end gap-2 rounded-b-xl px-5 py-3 max-sm:*:flex-1', className)}>{children}</DialogFooter>
+  <DialogFooter bar className={className}>{children}</DialogFooter>
 )
 
 /** The window's Close button, for a footer. */
@@ -82,7 +83,7 @@ export function CloseButton() {
   const { t } = useTranslation()
   return (
     <DialogClose asChild>
-      <Button variant="outline" className="h-11 text-base">
+      <Button variant="outline" className="h-11">
         {t('Close')}
       </Button>
     </DialogClose>
@@ -123,7 +124,7 @@ export function Loading() {
 /** A problem loading or saving, in the window. */
 export function Problem({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800">
+    <p role="alert" className="rounded-lg border border-danger-border bg-danger-muted px-3 py-2 text-danger">
       {children}
     </p>
   )
@@ -140,7 +141,7 @@ export function Field({ label, hint, htmlFor, children }: {
       <label htmlFor={htmlFor} className="block font-semibold">
         {label}
       </label>
-      {hint && <p className="text-[0.92rem] text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-small text-muted-foreground">{hint}</p>}
       {children}
     </div>
   )
@@ -180,7 +181,7 @@ export function TagsField({ label, hint, value, onChange, suggestions = [] }: {
     <Field label={label} hint={hint} htmlFor={id}>
       <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-input p-1.5 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
         {value.map((v, i) => (
-          <span key={v} className="inline-flex h-9 items-center gap-1 rounded-md bg-secondary pl-3 text-[0.98rem]">
+          <span key={v} className="inline-flex h-9 items-center gap-1 rounded-md bg-secondary pl-3 text-body">
             {shown(v)}
             <button
               type="button"
@@ -224,7 +225,7 @@ export function TagsField({ label, hint, value, onChange, suggestions = [] }: {
       {unpicked(suggestions, value).length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1">
           {unpicked(suggestions, value).map(s => (
-            <Button key={s} type="button" variant="outline" className="h-10 text-[0.95rem]" onClick={() => onChange([...value, s])}>
+            <Button key={s} type="button" variant="outline" size="sm" className="h-10" onClick={() => onChange([...value, s])}>
               <Plus />
               {t(s)}
             </Button>
@@ -257,7 +258,6 @@ export function ChoiceField({ label, value, options, onChange }: {
               type="button"
               aria-pressed={on}
               variant={on ? 'default' : 'outline'}
-              className="h-11 px-4 text-base"
               onClick={() => onChange(on ? value.filter(v => v !== o) : [...value, o])}
             >
               {options.includes(o) ? t(o) : o}
@@ -303,7 +303,7 @@ export function MoneyField({ label, value, onChange, currencies, periods }: {
           value={formatAmount(value.amount, locale())}
           placeholder={t('e.g. 20,000,000')}
           aria-label={t('{label} amount', { label })}
-          className="h-11 w-48 text-base md:text-base"
+          className="h-11 w-48"
           onChange={e => onChange(withAmount(value, e.target.value))}
         />
         <Select aria-label={t('{label} currency', { label })} value={value.currency} onChange={e => onChange({ ...value, currency: e.target.value })}>
@@ -326,7 +326,7 @@ export function MoneyField({ label, value, onChange, currencies, periods }: {
           <option value="net">{t('net (take-home)')}</option>
         </Select>
       </div>
-      {value.text && <p className="text-[0.92rem] text-muted-foreground">{t('You wrote: "{text}". Fill in an amount to replace it.', { text: value.text })}</p>}
+      {value.text && <p className="text-small text-muted-foreground">{t('You wrote: "{text}". Fill in an amount to replace it.', { text: value.text })}</p>}
     </Field>
   )
 }

@@ -20,11 +20,11 @@ export const isOpen = (j: Job) => j.status === 'saved' || j.status === 'waiting'
 export type Grade = 'A' | 'B' | 'C' | 'D' | 'F' | '?'
 
 export const GRADES: Record<Grade, { label: string; tone: string }> = {
-  A: { label: N_('Great fit'), tone: 'bg-emerald-600 text-white' },
-  B: { label: N_('Good fit'), tone: 'bg-teal-700 text-white' },
-  C: { label: N_('Okay fit'), tone: 'bg-amber-500 text-white' },
-  D: { label: N_('Weak fit'), tone: 'bg-orange-600 text-white' },
-  F: { label: N_('Poor fit'), tone: 'bg-red-700 text-white' },
+  A: { label: N_('Great fit'), tone: 'bg-grade-a text-white' },
+  B: { label: N_('Good fit'), tone: 'bg-grade-b text-white' },
+  C: { label: N_('Okay fit'), tone: 'bg-grade-c text-white' },
+  D: { label: N_('Weak fit'), tone: 'bg-grade-d text-white' },
+  F: { label: N_('Poor fit'), tone: 'bg-grade-f text-white' },
   '?': { label: N_('Not rated yet'), tone: 'bg-muted text-muted-foreground' },
 }
 

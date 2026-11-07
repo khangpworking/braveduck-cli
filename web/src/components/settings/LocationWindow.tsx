@@ -125,7 +125,7 @@ function LocationForm({ saved, close }: { saved: Location; close: () => void }) 
   return (
     <>
       <Body>
-        <Button className="h-12 w-full text-base sm:w-auto" onClick={locateMe}>
+        <Button className="h-12 w-full sm:w-auto" onClick={locateMe}>
           <LocateFixed />
           {t('Use my current location')}
         </Button>
@@ -141,9 +141,9 @@ function LocationForm({ saved, close }: { saved: Location; close: () => void }) 
             onChange={e => setQuery(e.target.value)}
             placeholder={t('…or search an address, district or city')}
             aria-label={t('Search an address')}
-            className="h-11 flex-1 text-base md:text-base"
+            className="h-11 flex-1"
           />
-          <Button type="submit" variant="outline" className="h-11 text-base" disabled={search.isPending}>
+          <Button type="submit" variant="outline" className="h-11" disabled={search.isPending}>
             <Search />
             {t('Search')}
           </Button>
@@ -153,10 +153,10 @@ function LocationForm({ saved, close }: { saved: Location; close: () => void }) 
             {search.isPending ? (
               <span className="text-muted-foreground">{t('Searching…')}</span>
             ) : search.isError ? (
-              <span className="text-red-700">{err(search.error)}</span>
+              <span className="text-danger">{err(search.error)}</span>
             ) : search.data?.length ? (
               search.data.map(p => (
-                <Button key={`${p.lat},${p.lng}`} variant="outline" className="h-auto min-h-11 justify-start py-2 text-left text-base whitespace-normal" onClick={() => pick(p)}>
+                <Button key={`${p.lat},${p.lng}`} variant="outline" size="row" className="min-h-11 justify-start" onClick={() => pick(p)}>
                   <MapPin />
                   {p.label}
                 </Button>
@@ -175,22 +175,22 @@ function LocationForm({ saved, close }: { saved: Location; close: () => void }) 
             <LocationMap at={picked} onPick={p => pick({ ...p, label: '' })} />
           </Suspense>
         </MapGuard>
-        <p className="-mt-2 text-[0.95rem] text-muted-foreground" data-picked>
+        <p className="-mt-2 text-small text-muted-foreground" data-picked>
           {pinText}
         </p>
         <Field label={t('Maximum commute (km)')} htmlFor="max-km">
-          <Input id="max-km" type="number" min={1} max={500} step={1} value={maxKm} onChange={e => setMaxKm(e.target.value)} className="h-11 w-32 text-base md:text-base" />
+          <Input id="max-km" type="number" min={1} max={500} step={1} value={maxKm} onChange={e => setMaxKm(e.target.value)} className="h-11 w-32" />
         </Field>
       </Body>
       <Footer className="sm:justify-between">
         {saved.set ? (
-          <Button variant="outline" className="h-11 text-base" disabled={forget.isPending} onClick={() => forget.mutate()}>
+          <Button variant="outline" className="h-11" disabled={forget.isPending} onClick={() => forget.mutate()}>
             {t('Forget my location')}
           </Button>
         ) : (
           <span />
         )}
-        <Button className="h-11 text-base" disabled={save.isPending} onClick={doSave}>
+        <Button className="h-11" disabled={save.isPending} onClick={doSave}>
           {save.isPending ? t('Saving…') : t('Save')}
         </Button>
       </Footer>

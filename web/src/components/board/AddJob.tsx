@@ -67,7 +67,7 @@ export function AddJob({ open, onOpenChange, onAdded }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-xl">{t('Add a job')}</DialogTitle>
+          <DialogTitle>{t('Add a job')}</DialogTitle>
           <DialogDescription>{t('Paste a link, a Facebook group, or the text of a posting.')}</DialogDescription>
         </DialogHeader>
         <Textarea
@@ -79,36 +79,36 @@ export function AddJob({ open, onOpenChange, onAdded }: {
           }}
           placeholder={t('Paste here')}
           aria-label={t('Link or text of the posting')}
-          className="min-h-32 text-base"
+          className="min-h-32"
           autoFocus
         />
         <p className="min-h-6 font-medium" role="status">
           {d && t(d.msg)}
         </p>
         {dups.length > 0 && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3" role="alert">
+          <div className="rounded-lg border border-warning-border bg-warning-muted p-3" role="alert">
             <p className="font-semibold">{t('This job is already on your board:')}</p>
             {dups.map(x => (
-              <Button
+              <button
+                type="button"
                 key={x.id}
-                variant="link"
-                className="h-auto px-0 py-1 text-base whitespace-normal"
+                className="block py-1 text-left font-medium text-primary underline-offset-4 hover:underline"
                 onClick={() => {
                   onOpenChange(false)
                   onAdded(x.id)
                 }}
               >
                 {x.title} · {t(stageName(x.status))}
-              </Button>
+              </button>
             ))}
           </div>
         )}
         {err && (
-          <p className="text-red-700" role="alert">
+          <p className="text-danger" role="alert">
             {err}
           </p>
         )}
-        <Button className="h-12 text-base" disabled={!d?.ok || add.isPending} onClick={() => add.mutate(v.trim())}>
+        <Button className="h-12" disabled={!d?.ok || add.isPending} onClick={() => add.mutate(v.trim())}>
           {add.isPending ? t('Reading the posting…') : t('Add')}
         </Button>
       </DialogContent>

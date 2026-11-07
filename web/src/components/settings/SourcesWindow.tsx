@@ -56,12 +56,12 @@ export function SourceWarnings() {
   return (
     <div className="space-y-2" data-warnings>
       {bad.map((s: SourceHealth) => (
-        <div key={s.name} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950">
-          <AlertTriangle className="size-5 shrink-0 text-amber-700" />
+        <div key={s.name} role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-warning-border bg-warning-muted px-3 py-2 text-warning-strong">
+          <AlertTriangle className="size-5 shrink-0 text-warning" />
           <span className="min-w-48 flex-1" title={s.lastError ? t(s.lastError) : undefined}>
             {t(unhealthyText(s), { source: name(s.name), when: s.lastRun ? msg(ago(s.lastRun)) : t('never') })}
           </span>
-          <Button variant="outline" className="h-10 text-base" disabled={retry.isPending} onClick={() => retry.mutate(s.name)}>
+          <Button variant="outline" className="h-10" disabled={retry.isPending} onClick={() => retry.mutate(s.name)}>
             <RotateCw />
             {retry.isPending && retry.variables === s.name ? t('Checking…') : t('Try again')}
           </Button>
@@ -136,11 +136,11 @@ function SourcesBody() {
       <div key={sc.source} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b py-3 last:border-b-0" data-source={sc.source}>
         <div className="min-w-0">
           <div className="font-semibold">{t(sc.name)}</div>
-          <div className={cn('text-[0.95rem]', st.bad ? 'font-medium text-red-700' : 'text-muted-foreground')}>
+          <div className={cn('text-small', st.bad ? 'font-medium text-danger' : 'text-muted-foreground')}>
             {t(st.text[0], { time: st.when ? msg(st.when) : '' })}
           </div>
         </div>
-        <label className="flex items-center gap-2 text-[0.95rem]">
+        <label className="flex items-center gap-2 text-small">
           <span className="text-muted-foreground">{label}</span>
           <Select
             aria-label={t('{site}: {label}', { site: t(sc.name), label })}
@@ -171,20 +171,20 @@ function SourcesBody() {
         {others.length > 0 && (
           <Collapsible>
             <CollapsibleTrigger asChild>
-              <Button variant="outline" className="group h-11 w-full justify-between text-base">
+              <Button variant="outline" className="group h-11 w-full justify-between">
                 {t('Advanced')}
                 <ChevronDown className="transition-transform group-data-[state=open]:rotate-180" />
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="pt-2" data-advanced>
-              {others.map(sc => row(sc, t('Runs:')))}
+            <CollapsibleContent data-advanced>
+              <div className="pt-2">{others.map(sc => row(sc, t('Runs:')))}</div>
             </CollapsibleContent>
           </Collapsible>
         )}
         {needTerms ? (
           <p className="flex flex-wrap items-center gap-x-2" data-hint>
             {t('First tell us what jobs to look for.')}
-            <Button variant="link" className="h-auto p-0 text-base" onClick={() => openWindow('keywords')}>
+            <Button variant="link" size="inline" onClick={() => openWindow('keywords')}>
               {t('Add them')}
             </Button>
           </p>
@@ -194,7 +194,7 @@ function SourcesBody() {
       </Body>
       <Footer>
         <CloseButton />
-        <Button className="h-11 text-base" disabled={checking || needTerms || !on.length || !kw.ready} onClick={() => void check()}>
+        <Button className="h-11" disabled={checking || needTerms || !on.length || !kw.ready} onClick={() => void check()}>
           <RotateCw className={cn(checking && 'animate-spin')} />
           {checking ? t('Checking…') : t('Check now')}
         </Button>

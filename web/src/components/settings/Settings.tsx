@@ -55,8 +55,8 @@ function Row({ icon: Icon, label, detail, bad, onClick }: {
     <button type="button" onClick={onClick} className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left hover:bg-muted">
       <Icon className="size-5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1">
-        <span className="block text-[1.02rem] font-medium">{label}</span>
-        {detail && <span className={cn('block text-[0.9rem]', bad ? 'font-medium text-red-700' : 'text-muted-foreground')}>{detail}</span>}
+        <span className="block text-body font-medium">{label}</span>
+        {detail && <span className={cn('block text-small', bad ? 'font-medium text-danger' : 'text-muted-foreground')}>{detail}</span>}
       </span>
       <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
     </button>
@@ -75,7 +75,7 @@ function LanguageWindow(p: WinProps) {
               lang={l}
               aria-pressed={l === lang}
               variant={l === lang ? 'default' : 'outline'}
-              className="h-12 justify-start text-base"
+              className="h-12 justify-start"
               onClick={() => (l === lang ? p.onOpenChange(false) : setLang(l))}
             >
               {LANGS[l]}
@@ -177,17 +177,17 @@ export function Settings({ open, onOpenChange, onOpenJob }: {
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" showCloseButton={false} className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-md">
+        <SheetContent side="right" showCloseButton={false} flush className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-md">
           <SheetClose asChild>
             <Button variant="ghost" size="icon" className="absolute top-3 right-3 size-10" aria-label={t('Close')}>
               <X className="size-5" />
             </Button>
           </SheetClose>
-          <SheetHeader className="border-b pr-14">
-            <SheetTitle className="text-xl font-semibold">{t('Settings')}</SheetTitle>
+          <SheetHeader bar>
+            <SheetTitle>{t('Settings')}</SheetTitle>
             {hosted ? (
-              <SheetDescription className="flex flex-wrap items-center gap-x-3 text-base">
-                <span>{t('Logged in as {user}', { user: hosted.user })}</span>
+              <SheetDescription>
+                <span className="mr-3">{t('Logged in as {user}', { user: hosted.user })}</span>
                 {hosted.logout_url && /^https?:\/\//i.test(hosted.logout_url) && (
                   <a href={hosted.logout_url} className="font-medium text-primary underline underline-offset-4">
                     {t('Log out')}
@@ -224,7 +224,7 @@ export function Settings({ open, onOpenChange, onOpenJob }: {
             <Row icon={Globe} label={t('Language')} detail={LANGS[lang]} onClick={() => show('language')} />
             <label className="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-1.5 hover:bg-muted">
               <Bell className="size-5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 text-[1.02rem] font-medium">{t('Notify me of great matches')}</span>
+              <span className="min-w-0 flex-1 text-body font-medium">{t('Notify me of great matches')}</span>
               <Switch checked={notify} onCheckedChange={() => void toggleNotify()} className="scale-125" />
             </label>
           </nav>

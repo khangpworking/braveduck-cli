@@ -46,18 +46,18 @@ export function AskAI({ job, kind, ask, onClose }: { job: Job; kind: AskKind; as
     <Dialog open={!!ask} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="text-xl">{t(TITLES[kind])}</DialogTitle>
+          <DialogTitle>{t(TITLES[kind])}</DialogTitle>
           <DialogDescription>
             {t('braveduck doesn’t run an AI for this. Paste this into Claude Code (with braveduck connected):')}
           </DialogDescription>
         </DialogHeader>
         <pre className="max-h-40 overflow-auto rounded-lg border bg-muted/50 p-3 text-sm whitespace-pre-wrap">{ask?.prompt}</pre>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="h-11 text-base" onClick={() => ask && void copy(ask.prompt, t)}>
+          <Button variant="outline" className="h-11" onClick={() => ask && void copy(ask.prompt, t)}>
             <Copy />
             {t('Copy the request')}
           </Button>
-          <Button variant="outline" className="h-11 text-base" onClick={() => ask && void copy(ask.brief, t)}>
+          <Button variant="outline" className="h-11" onClick={() => ask && void copy(ask.brief, t)}>
             <Copy />
             {t('Copy everything (for any AI chat)')}
           </Button>
@@ -73,10 +73,10 @@ export function AskAI({ job, kind, ask, onClose }: { job: Job; kind: AskKind; as
                   ? t('…or paste the CV your AI wrote (Markdown) here')
                   : t('…or paste the email here: first line “Subject: …”, then the body')
               }
-              className="min-h-28 text-base"
+              className="min-h-28"
             />
             <DialogFooter>
-              <Button className="h-11 text-base" disabled={!text.trim() || save.isPending} onClick={() => save.mutate()}>
+              <Button className="h-11" disabled={!text.trim() || save.isPending} onClick={() => save.mutate()}>
                 {t('Save what my AI wrote')}
               </Button>
             </DialogFooter>

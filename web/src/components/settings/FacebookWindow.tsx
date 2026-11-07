@@ -11,9 +11,9 @@ import { Body, CloseButton, Footer, Loading, Problem, Win, useErr, useFresh, typ
 
 const VISIBILITY: Record<FBGroup['visibility'], [string, string]> = {
   checking: [N_("Checking whether it's public…"), 'text-muted-foreground'],
-  public: [N_('Public — its job posts come to your board'), 'text-emerald-700'],
-  private: [N_('Private — only members see its posts. Paste the posts you want (link + text).'), 'text-amber-700'],
-  unavailable: [N_("Can't be read right now"), 'text-red-700'],
+  public: [N_('Public — its job posts come to your board'), 'text-success'],
+  private: [N_('Private — only members see its posts. Paste the posts you want (link + text).'), 'text-warning'],
+  unavailable: [N_("Can't be read right now"), 'text-danger'],
 }
 
 /** Only http(s) links are links; anything else isn't clickable. */
@@ -51,16 +51,16 @@ function FacebookBody() {
           const [label, tone] = VISIBILITY[g.visibility] ?? [g.visibility, 'text-muted-foreground']
           return (
             <li key={g.key} className="flex items-center justify-between gap-3 border-b py-3 last:border-b-0" data-group={g.key}>
-              <span className="min-w-0 [overflow-wrap:anywhere]">
+              <span className="min-w-0 wrap-anywhere">
                 <a href={safeUrl(g.url)} target="_blank" rel="noopener noreferrer" className="font-semibold underline-offset-4 hover:underline">
                   {g.name || g.url}
                 </a>
-                <span className={cn('block text-[0.95rem]', tone)}>
+                <span className={cn('block text-small', tone)}>
                   {t(label)}
                   {g.note ? ` — ${g.note}` : ''}
                 </span>
               </span>
-              <Button variant="outline" className="h-11 shrink-0 text-base" disabled={unfollow.isPending} onClick={() => unfollow.mutate(g.key)}>
+              <Button variant="outline" className="h-11 shrink-0" disabled={unfollow.isPending} onClick={() => unfollow.mutate(g.key)}>
                 {t('Unfollow')}
               </Button>
             </li>

@@ -26,18 +26,22 @@ export function Section({ title, hint, open, children }: {
   children: React.ReactNode
 }) {
   return (
-    <Collapsible defaultOpen={open} className="border-t">
+    <div className="border-t">
+    <Collapsible defaultOpen={open}>
       <CollapsibleTrigger asChild>
         <button type="button" className="group flex min-h-14 w-full items-center gap-3 text-left">
           <span className="flex-1">
-            <span className="block text-[1.06rem] font-semibold">{title}</span>
+            <span className="block text-body font-semibold">{title}</span>
             {hint && <span className="block text-sm text-muted-foreground">{hint}</span>}
           </span>
           <ChevronRight className="size-5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-3 pb-4">{children}</CollapsibleContent>
+      <CollapsibleContent>
+        <div className="space-y-3 pb-4">{children}</div>
+      </CollapsibleContent>
     </Collapsible>
+    </div>
   )
 }
 
@@ -58,7 +62,7 @@ export function Notes({ job, a }: { job: Job; a: JobActions }) {
         value={v}
         aria-label={t('My notes')}
         placeholder={t('Who you talked to, what to ask, anything to remember')}
-        className="min-h-24 text-base"
+        className="min-h-24"
         onChange={e => {
           const next = e.target.value
           setV(next)
@@ -92,30 +96,30 @@ function EmailDraft({ job, a, d }: { job: Job; a: JobActions; d: Draft }) {
     <div className="space-y-2">
       <label className="grid gap-1 text-sm font-medium">
         {t('To')}
-        <Input value={v.to} readOnly={sent} placeholder="hr@company.com" onChange={e => setV({ ...v, to: e.target.value })} className="h-11 text-base" />
+        <Input value={v.to} readOnly={sent} placeholder="hr@company.com" onChange={e => setV({ ...v, to: e.target.value })} className="h-11" />
       </label>
       <label className="grid gap-1 text-sm font-medium">
         {t('Subject')}
-        <Input value={v.subject} readOnly={sent} onChange={e => setV({ ...v, subject: e.target.value })} className="h-11 text-base" />
+        <Input value={v.subject} readOnly={sent} onChange={e => setV({ ...v, subject: e.target.value })} className="h-11" />
       </label>
       <label className="grid gap-1 text-sm font-medium">
         {t('Email')}
-        <Textarea value={v.body} readOnly={sent} onChange={e => setV({ ...v, body: e.target.value })} className="min-h-40 text-base" />
+        <Textarea value={v.body} readOnly={sent} onChange={e => setV({ ...v, body: e.target.value })} className="min-h-40" />
       </label>
       {sent ? (
-        <p className="font-medium text-emerald-700">{t('✓ Sent (you said you sent it).')}</p>
+        <p className="font-medium text-success">{t('✓ Sent (you said you sent it).')}</p>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">{t('Attach the CV for this job in your mail app before you send it.')}</p>
           <div className="flex flex-wrap gap-2">
-            <Button className="h-11 text-base" onClick={send}>
+            <Button className="h-11" onClick={send}>
               <Mail />
               {t('Send from my mail app')}
             </Button>
-            <Button variant="outline" className="h-11 text-base" onClick={() => a.askAI.mutate({ kind: 'draft', notes: job.draft_notes })}>
+            <Button variant="outline" className="h-11" onClick={() => a.askAI.mutate({ kind: 'draft', notes: job.draft_notes })}>
               {t('Write it again')}
             </Button>
-            <Button variant="ghost" className="h-11 text-base text-muted-foreground" onClick={() => setDiscard(true)}>
+            <Button variant="quiet" onClick={() => setDiscard(true)}>
               {t('Discard')}
             </Button>
           </div>
@@ -128,8 +132,8 @@ function EmailDraft({ job, a, d }: { job: Job; a: JobActions; d: Draft }) {
             <AlertDialogDescription>{t('If you did, braveduck marks it sent and moves the job to Applied.')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="h-11 text-base">{t('Not yet')}</AlertDialogCancel>
-            <AlertDialogAction className="h-11 text-base" onClick={() => a.draft.sent.mutate()}>
+            <AlertDialogCancel className="h-11">{t('Not yet')}</AlertDialogCancel>
+            <AlertDialogAction className="h-11" onClick={() => a.draft.sent.mutate()}>
               {t('Yes, I sent it')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -141,8 +145,8 @@ function EmailDraft({ job, a, d }: { job: Job; a: JobActions; d: Draft }) {
             <AlertDialogTitle>{t('Discard this email?')}</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="h-11 text-base">{t('Cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" className="h-11 text-base" onClick={() => a.draft.reject.mutate()}>
+            <AlertDialogCancel className="h-11">{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" className="h-11" onClick={() => a.draft.reject.mutate()}>
               {t('Discard')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -177,14 +181,14 @@ export function Documents({ job, a }: { job: Job; a: JobActions }) {
           {cvReady && (
             <Button
               variant="outline"
-              className="h-11 text-base"
+              className="h-11"
               onClick={() => download(`/jobs/${job.id}/cv.pdf`, `cv-job-${job.id}.pdf`).catch((e: Error) => toast.error(t(e.message)))}
             >
               <Download />
               {t('Download the PDF')}
             </Button>
           )}
-          <Button variant="outline" className="h-11 text-base" onClick={() => a.askAI.mutate({ kind: 'cv' })}>
+          <Button variant="outline" className="h-11" onClick={() => a.askAI.mutate({ kind: 'cv' })}>
             <Sparkles />
             {cvReady ? t('Ask your AI to improve it') : t('Ask your AI to tailor it')}
           </Button>
@@ -201,9 +205,9 @@ export function Documents({ job, a }: { job: Job; a: JobActions }) {
               onChange={e => setNotes(e.target.value)}
               aria-label={t('Notes for your AI')}
               placeholder={t('Anything your AI should know (tone, what to stress)… optional')}
-              className="min-h-20 text-base"
+              className="min-h-20"
             />
-            <Button variant="outline" className="h-11 text-base" onClick={() => a.askAI.mutate({ kind: 'draft', notes })}>
+            <Button variant="outline" className="h-11" onClick={() => a.askAI.mutate({ kind: 'draft', notes })}>
               <Sparkles />
               {t('Ask your AI to write it')}
             </Button>
@@ -223,13 +227,13 @@ export function AboutJob({ job }: { job: Job }) {
   return (
     <Section title={t('About the job')}>
       {points.length ? (
-        <ul className="list-disc space-y-1 pl-5 text-[1.02rem]">
+        <ul className="list-disc space-y-1 pl-5 text-body">
           {points.map(p => (
             <li key={p}>{p}</li>
           ))}
         </ul>
       ) : (
-        <p className="text-[1.02rem] whitespace-pre-line">{job.jd_summary}</p>
+        <p className="text-body whitespace-pre-line">{job.jd_summary}</p>
       )}
       {skills.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

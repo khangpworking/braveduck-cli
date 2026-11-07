@@ -28,14 +28,14 @@ function EditDetails({ job, a, open, onOpenChange }: { job: Job; a: JobActions; 
   const field = (k: keyof typeof v, label: string) => (
     <label className="grid gap-1 text-sm font-medium">
       {label}
-      <Input value={v[k]} onChange={e => setV({ ...v, [k]: e.target.value })} className="h-11 text-base" />
+      <Input value={v[k]} onChange={e => setV({ ...v, [k]: e.target.value })} className="h-11" />
     </label>
   )
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-xl">{t('Edit details')}</DialogTitle>
+          <DialogTitle>{t('Edit details')}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
           {field('title', t('Title'))}
@@ -45,7 +45,7 @@ function EditDetails({ job, a, open, onOpenChange }: { job: Job; a: JobActions; 
         </div>
         <DialogFooter>
           <Button
-            className="h-11 text-base"
+            className="h-11"
             disabled={!v.title.trim() || a.edit.isPending}
             onClick={() => a.edit.mutate(v, { onSuccess: () => onOpenChange(false) })}
           >
@@ -70,22 +70,22 @@ export function MoreMenu({ job, a, onDeleted }: { job: Job; a: JobActions; onDel
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          <DropdownMenuCheckboxItem checked={job.pinned} onCheckedChange={() => a.pin.mutate()} className="h-11 text-base">
+          <DropdownMenuCheckboxItem checked={job.pinned} onCheckedChange={() => a.pin.mutate()} className="h-11">
             <Pin />
             {t('Pin to the top')}
           </DropdownMenuCheckboxItem>
           {keepable(job) && (
-            <DropdownMenuCheckboxItem checked={job.keep} onCheckedChange={() => a.keep.mutate()} className="h-11 text-base">
+            <DropdownMenuCheckboxItem checked={job.keep} onCheckedChange={() => a.keep.mutate()} className="h-11">
               <LifeBuoy />
               {t('Keep (don’t move it to Closed by itself)')}
             </DropdownMenuCheckboxItem>
           )}
-          <DropdownMenuItem onSelect={() => setEditing(true)} className="h-11 text-base">
+          <DropdownMenuItem onSelect={() => setEditing(true)} className="h-11">
             <Pencil />
             {t('Edit details')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)} className="h-11 text-base">
+          <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)} className="h-11">
             <Trash2 />
             {t('Delete')}
           </DropdownMenuItem>
@@ -101,10 +101,10 @@ export function MoreMenu({ job, a, onDeleted }: { job: Job; a: JobActions; onDel
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="h-11 text-base">{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogCancel className="h-11">{t('Cancel')}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              className="h-11 text-base"
+              className="h-11"
               onClick={() => a.remove.mutate(undefined, { onSuccess: onDeleted })}
             >
               {t('Delete')}

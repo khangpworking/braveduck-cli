@@ -95,16 +95,16 @@ function ProfileEditor({ saved, profile, close }: {
         <p className="flex items-start gap-2" role="status">
           {filled ? (
             <>
-              <CircleCheck className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+              <CircleCheck className="mt-0.5 size-5 shrink-0 text-success" />
               {t('Filled in — jobs can be rated against it.')}
             </>
           ) : (
-            <span className="font-medium text-amber-800">{t("Not filled in yet, so jobs can't be rated. Start with the job titles you want.")}</span>
+            <span className="font-medium text-warning-strong">{t("Not filled in yet, so jobs can't be rated. Start with the job titles you want.")}</span>
           )}
         </p>
         {mode === 'text' ? (
           <Field label={t('Profile (Markdown)')} hint={t('The whole profile as text (Markdown). Lines inside <!-- --> are hints and are ignored.')} htmlFor="profile-text">
-            <Textarea id="profile-text" spellCheck={false} value={text} onChange={e => setText(e.target.value)} className="min-h-[50dvh] font-mono text-sm md:text-sm" />
+            <Textarea id="profile-text" spellCheck={false} value={text} onChange={e => setText(e.target.value)} code className="min-h-96" />
           </Field>
         ) : (
           <>
@@ -113,10 +113,10 @@ function ProfileEditor({ saved, profile, close }: {
               <ChoiceField label={t('Level')} value={form.seniority} options={o.seniority} onChange={set('seniority')} />
               <ChoiceField label={t('Type of job')} value={form.job_types} options={o.job_types} onChange={set('job_types')} />
               <ChoiceField label={t('Work mode')} value={form.work_modes} options={o.work_modes} onChange={set('work_modes')} />
-              <p className="flex flex-wrap items-center gap-x-1 text-[0.95rem] text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-x-1 text-small text-muted-foreground">
                 <MapPin className="size-4" />
                 {t("Where you live and how far you'll travel to work:")}
-                <Button variant="link" className="h-auto p-0 text-[0.95rem]" onClick={() => openWindow('location')}>
+                <Button variant="link" size="inline" onClick={() => openWindow('location')}>
                   {t('set your location →')}
                 </Button>
               </p>
@@ -135,37 +135,39 @@ function ProfileEditor({ saved, profile, close }: {
             </Section>
             <Section title={t('4. About you')}>
               <Field label={t('Your experience and skills')} hint={t('Filled in from your CV when you upload one. Edit freely.')} htmlFor="profile-about">
-                <Textarea id="profile-about" rows={6} value={form.about_me} onChange={e => set('about_me')(e.target.value)} className="min-h-36 text-base md:text-base" />
+                <Textarea id="profile-about" rows={6} value={form.about_me} onChange={e => set('about_me')(e.target.value)} className="min-h-36" />
               </Field>
             </Section>
             <Collapsible>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" className="group h-11 w-full justify-between text-base">
+                <Button variant="outline" className="group h-11 w-full justify-between">
                   {t('More (optional)')}
                   <ChevronDown className="transition-transform group-data-[state=open]:rotate-180" />
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-5 pt-4">
+              <CollapsibleContent>
+<div className="space-y-5 pt-4">
                 <TagsField label={t('Industries you like')} value={form.industries_want} onChange={set('industries_want')} />
                 <TagsField label={t('Industries to avoid')} value={form.industries_avoid} onChange={set('industries_avoid')} />
                 <TagsField label={t('Languages you can work in')} value={form.languages} suggestions={o.languages} onChange={set('languages')} />
                 <Field label={t('Anything else the rater should know')} htmlFor="profile-notes">
-                  <Textarea id="profile-notes" rows={3} value={form.notes} onChange={e => set('notes')(e.target.value)} className="text-base md:text-base" />
+                  <Textarea id="profile-notes" rows={3} value={form.notes} onChange={e => set('notes')(e.target.value)} />
                 </Field>
-              </CollapsibleContent>
+              </div>
+</CollapsibleContent>
             </Collapsible>
           </>
         )}
-        <Button variant="link" className="h-11 px-0 text-base" disabled={save.isPending} onClick={switchMode}>
+        <Button variant="link" size="inline" className="h-11" disabled={save.isPending} onClick={switchMode}>
           {mode === 'form' ? t('Edit as text instead') : t('Back to the form')}
         </Button>
       </Body>
       <Footer>
-        <Button variant="outline" className="h-11 text-base" onClick={close}>
+        <Button variant="outline" className="h-11" onClick={close}>
           {t('Close')}
         </Button>
         <Button
-          className="h-11 text-base"
+          className="h-11"
           disabled={save.isPending}
           onClick={() => afterBlur(() => save.mutate(undefined, { onSuccess: () => toast.success(t('Profile saved')) }))}
         >

@@ -14,10 +14,10 @@ import { Body, CloseButton, Footer, Loading, Problem, Win, useErr, useFresh, typ
 
 const STATUS: Record<Platform['status'], [string, string]> = {
   not_connected: [N_('Not connected'), 'text-muted-foreground'],
-  connecting: [N_('Waiting for you to log in in the browser window…'), 'text-amber-700'],
-  connected: [N_('Logged in ✓'), 'text-emerald-700'],
-  expired: [N_('Logged out — connect again'), 'text-red-700'],
-  unknown: [N_('Saved (login check not verified yet)'), 'text-amber-700'],
+  connecting: [N_('Waiting for you to log in in the browser window…'), 'text-warning'],
+  connected: [N_('Logged in ✓'), 'text-success'],
+  expired: [N_('Logged out — connect again'), 'text-danger'],
+  unknown: [N_('Saved (login check not verified yet)'), 'text-warning'],
 }
 
 export function LoginsWindow(p: WinProps) {
@@ -91,24 +91,24 @@ function LoginsBody({ hosted }: { hosted: boolean }) {
                 <div className="font-semibold">
                   {p.name} {p.account && <span className="font-normal text-muted-foreground">{p.account}</span>}
                 </div>
-                <div className={cn('text-[0.95rem]', tone)}>{t(label)}</div>
+                <div className={cn('text-small', tone)}>{t(label)}</div>
               </div>
               {p.status !== 'connecting' && (
                 <div className="flex flex-wrap gap-2">
                   {!hosted && p.id === 'topcv' && p.status === 'connected' && (
-                    <Button variant="outline" className="h-11 text-base" disabled={sync.isPending} onClick={() => sync.mutate(p.id)}>
+                    <Button variant="outline" className="h-11" disabled={sync.isPending} onClick={() => sync.mutate(p.id)}>
                       {sync.isPending ? t('Syncing…') : t('Sync applications')}
                     </Button>
                   )}
                   {saved && (
-                    <Button variant="outline" className="h-11 text-base" disabled={disconnect.isPending} onClick={() => disconnect.mutate(p.id)}>
+                    <Button variant="outline" className="h-11" disabled={disconnect.isPending} onClick={() => disconnect.mutate(p.id)}>
                       {t('Disconnect')}
                     </Button>
                   )}
                   {!hosted && (
                     <Button
                       variant={saved ? 'outline' : 'default'}
-                      className="h-11 text-base"
+                      className="h-11"
                       disabled={connect.isPending}
                       onClick={() => connect.mutate(p.id)}
                     >

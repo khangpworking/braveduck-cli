@@ -101,12 +101,12 @@ function CVBody({ over, upload, pending, problem }: { over: boolean; upload: (f:
         {cv ? (
           <>
             <span className="flex items-center gap-2">
-              <CircleCheck className="size-5 text-emerald-600" />
+              <CircleCheck className="size-5 text-success" />
               {t('{name}, added {time}', { name: cv.name, time: msg(ago(cv.uploaded_at)) })}
             </span>
             <Button
-              variant="link"
-              className="h-10 px-0 text-base"
+              variant="quiet"
+              className="h-10"
               onClick={() => download('/cv/file', cv.name).catch(e => toast.error(err(e)))}
             >
               <Download />
@@ -135,12 +135,12 @@ function CVBody({ over, upload, pending, problem }: { over: boolean; upload: (f:
             if (f) upload(f)
           }}
         />
-        <Button className="h-12 px-5 text-base" disabled={pending} onClick={() => input.current?.click()}>
+        <Button size="lg" disabled={pending} onClick={() => input.current?.click()}>
           <Upload />
           {pending ? t('Uploading…') : cv ? t('Replace it') : t('Choose file')}
         </Button>
         <span className="text-muted-foreground">{t('or drop it here')}</span>
-        <span className="text-[0.92rem] text-muted-foreground">{t('PDF or Word, up to 5 MB.')}</span>
+        <span className="text-small text-muted-foreground">{t('PDF or Word, up to 5 MB.')}</span>
       </div>
       {problem && <Problem>{problem}</Problem>}
     </Body>

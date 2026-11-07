@@ -1,17 +1,37 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+// braveduck's cards also say what they're about (tone) and come in two
+// sizes for content placed straight in the card: a callout (a next step, a
+// warning) and a fact (pay, distance).
+const TONES = {
+  default: "",
+  muted: "bg-muted/60 ring-transparent",
+  success: "bg-success-muted ring-success/30",
+  warning: "bg-warning-muted ring-warning-border",
+  danger: "bg-danger-muted ring-danger-border",
+  info: "bg-info-muted ring-info-border",
+} as const
+
 function Card({
   className,
   size = "default",
+  tone = "default",
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+}: React.ComponentProps<"div"> & {
+  size?: "default" | "sm" | "callout" | "fact"
+  tone?: keyof typeof TONES
+}) {
   return (
     <div
       data-slot="card"
       data-size={size}
+      data-tone={tone}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-base text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        size === "callout" && "gap-1.5 px-5 py-4",
+        size === "fact" && "gap-0.5 px-4 py-3",
+        TONES[tone],
         className
       )}
       {...props}
