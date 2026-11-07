@@ -43,6 +43,8 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	usersFile := fs.String("login-users-file", "", "the login service's users file (Authelia's users_database.yml): agent keys of users removed or disabled there stop working")
 	maxJobs := fs.Int("max-jobs-per-user", 5000, "jobs each user's board holds (0 = no limit)")
 	jevDaily := fs.Int("jev-daily-limit", 50, "Jev ratings per user per day, paid by the server's key (0 = no limit)")
+	accessTeam := fs.String("access-team", "", "log in with Cloudflare Access instead of a proxy: the team's address, https://TEAM.cloudflareaccess.com (see deploy/cloudflare)")
+	accessAUD := fs.String("access-aud", "", "with --access-team: the Access application's audience (AUD) tag")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -54,8 +56,9 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 		}
 		secret = strings.TrimSpace(string(b))
 	}
-	if secret == "" {
-		return errors.New("a shared server needs the proxy secret: --proxy-secret-file FILE or $BRAVEDUCK_PROXY_SECRET")
+	viaAccess := *accessTeam != "" || *accessAUD != ""
+	if secret == "" && !viaAccess {
+		return errors.New("a shared server needs the proxy secret (--proxy-secret-file FILE or $BRAVEDUCK_PROXY_SECRET), or Cloudflare Access (--access-team and --access-aud)")
 	}
 	browser.SetMaxBrowsers(*maxBrowsers)
 
@@ -66,6 +69,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	h, err := hosted.New(srvCtx, hosted.Options{
 		Dir: *users, UserHeader: *header, Secret: secret,
 		MaxUsers: *maxUsers, LogoutURL: *logout, JevDaily: *jevDaily, MaxJobs: *maxJobs, UsersFile: *usersFile, Tick: time.Minute,
+		AccessTeam: *accessTeam, AccessAUD: *accessAUD,
 	})
 	if err != nil {
 		return err
@@ -93,7 +97,11 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 		defer c()
 		_ = srv.Shutdown(sc)
 	}()
-	fmt.Printf("braveduck shared server on %s for %d user(s) in %s (behind its login proxy)\n", ln.Addr(), len(h.Users()), *users)
+	login := "behind its login proxy"
+	if viaAccess {
+		login = "logins by Cloudflare Access"
+	}
+	fmt.Printf("braveduck shared server on %s for %d user(s) in %s (%s)\n", ln.Addr(), len(h.Users()), *users, login)
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

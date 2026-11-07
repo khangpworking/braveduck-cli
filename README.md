@@ -148,6 +148,9 @@ their own board, with their own data. Logins are handled by
 [Authelia](https://www.authelia.com) behind [Caddy](https://caddyserver.com)
 (HTTPS from Let's Encrypt); [deploy/hosted](deploy/hosted/README.md) has the
 Docker Compose setup, scripts to add people, and a test of the whole chain.
+No server? [deploy/cloudflare](deploy/cloudflare/README.md) runs it from your
+own computer for free: Cloudflare Tunnel brings people in, Cloudflare Access
+logs them in with an email code (`--access-team`, `--access-aud`).
 AI agents connect to `https://…/mcp` with a key made on the person's board.
 Pasting a Facebook group's link follows the group: with the optional
 fb-watcher scanner, a public group's matching posts come in by themselves. Job-site
