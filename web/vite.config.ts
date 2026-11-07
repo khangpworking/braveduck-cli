@@ -21,10 +21,16 @@ function devToken(): Plugin {
 }
 
 export default defineConfig({
-  base: './',
+  base: '/',
   plugins: [react(), tailwindcss(), devToken()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   server: { proxy: { '/api': board } },
   // The Go binary embeds the build (internal/api/app.go).
-  build: { outDir: '../internal/api/app', emptyOutDir: true, chunkSizeWarningLimit: 1000 },
+  // Three pages: the board, the landing page (/welcome) and the 404 page.
+  build: {
+    outDir: '../internal/api/app',
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: { input: { index: 'index.html', welcome: 'welcome.html', notfound: '404.html' } },
+  },
 })
