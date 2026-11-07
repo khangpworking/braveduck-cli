@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { ApiError, addContent, type Job } from '@/lib/api'
 import { stageName } from '@/lib/jobs'
 import { N_ } from '@/lib/n'
+import { serverError } from '@/lib/serverText'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -58,7 +59,7 @@ export function AddJob({ open, onOpenChange, onAdded }: {
         setDups(e.body.duplicates as Duplicate[])
         setErr('')
       } else {
-        setErr(e.message)
+        setErr(serverError(e.message, t))
       }
     },
   })

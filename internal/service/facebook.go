@@ -59,6 +59,7 @@ func (s *Service) FollowGroup(ctx context.Context, link string) (g FBGroup, adde
 	g, _, err = s.st.FBGroup(ctx, key)
 	if added {
 		s.logEvent(ctx, "added", "Following the Facebook group "+url)
+		s.checkGroupSoon(key, url)
 	}
 	return g, added, err
 }

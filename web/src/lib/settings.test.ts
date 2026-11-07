@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 // The settings windows' pure logic: tags, pay, intervals, activity lines,
 // Get started and great-match notifications.
 import { describe, expect, test } from 'vitest'
@@ -146,4 +147,15 @@ describe('great matches', () => {
     expect(greatMatches(jobs).map(j => j.id)).toEqual([1, 2, 5])
     expect(freshMatches(jobs, new Set([2])).map(j => j.id)).toEqual([5, 1])
   })
+})
+
+test('server errors read in Vietnamese, numbers and all', async () => {
+  const { serverError } = await import('./serverText')
+  const vi = (await import('@/locales/vi.json')).default as Record<string, string>
+  const t = ((k: string, v?: Record<string, unknown>) => (vi[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => String(v?.[n] ?? ''))) as unknown as TFunction
+  expect(serverError("invalid input: reading Facebook is busy right now — try again in 3 minutes, or paste the post's text under the link", t)).toBe(
+    'Đang đọc Facebook hơi nhiều, bạn thử lại sau 3 phút, hoặc dán nội dung bài ngay dưới link.',
+  )
+  expect(serverError('invalid input: paste a job link or description', t)).toBe('Dán link hoặc nội dung tin tuyển dụng.')
+  expect(serverError('something new', t)).toBe('something new')
 })

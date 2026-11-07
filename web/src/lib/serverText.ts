@@ -2,6 +2,7 @@
 // t(option), t(source.name). They're listed here so the i18n test finds
 // them and vi.json keeps their translations. Keep each exactly as the Go
 // code writes it.
+import type { TFunction } from 'i18next'
 import { N_ } from './n'
 
 export const SERVER_TEXTS = [
@@ -50,6 +51,17 @@ export const SERVER_TEXTS = [
   N_('invalid input: only on a shared server — on your own computer, connect your agent with `braveduck mcp`'),
   N_('missing or bad token — reload the board'),
 
+  // Reading a pasted Facebook post through fb-watcher (service/fbwatcher.go).
+  N_('this post is in a private group, so braveduck can\'t read it — paste its text under the link'),
+  N_('braveduck can\'t see this post (deleted, or for members only) — paste its text under the link'),
+  N_('that isn\'t a link to a post in a Facebook group'),
+  N_('this Facebook post has no text to read — paste the job\'s text under the link'),
+  N_('braveduck couldn\'t reach its Facebook reader — paste the post\'s text under the link'),
+  N_('braveduck couldn\'t read this post — paste its text under the link'),
+  N_('reading Facebook is busy right now — try again in {n} minutes, or paste the post\'s text under the link'),
+  N_('paste a job link or description'),
+  N_('the board is full ({n} jobs) — delete some old ones first'),
+
   // Activity lines with nothing to fill in.
   N_('Location updated'),
   N_('Updated your profile'),
@@ -57,3 +69,18 @@ export const SERVER_TEXTS = [
   N_('Made a new key for your AI agent (the old one no longer works)'),
   N_("Removed your AI agent's key"),
 ]
+
+/**
+ * A server error in the reader's language: the "invalid input: " prefix goes,
+ * and messages with a number in them match their {n} form.
+ */
+export function serverError(message: string, t: TFunction) {
+  if (t(message) !== message) return t(message)
+  const m = message.replace(/^invalid input: /, '')
+  const n = /\d+/.exec(m)?.[0]
+  if (n) {
+    const key = m.replace(n, '{n}')
+    if (t(key, { n }) !== key) return t(key, { n })
+  }
+  return t(m)
+}

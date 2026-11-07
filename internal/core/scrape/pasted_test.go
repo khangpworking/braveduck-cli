@@ -210,3 +210,17 @@ func TestSalaryWordTakesNoUnit(t *testing.T) {
 		t.Fatalf("salary = %q (ok=%v), want the bare word", jp.Salary, ok)
 	}
 }
+
+// A tag in front of the title ("HN - …", "[HCM] …") isn't the title.
+func TestParsePostSkipsTagBeforeTitle(t *testing.T) {
+	for in, want := range map[string]string{
+		"HN - Tuyển AI Engineer (RAG & AI Agent)\nLương 30-40 triệu": "Tuyển AI Engineer (RAG & AI Agent)",
+		"[HCM] - Kế toán tổng hợp\nLương 12 triệu":                   "Kế toán tổng hợp",
+		"Kế toán kho - Quận 5\nLương 10 triệu":                       "Kế toán kho",
+		"SG": "SG",
+	} {
+		if got := ParsePost(in).Title; got != want {
+			t.Errorf("ParsePost(%q).Title = %q, want %q", in, got, want)
+		}
+	}
+}

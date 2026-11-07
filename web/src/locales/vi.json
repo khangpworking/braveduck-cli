@@ -549,5 +549,14 @@
   "Go back": "Quay lại",
   "New to braveduck?": "Lần đầu dùng braveduck?",
   "See what it does": "Xem braveduck làm được gì",
-  "Main menu": "Menu chính"
+  "Main menu": "Menu chính",
+  "this post is in a private group, so braveduck can't read it — paste its text under the link": "Bài này nằm trong nhóm riêng tư nên braveduck không đọc được. Bạn dán nội dung bài ngay dưới link nhé.",
+  "braveduck can't see this post (deleted, or for members only) — paste its text under the link": "braveduck không xem được bài này (đã bị xóa, hoặc chỉ thành viên mới xem được). Bạn dán nội dung bài ngay dưới link nhé.",
+  "that isn't a link to a post in a Facebook group": "Đây không phải link một bài đăng trong nhóm Facebook.",
+  "this Facebook post has no text to read — paste the job's text under the link": "Bài Facebook này không có chữ để đọc. Bạn dán nội dung tin ngay dưới link nhé.",
+  "braveduck couldn't reach its Facebook reader — paste the post's text under the link": "braveduck chưa kết nối được công cụ đọc Facebook. Bạn dán nội dung bài ngay dưới link nhé.",
+  "braveduck couldn't read this post — paste its text under the link": "braveduck chưa đọc được bài này. Bạn dán nội dung bài ngay dưới link nhé.",
+  "reading Facebook is busy right now — try again in {n} minutes, or paste the post's text under the link": "Đang đọc Facebook hơi nhiều, bạn thử lại sau {n} phút, hoặc dán nội dung bài ngay dưới link.",
+  "paste a job link or description": "Dán link hoặc nội dung tin tuyển dụng.",
+  "the board is full ({n} jobs) — delete some old ones first": "Bảng việc đã đầy ({n} việc). Xóa bớt việc cũ trước nhé."
 }

@@ -153,7 +153,12 @@ own computer for free: Cloudflare Tunnel brings people in, Cloudflare Access
 logs them in with an email code (`--access-team`, `--access-aud`).
 AI agents connect to `https://…/mcp` with a key made on the person's board.
 Pasting a Facebook group's link follows the group: with the optional
-fb-watcher scanner, a public group's matching posts come in by themselves. Job-site
+fb-watcher scanner, a public group's matching posts come in by themselves.
+With fb-watcher's API connected (`BRAVEDUCK_FBWATCHER_URL` and
+`BRAVEDUCK_FBWATCHER_KEY_FILE`, e.g. `http://127.0.0.1:8091` and its key
+file), pasting a post's link is enough: fb-watcher reads a public group's
+post for you, and a group you follow shows at once whether it's public.
+braveduck itself never opens Facebook. Job-site
 logins and assisted apply open windows on your own screen, so they stay on
 braveduck running on your computer.
 

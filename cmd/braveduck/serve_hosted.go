@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
+	"github.com/khangpworking/braveduck-cli/internal/core/fbwatcher"
 	"github.com/khangpworking/braveduck-cli/internal/hosted"
 )
 
@@ -61,6 +62,10 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 		return errors.New("a shared server needs the proxy secret (--proxy-secret-file FILE or $BRAVEDUCK_PROXY_SECRET), or Cloudflare Access (--access-team and --access-aud)")
 	}
 	browser.SetMaxBrowsers(*maxBrowsers)
+	fbw, err := fbwatcher.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -69,7 +74,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	h, err := hosted.New(srvCtx, hosted.Options{
 		Dir: *users, UserHeader: *header, Secret: secret,
 		MaxUsers: *maxUsers, LogoutURL: *logout, JevDaily: *jevDaily, MaxJobs: *maxJobs, UsersFile: *usersFile, Tick: time.Minute,
-		AccessTeam: *accessTeam, AccessAUD: *accessAUD,
+		AccessTeam: *accessTeam, AccessAUD: *accessAUD, FBWatcher: fbw,
 	})
 	if err != nil {
 		return err

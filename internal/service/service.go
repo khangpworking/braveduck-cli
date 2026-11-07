@@ -52,6 +52,7 @@ type Service struct {
 	hosted      *HostedInfo    // see SetHosted
 	jevDaily    int            // see SetJevDailyLimit
 	maxJobs     int            // see SetMaxJobs
+	fbw         fbReader       // see SetFBWatcher
 	distRunning atomic.Bool    // an UpdateDistances pass is running
 	jevMu       sync.Mutex     // makes checking and counting a Jev call one step
 
@@ -144,8 +145,9 @@ func (s *Service) AddJob(ctx context.Context, in NewJob) (jobs.Job, error) {
 // AddFromContent is the board's "Add", done without any AI: content is a link
 // from a supported site (scrape.Sources), optionally followed by the job's
 // text, or a pasted JD on its own. Job-site links are fetched and their
-// schema.org JobPosting lifted verbatim; a Facebook link is never fetched, so
-// its post text is read from the paste. Pasted text is read with line/regex
+// schema.org JobPosting lifted verbatim. braveduck never opens a Facebook
+// link itself: its post text is read from the paste, or, with fb-watcher
+// connected (SetFBWatcher), fb-watcher reads a public group's post. Pasted text is read with line/regex
 // heuristics, and fields that can't be read stay empty.
 func (s *Service) AddFromContent(ctx context.Context, content string) (jobs.Job, error) {
 	content = strings.TrimSpace(content)
@@ -181,6 +183,17 @@ func (s *Service) AddFromContent(ctx context.Context, content string) (jobs.Job,
 	}
 	switch {
 	case found:
+	case src.ID == "facebook" && text == "" && s.fbw != nil:
+		// fb-watcher reads the post (public groups only), so the user
+		// needn't paste its text.
+		post, err := s.readFacebookPost(ctx, canonical)
+		if err != nil {
+			return jobs.Job{}, err
+		}
+		jp = scrape.ParsePost(post.Text)
+		if post.GroupName != "" {
+			j.Notes = "From the Facebook group " + post.GroupName
+		}
 	case !src.Fetch && text == "":
 		jp.Title = src.Name + " post" // a bare-link card; the text can be added later
 	case !src.Fetch:
