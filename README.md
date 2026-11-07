@@ -7,7 +7,8 @@ One Go binary, three faces over a shared core:
 - **`braveduck …`** — CLI commands (add / rate / apply / list a job pipeline)
 - **`braveduck mcp`** — an MCP server, so **Claude Code / Codex / agy** can drive
   your job hunt as native tools
-- **`braveduck serve`** — a local web board (kanban) served on `localhost`
+- **`braveduck serve`** — a local web board on `localhost`: your jobs as a list, the
+  one job beside it, and what to do today (works on a phone too)
 
 Everything runs on **your own machine** against **your own logins** — no hosting,
 no accounts, and no stored passwords. You authenticate with TopCV / VietnamWorks /

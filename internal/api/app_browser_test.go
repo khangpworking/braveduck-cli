@@ -38,7 +38,7 @@ func appBoard(t *testing.T, list []jobs.Job) (*store.Store, *service.Service, st
 	}
 	ts := httptest.NewServer(Handler(st, svc, testToken))
 	t.Cleanup(ts.Close)
-	return st, svc, ts.URL + AppPath
+	return st, svc, ts.URL + BoardPath
 }
 
 func appDay(d int) string { return time.Now().AddDate(0, 0, d).Format("2006-01-02") }

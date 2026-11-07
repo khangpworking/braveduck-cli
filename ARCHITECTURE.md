@@ -9,8 +9,9 @@ this section is what exists.
 
 **One binary, three faces over one core.** `cmd/braveduck` is the CLI (a
 plain `switch` over subcommands, `flag` per command). `braveduck serve`
-runs the board: `internal/api` (net/http `ServeMux`, the embedded board in
-`internal/api/web`, a per-run token and a localhost-Host guard on every
+runs the board: `internal/api` (net/http `ServeMux`, the embedded board
+built from `web/` (React, TypeScript, shadcn/ui) into `internal/api/app`, a
+per-run token and a localhost-Host guard on every
 request, SSE live updates). `braveduck mcp` runs `internal/mcp` (the
 official `modelcontextprotocol/go-sdk`, stdio). All three call
 **`internal/service`**, which holds every rule once (validation, duplicates,

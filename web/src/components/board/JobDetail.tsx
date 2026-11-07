@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { getSetup, type Job, type Status } from '@/lib/api'
 import { applySite, draftOf, getPlatforms, mailto } from '@/lib/jobApi'
-import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, reasons, sourceName, stageName } from '@/lib/jobs'
+import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, postingUrl, reasons, sourceName, stageName } from '@/lib/jobs'
 import { locale } from '@/lib/i18n'
 import { N_ } from '@/lib/n'
 import { Button } from '@/components/ui/button'
@@ -294,7 +294,8 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
   const platforms = useQuery({ queryKey: ['platforms'], queryFn: getPlatforms })
   const setup = useQuery({ queryKey: ['setup'], queryFn: getSetup })
   const big = 'h-auto min-h-14 w-full py-3 text-lg whitespace-normal'
-  const site = applySite(job, platforms.data ?? [])
+  const url = postingUrl(job)
+  const site = url ? applySite(job, platforms.data ?? []) : undefined
 
   if (job.apply_state === 'confirm') {
     return (
@@ -321,7 +322,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
         </Button>
       )
     }
-    if (asking || !job.url) {
+    if (asking || !url) {
       return (
         <div className="space-y-2 text-center">
           <p className="text-lg font-semibold">{t('Did you send your CV?')}</p>
@@ -329,7 +330,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
             <Button className="h-14 flex-1 text-lg" onClick={() => onMove(job, 'applied', { next: true })}>
               {t('Yes, I applied')}
             </Button>
-            {job.url && (
+            {url && (
               <Button variant="outline" className="h-14 flex-1 text-lg" onClick={() => setAsking(false)}>
                 {t('Not yet')}
               </Button>
@@ -359,7 +360,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
     }
     return (
       <Button asChild className={big}>
-        <a href={job.url} target="_blank" rel="noopener noreferrer" onClick={() => setAsking(true)}>
+        <a href={url} target="_blank" rel="noopener noreferrer" onClick={() => setAsking(true)}>
           {t('Open the posting to apply')}
           <ArrowUpRight />
         </a>
@@ -481,10 +482,10 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
           })}
           {' · '}
           {t(stageName(job.status))}
-          {job.url && (
+          {postingUrl(job) && (
             <>
               {' · '}
-              <a href={job.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+              <a href={postingUrl(job)} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
                 {t('See the posting')}
               </a>
             </>

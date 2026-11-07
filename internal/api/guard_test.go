@@ -73,7 +73,7 @@ func TestRejectsNonLoopbackHost(t *testing.T) {
 // Both boards' pages carry the token, are never cached and can't be framed.
 func TestIndexCarriesTokenAndIsntCached(t *testing.T) {
 	ts, _ := newTestServer(t)
-	for _, path := range []string{"/", AppPath, AppPath + "index.html"} {
+	for _, path := range []string{BoardPath, "/index.html"} {
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
 			t.Fatal(err)
@@ -99,7 +99,7 @@ func TestAppServesItsAssets(t *testing.T) {
 	if err != nil || len(assets) == 0 {
 		t.Fatalf("no script in the embedded build (%v); run npm run build in web/", err)
 	}
-	resp, err := http.Get(ts.URL + AppPath + strings.TrimPrefix(assets[0], "app/"))
+	resp, err := http.Get(ts.URL + BoardPath + strings.TrimPrefix(assets[0], "app/"))
 	if err != nil {
 		t.Fatal(err)
 	}

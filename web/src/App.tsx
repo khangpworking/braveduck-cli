@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { LayoutGrid, Plus, RotateCw, Search, Settings as Gear, Sun } from 'lucide-react'
+import { Plus, RotateCw, Search, Settings as Gear, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getJobs, getToday, patchJob, setOnUnauthorized, type Job, type Status } from '@/lib/api'
@@ -15,6 +15,7 @@ import { N_ } from '@/lib/n'
 import { JobRow, TodayCard } from '@/components/board/JobList'
 import { JobDetail, type Move } from '@/components/board/JobDetail'
 import { AddJob } from '@/components/board/AddJob'
+import { Morale } from '@/components/board/Morale'
 import { Settings } from '@/components/settings/Settings'
 import { GetStarted } from '@/components/settings/GetStarted'
 
@@ -69,6 +70,27 @@ export default function App() {
   const [phoneJob, setPhoneJob] = useState(false)
   const [stale, setStale] = useState(false)
   useEffect(() => setOnUnauthorized(() => setStale(true)), [])
+
+  // Keys: / searches, n adds a job, ? lists the keys. Not while typing, and
+  // not with Ctrl, Alt or Cmd (those belong to the browser).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (e.ctrlKey || e.metaKey || e.altKey || el.closest('input, textarea, select, [contenteditable=true], [role=dialog]')) return
+      if (e.key === '/') {
+        e.preventDefault()
+        if (view === 'today') setView('saved')
+        setTimeout(() => document.querySelector<HTMLInputElement>('input[type=search]')?.focus())
+      } else if (e.key === 'n') {
+        e.preventDefault()
+        setAdding(true)
+      } else if (e.key === '?') {
+        toast(t('Keys: / search · n add a job · Esc close a window · ? this list'))
+      }
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [view, t])
 
   const jobs = useMemo(() => jobsQ.data ?? [], [jobsQ.data])
   const today = useMemo(() => todayEntries(todayQ.data ?? [], jobs), [todayQ.data, jobs])
@@ -163,15 +185,6 @@ export default function App() {
           </>
         }
       />
-      <NavItem
-        onClick={() => location.assign('/')}
-        label={
-          <>
-            <LayoutGrid className="size-4" />
-            {t('Old board')}
-          </>
-        }
-      />
     </nav>
   )
 
@@ -217,6 +230,7 @@ export default function App() {
           </h2>
         )}
         {search}
+        {(view === 'applied' || view === 'interview' || view === 'offer') && <Morale />}
       </div>
       <Separator />
       <div className="flex-1 overflow-auto">
