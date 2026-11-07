@@ -223,6 +223,18 @@ func cmdStatus(ctx context.Context, svc *service.Service, args []string) error {
 	return nil
 }
 
+func cmdFollowUp(ctx context.Context, svc *service.Service, args []string) error {
+	id, err := oneID(args, "followup")
+	if err != nil {
+		return err
+	}
+	if _, err := svc.MarkFollowedUp(ctx, id); err != nil {
+		return friendly(err, id)
+	}
+	fmt.Printf("job #%d: noted that you followed up; Today reminds you again in a week if there's no answer\n", id)
+	return nil
+}
+
 func cmdToggle(ctx context.Context, svc *service.Service, args []string, kind string) error {
 	id, err := oneID(args, kind)
 	if err != nil {
