@@ -200,38 +200,24 @@ func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, list, err)
 }
 
-// createReq is the board's "Add" payload: a single pasted string that is either
-// a listing URL or free-text JD.
-type createReq struct {
-	Content string `json:"content"`
-}
-
 func (s *server) createJob(w http.ResponseWriter, r *http.Request) {
-	var req createReq
+	var req CreateJobRequest
 	if !decode(w, r, &req) {
 		return
 	}
 	// A Facebook group's link follows the group instead of adding a job.
 	if _, _, ok := scrape.FacebookGroup(strings.TrimSpace(req.Content)); ok {
 		g, added, err := s.svc.FollowGroup(r.Context(), strings.TrimSpace(req.Content))
-		reply(w, http.StatusCreated, map[string]any{"group": g, "added": added}, err)
+		reply(w, http.StatusCreated, FollowGroupReply{Group: g, Added: added}, err)
 		return
 	}
 	j, err := s.svc.AddFromContent(r.Context(), req.Content)
 	var dup *service.DuplicateError
 	if errors.As(err, &dup) {
 		// Name the jobs it matches, so the board can point at them.
-		type match struct {
-			ID     int64  `json:"id"`
-			Title  string `json:"title"`
-			Status string `json:"status"`
-		}
-		out := struct {
-			Error      string  `json:"error"`
-			Duplicates []match `json:"duplicates"`
-		}{Error: err.Error()}
+		out := DuplicateReply{Error: err.Error()}
 		for _, d := range dup.Jobs {
-			out.Duplicates = append(out.Duplicates, match{d.ID, d.Title, d.Status})
+			out.Duplicates = append(out.Duplicates, DuplicateMatch{d.ID, d.Title, d.Status})
 		}
 		writeJSON(w, http.StatusConflict, out)
 		return
@@ -254,25 +240,12 @@ func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// jobPatch is the mutable subset a board edits. Pointers distinguish "field
-// omitted" from a zero value, so a PATCH touches only what it names.
-type jobPatch struct {
-	Status   *string `json:"status"`
-	Pinned   *bool   `json:"pinned"`
-	Keep     *bool   `json:"keep"`
-	Notes    *string `json:"notes"`
-	Title    *string `json:"title"`
-	Company  *string `json:"company"`
-	Salary   *string `json:"salary"`
-	Location *string `json:"location"`
-}
-
 func (s *server) patchJob(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	var p jobPatch
+	var p JobPatch
 	if !decode(w, r, &p) {
 		return
 	}
@@ -306,15 +279,8 @@ func (s *server) toggleKeep(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ratingConfigJSON is the board's wire shape for rating.Config.
-type ratingConfigJSON struct {
-	DefaultModel string   `json:"default_model"`
-	ABMode       bool     `json:"ab_mode"`
-	Models       []string `json:"models"`
-}
-
-func toRatingJSON(c rating.Config) ratingConfigJSON {
-	return ratingConfigJSON{DefaultModel: c.DefaultModel, ABMode: c.ABEnabled, Models: c.Models}
+func toRatingJSON(c rating.Config) RatingConfig {
+	return RatingConfig{DefaultModel: c.DefaultModel, ABMode: c.ABEnabled, Models: c.Models}
 }
 
 func (s *server) getRatingConfig(w http.ResponseWriter, r *http.Request) {
@@ -323,7 +289,7 @@ func (s *server) getRatingConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) putRatingConfig(w http.ResponseWriter, r *http.Request) {
-	var in ratingConfigJSON
+	var in RatingConfig
 	if !decode(w, r, &in) {
 		return
 	}
@@ -333,16 +299,9 @@ func (s *server) putRatingConfig(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, toRatingJSON(c), err)
 }
 
-// jevJSON is whether Jev can rate here and whether this user opted out of
-// sending their profile to it.
-type jevJSON struct {
-	Available bool `json:"available"`
-	OptOut    bool `json:"opt_out"`
-}
-
-func (s *server) jevState(r *http.Request) (jevJSON, error) {
+func (s *server) jevState(r *http.Request) (JevState, error) {
 	out, err := s.svc.JevOptedOut(r.Context())
-	return jevJSON{Available: s.svc.JevAvailable(), OptOut: out}, err
+	return JevState{Available: s.svc.JevAvailable(), OptOut: out}, err
 }
 
 func (s *server) getJev(w http.ResponseWriter, r *http.Request) {
@@ -351,7 +310,7 @@ func (s *server) getJev(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) putJev(w http.ResponseWriter, r *http.Request) {
-	var in jevJSON
+	var in JevState
 	if !decode(w, r, &in) {
 		return
 	}
@@ -384,10 +343,9 @@ func (s *server) getActivity(w http.ResponseWriter, r *http.Request) {
 func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 	source := r.PathValue("source")
 	if !s.svc.IsBuiltinSource(source) {
-		writeJSON(w, http.StatusNotImplemented, map[string]any{
-			"ok":      false,
-			"source":  source,
-			"message": "braveduck can't restart this source — it's run by its own tool (e.g. fb-watcher); restart it there",
+		writeJSON(w, http.StatusNotImplemented, CrawlReply{
+			Source:  source,
+			Message: "braveduck can't restart this source — it's run by its own tool (e.g. fb-watcher); restart it there",
 		})
 		return
 	}
@@ -398,11 +356,10 @@ func (s *server) retryCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil && !errors.Is(err, service.ErrInvalid) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "source": source, "message": err.Error()})
+		writeJSON(w, http.StatusOK, CrawlReply{Source: source, Message: err.Error()})
 		return
 	}
-	reply(w, http.StatusOK, map[string]any{"ok": true, "source": source, "result": res,
-		"message": crawlMessage(source, res)}, err)
+	reply(w, http.StatusOK, CrawlReply{OK: true, Source: source, Result: &res, Message: crawlMessage(source, res)}, err)
 }
 
 // crawlMessage sums up a crawl for the board's toast: what's new, and what
@@ -433,9 +390,7 @@ func (s *server) getCrawlSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) putCrawlSchedule(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		EveryMinutes int `json:"every_minutes"`
-	}
+	var in ScheduleRequest
 	if !decode(w, r, &in) {
 		return
 	}
@@ -525,10 +480,7 @@ func reply(w http.ResponseWriter, code int, v any, err error) {
 	case errors.Is(err, service.ErrProfileEmpty):
 		// The board can't edit a file path; send people to the profile form.
 		// CLI and MCP still get the detailed service error with the path.
-		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "Answer a few questions first",
-			"code":  "profile_empty",
-		})
+		writeJSON(w, http.StatusConflict, ErrorReply{Error: "Answer a few questions first", Code: "profile_empty"})
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
 	}
@@ -541,5 +493,5 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, code int, err error) {
-	writeJSON(w, code, map[string]string{"error": err.Error()})
+	writeJSON(w, code, ErrorReply{Error: err.Error()})
 }

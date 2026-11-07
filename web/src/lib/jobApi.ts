@@ -1,46 +1,16 @@
 // What the board does to one job beyond moving it: assisted apply, follow-ups,
 // pins, notes and edits, ratings, tailored CVs and email drafts.
 import { api, token, type Job, type JobPatch } from './api'
+import type * as service from './gen/service'
+import type * as wire from './gen/api'
 
-export interface Platform {
-  id: string
-  name: string
-  status: string // not_connected / connecting / connected / expired / unknown
-  domains: string[]
-}
-
-export interface RatingConfig {
-  default_model: string
-  ab_mode: boolean
-  models: string[]
-}
-
-export interface ApplyPrep {
-  job_id: number
-  url: string
-  site: string
-  site_id: string
-  cv_pdf: string
-  cover_letter: string
-}
-
+export type Platform = service.PlatformStatus
+export type RatingConfig = wire.RatingConfig
+export type ApplyPrep = service.ApplyPrep
 /** What to paste into an AI: a request for an agent with braveduck, or a full brief for any chat. */
-export interface Ask {
-  prompt: string
-  brief: string
-}
-
-export interface RatingRequest extends Partial<Ask> {
-  model: string
-  rated?: boolean
-  job?: Job
-}
-
-export interface Draft {
-  to: string
-  subject: string
-  body: string
-}
+export type Ask = wire.AskReply
+export type RatingRequest = service.RatingRequest
+export type Draft = service.Draft
 
 export const getPlatforms = () => api<Platform[]>('GET', '/platforms')
 export const getRatingConfig = () => api<RatingConfig>('GET', '/rating-config')

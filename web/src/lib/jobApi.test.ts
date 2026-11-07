@@ -22,7 +22,7 @@ test('mailto keeps spaces as %20 and the address readable', () => {
 })
 
 test('assisted apply needs a connected site that owns the job link', () => {
-  const p = (status: string): Platform => ({ id: 'topcv', name: 'TopCV', status, domains: ['topcv.vn'] })
+  const p = (status: Platform['status']): Platform => ({ id: 'topcv', name: 'TopCV', status, domains: ['topcv.vn'], verified: true, builtin: true })
   const j = job({ url: 'https://www.topcv.vn/viec-lam/x/1.html' })
   expect(applySite(j, [p('connected')])?.name).toBe('TopCV')
   expect(applySite(j, [p('expired')])).toBeUndefined()

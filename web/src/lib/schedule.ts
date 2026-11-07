@@ -1,35 +1,16 @@
 // Job sources: how often each one checks, and how long ago it last did.
 // Pure, so it's easy to test; texts come back as [key, values] for t().
+import type * as service from './gen/service'
+import type * as store from './gen/store'
 import { N_ } from './n'
 
 export type Msg = [string, Record<string, string | number>?]
 
 /** One source's schedule (GET /api/crawl-schedule). */
-export interface SourceSchedule {
-  source: string
-  name: string
-  every_minutes: number // 0 = off
-  min_every_minutes: number
-  builtin: boolean
-  task: boolean // a background task (rating, sync), not a job site
-  configured: boolean // false = still on the default
-}
-
+export type SourceSchedule = service.SourceSchedule
 /** One source's health (GET /api/crawl-status). */
-export interface SourceHealth {
-  name: string
-  count: number
-  healthy: boolean
-  lastRun: string
-  lastError: string
-  task?: boolean
-}
-
-export interface CrawlStatus {
-  newJobsToday: number
-  date: string
-  sources: SourceHealth[]
-}
+export type SourceHealth = store.CrawlSource
+export type CrawlStatus = store.CrawlStatusView
 
 export const EVERY: [number, string][] = [
   [0, N_('off')],

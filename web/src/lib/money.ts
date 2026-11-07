@@ -1,12 +1,8 @@
 // Pay as the profile form edits it (service.Money).
+import type { Money } from './gen/service'
 
-export interface Money {
-  amount: number // 0 = not given
-  currency?: string
-  period?: string // month / year / hour
-  basis?: string // gross / net / ""
-  text?: string // what the profile said, when the fields can't show it
-}
+export type { Money }
+
 
 /** 20000000 → "20,000,000" (or "20.000.000" in Vietnamese); 0 → "". */
 export const formatAmount = (n: number, locale: string) => (n ? n.toLocaleString(locale) : '')

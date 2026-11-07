@@ -3,13 +3,11 @@
 // into its template and values, so it can be shown in the board's language.
 import type { Status } from './api'
 import { sourceName, stageName } from './jobs'
+import type { Event } from './gen/store'
 import { N_ } from './n'
 
-export interface ActivityEvent {
-  type: string // error / info / added, moved, rated, …
-  message: string
-  timestamp: string
-}
+export type ActivityEvent = Event
+
 
 /** A text to translate, with values; a value that is itself a text is a [key]. */
 export type Part = string | number | [string]

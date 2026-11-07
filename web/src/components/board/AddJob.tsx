@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ApiError, addContent, type Job } from '@/lib/api'
+import { ApiError, addContent } from '@/lib/api'
 import { stageName } from '@/lib/jobs'
 import { N_ } from '@/lib/n'
 import { serverError } from '@/lib/serverText'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import type { DuplicateMatch } from '@/lib/gen/api'
 
 /** What the pasted text looks like, said before anything is sent. */
 export function detect(v: string): { ok: boolean; msg: string } | null {
@@ -19,11 +20,7 @@ export function detect(v: string): { ok: boolean; msg: string } | null {
   return v.length >= 20 ? { ok: true, msg: N_('The text of a posting: ready to add') } : { ok: false, msg: N_('Paste a little more') }
 }
 
-interface Duplicate {
-  id: number
-  title: string
-  status: Job['status']
-}
+type Duplicate = DuplicateMatch
 
 export function AddJob({ open, onOpenChange, onAdded }: {
   open: boolean

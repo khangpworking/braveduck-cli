@@ -82,7 +82,7 @@ func (s *Service) setup() (*platform.Registry, *vault.Vault, error) {
 type PlatformStatus struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
-	Status      string   `json:"status"` // not_connected / connecting / connected / expired / unknown
+	Status      string   `json:"status" tstype:"'not_connected' | 'connecting' | 'connected' | 'expired' | 'unknown'"`
 	Since       string   `json:"since,omitempty"`
 	CheckedAt   string   `json:"checked_at,omitempty"`
 	ExpiresHint string   `json:"expires_hint,omitempty"`

@@ -15,19 +15,12 @@ import (
 // CV" and "draft" return the request to copy into the user's AI — a short
 // one for an agent with braveduck connected, and a full brief for any chat.
 
-type askOut struct {
-	Prompt string `json:"prompt"` // for Claude Code etc. (braveduck over MCP)
-	Brief  string `json:"brief"`  // paste-ready, for any AI chat
-}
-
 func (s *server) rateRequest(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	var in struct {
-		Model string `json:"model"`
-	}
+	var in RateRequest
 	if r.ContentLength != 0 && !decode(w, r, &in) {
 		return
 	}
@@ -45,7 +38,7 @@ func (s *server) cvRequest(w http.ResponseWriter, r *http.Request) {
 		reply(w, 0, nil, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, askOut{service.AgentPrompt("cv", id, b.Job.Title), service.RenderDocBrief(b)})
+	writeJSON(w, http.StatusOK, AskReply{service.AgentPrompt("cv", id, b.Job.Title), service.RenderDocBrief(b)})
 }
 
 func (s *server) draftRequest(w http.ResponseWriter, r *http.Request) {
@@ -53,9 +46,7 @@ func (s *server) draftRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Notes string `json:"notes"`
-	}
+	var in DraftRequest
 	if r.ContentLength > 0 && !decode(w, r, &in) {
 		return
 	}
@@ -64,7 +55,7 @@ func (s *server) draftRequest(w http.ResponseWriter, r *http.Request) {
 		reply(w, 0, nil, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, askOut{service.AgentPrompt("draft", id, b.Job.Title), service.RenderDocBrief(b)})
+	writeJSON(w, http.StatusOK, AskReply{service.AgentPrompt("draft", id, b.Job.Title), service.RenderDocBrief(b)})
 }
 
 func (s *server) putCV(w http.ResponseWriter, r *http.Request) {
@@ -72,9 +63,7 @@ func (s *server) putCV(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Markdown string `json:"markdown"`
-	}
+	var in CVRequest
 	if !decode(w, r, &in) {
 		return
 	}
@@ -157,9 +146,7 @@ func (s *server) applyConfirm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req struct {
-		Submitted bool `json:"submitted"`
-	}
+	var req ApplyConfirmRequest
 	if !decode(w, r, &req) {
 		return
 	}

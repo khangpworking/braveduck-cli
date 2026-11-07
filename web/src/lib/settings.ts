@@ -2,109 +2,46 @@
 // Each endpoint has its own query key; a change invalidates the ones it
 // touches (live updates refetch the rest).
 import { ApiError, api, getSetup, onUnauthorized, token, type Setup } from './api'
-import type { Money } from './money'
 import type { CrawlStatus, SourceSchedule } from './schedule'
 import type { ActivityEvent } from './activity'
 import { fileName } from './windows'
+import type * as geo from './gen/geo'
+import type * as service from './gen/service'
+import type * as store from './gen/store'
+import type * as wire from './gen/api'
 
 export * from './windows'
 
-export interface Hosted {
-  user: string
-  logout_url?: string
-  owner?: boolean // the server runs on this user's computer
-}
+// The API's types, generated from the Go structs (tygo.yaml → gen/).
+export type Hosted = service.HostedInfo
+export type ProfileForm = service.ProfileForm
+export type ProfileOptions = service.ProfileFormOptions
+export type Profile = service.Profile
+export type BaseCV = service.BaseCV
+export type BaseCVReply = wire.BaseCVReply
+export type RatingConfig = wire.RatingConfig
+export type Jev = wire.JevState
+export type Platform = service.PlatformStatus
+export type Location = service.Location
+export type Place = geo.Place
+export type FBGroup = store.FBGroup
+export type CrawlReply = wire.CrawlReply
+
 
 export const hostedOf = (s: Setup | undefined) => (s?.hosted as Hosted | undefined) ?? null
 
-export interface ProfileForm {
-  about_me: string
-  roles: string[]
-  seniority: string[]
-  industries_want: string[]
-  industries_avoid: string[]
-  min_pay: Money
-  target_pay: Money
-  work_modes: string[]
-  job_types: string[]
-  deal_breakers: string[]
-  languages: string[]
-  notes: string
-  [other: string]: unknown // the fields the form doesn't show go back as they came
-}
 
-export interface ProfileOptions {
-  seniority: string[]
-  work_modes: string[]
-  job_types: string[]
-  currencies: string[]
-  periods: string[]
-  deal_breakers: string[]
-  languages: string[]
-}
 
-export interface Profile {
-  path: string
-  text: string
-  filled: boolean
-}
 
-export interface BaseCV {
-  name: string
-  kind: string
-  size: number
-  uploaded_at: string
-  profile_filled: boolean
-}
 
 export type Keywords = Record<string, string[]>
 
-export interface RatingConfig {
-  default_model: string
-  ab_mode: boolean
-  models: string[]
-}
 
-export interface Jev {
-  available: boolean
-  opt_out: boolean
-}
 
-export interface Platform {
-  id: string
-  name: string
-  status: 'not_connected' | 'connecting' | 'connected' | 'expired' | 'unknown'
-  account?: string
-  builtin: boolean
-}
 
-export interface Location {
-  set: boolean
-  lat?: number
-  lng?: number
-  label?: string
-  max_km: number
-}
 
-export interface Place {
-  lat: number
-  lng: number
-  label: string
-}
 
-export interface FBGroup {
-  key: string
-  url: string
-  name: string
-  visibility: 'checking' | 'public' | 'private' | 'unavailable'
-  note: string
-}
 
-export interface CrawlReply {
-  ok: boolean
-  message?: string
-  result?: { added?: number }
-}
 
 export const Q = {
   setup: ['setup'],
@@ -166,7 +103,7 @@ async function crawlNow(source: string): Promise<CrawlReply> {
   try {
     return await api<CrawlReply>('POST', `/crawl/${encodeURIComponent(source)}/retry`)
   } catch (e) {
-    if (e instanceof ApiError && e.body.ok === false) return { ok: false, message: String(e.body.message ?? '') }
+    if (e instanceof ApiError && e.body.ok === false) return { ok: false, source, message: String(e.body.message ?? '') }
     throw e
   }
 }

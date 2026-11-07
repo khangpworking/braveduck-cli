@@ -1,0 +1,59 @@
+# TypeScript types for the board (web/), written from the Go structs the REST
+# API sends and reads, so the two can't drift apart. Regenerate after
+# changing any of these files:
+#   go run github.com/gzuidhof/tygo@v0.2.21 generate
+# CI fails when web/src/lib/gen/ is stale.
+# Types from another package are written by name; each file imports them.
+type_mappings:
+  time.Time: "string"
+  jobs.Job: "jobs.Job"
+  jobs.Clock: "jobs.Clock"
+  jobs.ModelRating: "jobs.ModelRating"
+  store.FBGroup: "store.FBGroup"
+  store.Event: "store.Event"
+  store.CrawlStatusView: "store.CrawlStatusView"
+  geo.Point: "geo.Point"
+  geo.Place: "geo.Place"
+  service.FBGroup: "service.FBGroup"
+  service.CrawlResult: "service.CrawlResult"
+  service.ProfileForm: "service.ProfileForm"
+  service.ProfileFormOptions: "service.ProfileFormOptions"
+  service.BaseCV: "service.BaseCV"
+packages:
+  - path: "github.com/khangpworking/braveduck-cli/internal/core/jobs"
+    output_path: "web/src/lib/gen/jobs.ts"
+    include_files: ["job.go", "expiry.go"]
+    frontmatter: |
+      /** A job's stage (lane). */
+      export type Status = 'saved' | 'waiting' | 'applied' | 'interview' | 'offer' | 'closed'
+  - path: "github.com/khangpworking/braveduck-cli/internal/core/geo"
+    output_path: "web/src/lib/gen/geo.ts"
+    include_files: ["geo.go"]
+  - path: "github.com/khangpworking/braveduck-cli/internal/store"
+    output_path: "web/src/lib/gen/store.ts"
+    include_files: ["facebook.go", "events.go", "crawlstatus.go"]
+  - path: "github.com/khangpworking/braveduck-cli/internal/service"
+    output_path: "web/src/lib/gen/service.ts"
+    include_files:
+      - "today.go"
+      - "setup.go"
+      - "hosted.go"
+      - "platforms.go"
+      - "crawl.go"
+      - "profileform.go"
+      - "basecv.go"
+      - "location.go"
+      - "apply.go"
+      - "documents.go"
+      - "rating.go"
+      - "facebook.go"
+      - "stats.go"
+    frontmatter: |
+      import type * as jobs from './jobs'
+      import type * as store from './store'
+  - path: "github.com/khangpworking/braveduck-cli/internal/api"
+    output_path: "web/src/lib/gen/api.ts"
+    include_files: ["wire.go"]
+    frontmatter: |
+      import type { Status } from './jobs'
+      import type * as service from './service'

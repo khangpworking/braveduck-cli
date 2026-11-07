@@ -9,9 +9,9 @@ import (
 type FBGroup struct {
 	Key        string `json:"key"` // the id or name in facebook.com/groups/<key>
 	URL        string `json:"url"`
-	Name       string `json:"name"`       // "" until the scanner has seen it
-	Visibility string `json:"visibility"` // checking / public / private / unavailable
-	Note       string `json:"note"`       // why it can't be read, if it can't
+	Name       string `json:"name"` // "" until the scanner has seen it
+	Visibility string `json:"visibility" tstype:"'checking' | 'public' | 'private' | 'unavailable'"`
+	Note       string `json:"note"` // why it can't be read, if it can't
 	AddedAt    string `json:"added_at"`
 	CheckedAt  string `json:"checked_at"`
 }
