@@ -257,3 +257,25 @@ func TestOwnerKeepsLocalFeatures(t *testing.T) {
 		}
 	}
 }
+
+// A user's dir can be a link to a data dir kept elsewhere (the owner's own
+// ~/.braveduck): it's opened at start like any other, so its crawls run.
+func TestLinkedUserDirOpensAtStart(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TYPESAFE_API_KEY", "")
+	own, dir := t.TempDir(), t.TempDir()
+	if err := os.Symlink(own, filepath.Join(dir, "me@example.com")); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), Options{Dir: dir, UserHeader: "Remote-User", Secret: secret, MaxUsers: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if u := s.Users(); len(u) != 1 || u[0] != "me@example.com" {
+		t.Fatalf("users at start = %v", u)
+	}
+	if _, err := os.Stat(filepath.Join(own, "braveduck.db")); err != nil {
+		t.Fatalf("the linked data dir wasn't used: %v", err)
+	}
+}

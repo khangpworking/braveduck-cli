@@ -154,7 +154,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		s.logins = &loginUsers{path: opts.UsersFile}
 	}
 	for _, e := range entries {
-		if !e.IsDir() || !validUser.MatchString(e.Name()) {
+		// A user's dir may be a link to a data dir kept elsewhere (the
+		// owner's own ~/.braveduck), so follow links.
+		if fi, err := os.Stat(filepath.Join(opts.Dir, e.Name())); err != nil || !fi.IsDir() || !validUser.MatchString(e.Name()) {
 			continue
 		}
 		if _, err := s.user(e.Name()); err != nil {
