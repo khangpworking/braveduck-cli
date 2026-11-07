@@ -56,6 +56,15 @@ func getJob(t *testing.T, st *store.Store, id int64) jobs.Job {
 	return j
 }
 
+// openMoreMenu opens a job's ⋯ menu once the last one has finished closing:
+// a menu still animating out is in the page, and a click on it does nothing.
+// Radix opens menus on pointer down, not click.
+func openMoreMenu(page *rod.Page) {
+	page.MustWait(`() => !document.querySelector("[role=menu]")`)
+	page.MustElement(`button[aria-label="More actions"]`).MustEval(`() => this.dispatchEvent(new PointerEvent("pointerdown", {bubbles: true, button: 0, pointerType: "mouse"}))`)
+	page.MustElement(`[role=menu][data-state=open]`)
+}
+
 func clickText(page *rod.Page, sel, text string) {
 	page.MustElementR(sel, text).MustEval(`() => this.click()`)
 }
@@ -85,9 +94,8 @@ func TestAppMoreMenuAndNotes(t *testing.T) {
 	page.MustElement("section[aria-label='Cashier']") // newest first among unrated
 
 	menu := func(item string) {
-		// Radix opens menus on pointer down, not click.
-		page.MustElement(`button[aria-label="More actions"]`).MustEval(`() => this.dispatchEvent(new PointerEvent("pointerdown", {bubbles: true, button: 0, pointerType: "mouse"}))`)
-		clickText(page, "[role=menuitemcheckbox], [role=menuitem]", item)
+		openMoreMenu(page)
+		clickText(page, "[role=menu][data-state=open] [role=menuitemcheckbox], [role=menu][data-state=open] [role=menuitem]", item)
 	}
 	clickText(page, "[data-job]", "Accountant")
 	page.MustElement("section[aria-label='Accountant']")
