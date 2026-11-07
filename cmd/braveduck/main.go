@@ -87,7 +87,9 @@ Crawlers (search queries come from: braveduck keywords add search_queries ...)
 Web board
   serve      run the local web board + JSON API   (--addr, --no-open)
   serve --users DIR   a shared server: one board per user, behind a login
-             proxy (see deploy/hosted)  (--proxy-secret-file, --max-users)
+             proxy (see deploy/hosted)  (--proxy-secret-file, --max-users),
+             or behind Cloudflare Tunnel + Access (deploy/cloudflare)
+             (--access-team, --access-aud)
 
 AI agents
   mcp        MCP server on stdio, for Claude Code / Codex / agy

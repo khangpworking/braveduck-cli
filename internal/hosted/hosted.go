@@ -1,12 +1,13 @@
 // Package hosted runs braveduck as a shared server: many users, each with
 // their own board, behind a login proxy.
 //
-// braveduck does no logins itself. A reverse proxy (Caddy) asks a login
-// service (Authelia) about every request and passes the logged-in user's
-// name on in a header; deploy/hosted has a ready configuration. Server
-// trusts that header only on requests that also carry the secret shared
-// with the proxy, so nothing that reaches braveduck's port some other way
-// can pose as a user.
+// braveduck does no logins itself. Either a reverse proxy (Caddy) asks a
+// login service (Authelia) about every request and passes the logged-in
+// user's name on in a header (deploy/hosted has a ready configuration):
+// Server trusts that header only on requests that also carry the secret
+// shared with the proxy, so nothing that reaches braveduck's port some
+// other way can pose as a user. Or Cloudflare Access logs users in and
+// signs a token on each request (access.go, deploy/cloudflare).
 //
 // Each user gets a data dir of their own (DIR/<user>/: the database, the
 // profile, CVs, backups and the session key) and a complete single-user
@@ -69,6 +70,12 @@ type Options struct {
 	UsersFile string
 	JevDaily  int // Jev calls per user per day (the admin's key pays); 0 = no cap
 
+	// AccessTeam and AccessAUD switch the login to Cloudflare Access
+	// (access.go): the team's https:// address and the application's
+	// audience tag. Then UserHeader and Secret aren't used.
+	AccessTeam string
+	AccessAUD  string
+
 	// Tick is how often each user's scheduler looks for due work (crawls,
 	// rating, sweeps, backups); 0 turns schedulers off (tests).
 	Tick time.Duration
@@ -79,7 +86,8 @@ type Server struct {
 	opts   Options
 	ctx    context.Context // ends every user's scheduler
 	cancel context.CancelFunc
-	logins *loginUsers // nil: no users file to check
+	logins *loginUsers     // nil: no users file to check
+	access *accessVerifier // nil: the proxy names the user (UserHeader + Secret)
 
 	mu    sync.Mutex
 	users map[string]*tenant
@@ -101,15 +109,26 @@ var validUser = regexp.MustCompile(`^[a-z0-9][a-z0-9._@-]{0,63}$`)
 // dir, so their crawls keep running after a restart even before they visit.
 // Cancelling ctx stops every scheduler; Close stops them and closes the databases.
 func New(ctx context.Context, opts Options) (*Server, error) {
+	viaAccess := opts.AccessTeam != "" || opts.AccessAUD != ""
 	switch {
 	case opts.Dir == "":
 		return nil, errors.New("hosted: no users directory")
-	case opts.UserHeader == "":
+	case !viaAccess && opts.UserHeader == "":
 		return nil, errors.New("hosted: no user header")
-	case len(opts.Secret) < 32:
+	case !viaAccess && len(opts.Secret) < 32:
 		return nil, errors.New("hosted: the proxy secret must be at least 32 characters")
 	case opts.MaxUsers <= 0:
 		return nil, errors.New("hosted: max users must be at least 1")
+	}
+	var access *accessVerifier
+	if viaAccess {
+		var err error
+		if access, err = newAccess(ctx, opts.AccessTeam, opts.AccessAUD); err != nil {
+			return nil, err
+		}
+		if opts.LogoutURL == "" {
+			opts.LogoutURL = accessLogout
+		}
 	}
 	if err := os.MkdirAll(opts.Dir, 0o700); err != nil {
 		return nil, err
@@ -120,7 +139,7 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	s := &Server{opts: opts, ctx: ctx, cancel: cancel, users: map[string]*tenant{}}
+	s := &Server{opts: opts, ctx: ctx, cancel: cancel, access: access, users: map[string]*tenant{}}
 	if opts.UsersFile != "" {
 		s.logins = &loginUsers{path: opts.UsersFile}
 	}
@@ -155,16 +174,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}
-	got := r.Header.Get(SecretHeader)
-	if subtle.ConstantTimeCompare([]byte(got), []byte(s.opts.Secret)) != 1 {
-		writeErr(w, http.StatusForbidden, "braveduck only answers through its login proxy")
-		return
+	if s.access == nil {
+		got := r.Header.Get(SecretHeader)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(s.opts.Secret)) != 1 {
+			writeErr(w, http.StatusForbidden, "braveduck only answers through its login proxy")
+			return
+		}
 	}
 	if r.URL.Path == MCPPath {
 		s.serveAgent(w, r)
 		return
 	}
-	name := strings.ToLower(strings.TrimSpace(r.Header.Get(s.opts.UserHeader)))
+	var name string
+	if s.access != nil {
+		u, err := s.access.user(r)
+		if err != nil {
+			writeErr(w, http.StatusUnauthorized, "not logged in: open braveduck through its address, which asks you to log in")
+			return
+		}
+		name = u
+	} else {
+		name = strings.ToLower(strings.TrimSpace(r.Header.Get(s.opts.UserHeader)))
+	}
 	if name == "" {
 		writeErr(w, http.StatusUnauthorized, "not logged in")
 		return
@@ -191,6 +222,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2.Host = "localhost"
 	r2.Header.Del(SecretHeader)
 	r2.Header.Del(s.opts.UserHeader)
+	r2.Header.Del(AccessHeader)
 	t.handler.ServeHTTP(w, r2)
 }
 
@@ -214,6 +246,7 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request) {
 	r2.Host = "localhost"
 	r2.Header.Del(SecretHeader)
 	r2.Header.Del(s.opts.UserHeader)
+	r2.Header.Del(AccessHeader)
 	r2.Header.Del("Authorization")
 	t.mcp.ServeHTTP(w, r2)
 }
