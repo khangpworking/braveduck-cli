@@ -2,6 +2,7 @@
 import { ArrowLeft, Home } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { BOARD_URL, LANDING_URL } from '@/lib/links'
 
 export function NotFound() {
   const { t } = useTranslation()
@@ -21,7 +22,7 @@ export function NotFound() {
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg">
-            <a href="/">
+            <a href={BOARD_URL}>
               <Home />
               {t('Back to my board')}
             </a>
@@ -33,7 +34,7 @@ export function NotFound() {
         </div>
         <p className="mt-10 text-sm text-muted-foreground">
           {t('New to braveduck?')}{' '}
-          <a href="/welcome" className="font-medium text-foreground underline underline-offset-4">
+          <a href={LANDING_URL} className="font-medium text-foreground underline underline-offset-4">
             {t('See what it does')}
           </a>
         </p>

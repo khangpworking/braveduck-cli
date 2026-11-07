@@ -12,6 +12,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { BOARD_URL } from '@/lib/links'
 import { Preview } from './Preview'
 
 const REPO = 'https://github.com/khangpworking/braveduck-cli'
@@ -103,7 +104,7 @@ export function Landing() {
           <div className="ml-auto flex items-center gap-2">
             <LangSwitch />
             <Button asChild size="sm" className="hidden sm:inline-flex">
-              <a href="/">{t('Open my board')}</a>
+              <a href={BOARD_URL}>{t('Open my board')}</a>
             </Button>
           </div>
         </nav>
@@ -236,7 +237,7 @@ export function Landing() {
             </pre>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">
-                <a href="/">
+                <a href={BOARD_URL}>
                   {t('Open my board')}
                   <ArrowRight />
                 </a>
@@ -289,7 +290,7 @@ export function Landing() {
           <span>{t('Made for job seekers in Vietnam.')}</span>
           <div className="flex flex-wrap gap-5 md:ml-auto">
             <a href={REPO} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">GitHub</a>
-            <a href="/" className="hover:text-foreground">{t('Open my board')}</a>
+            <a href={BOARD_URL} className="hover:text-foreground">{t('Open my board')}</a>
             <span>© 2026 braveduck · MIT</span>
           </div>
         </div>

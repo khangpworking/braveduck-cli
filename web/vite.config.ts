@@ -20,17 +20,33 @@ function devToken(): Plugin {
   }
 }
 
-export default defineConfig({
+// The public site on Cloudflare Pages: the landing page is its home, and the
+// board lives on its own domain behind Cloudflare Access.
+const PAGES = { VITE_BOARD_URL: 'https://app.braveduck.io.vn', VITE_LANDING_URL: '/' }
+
+// `--mode pages` builds only the landing and 404 pages, for Cloudflare Pages
+// (scripts/pages.mjs then makes the landing page the site's index.html).
+export default defineConfig(({ mode }) => ({
   base: '/',
   plugins: [react(), tailwindcss(), devToken()],
+  define:
+    mode === 'pages'
+      ? Object.fromEntries(Object.entries(PAGES).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)]))
+      : {},
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   server: { proxy: { '/api': board } },
   // The Go binary embeds the build (internal/api/app.go).
   // Three pages: the board, the landing page (/welcome) and the 404 page.
   build: {
-    outDir: '../internal/api/app',
+    outDir: mode === 'pages' ? 'dist-pages' : '../internal/api/app',
     emptyOutDir: true,
     chunkSizeWarningLimit: 1000,
-    rollupOptions: { input: { index: 'index.html', welcome: 'welcome.html', notfound: '404.html' } },
+    rollupOptions: {
+      input: {
+        ...(mode === 'pages' ? {} : { index: 'index.html' }),
+        welcome: 'welcome.html',
+        notfound: '404.html',
+      } as Record<string, string>,
+    },
   },
-})
+}))
