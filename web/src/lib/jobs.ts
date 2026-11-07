@@ -144,3 +144,6 @@ export function dealbreakerText(d: string): [string, Record<string, string | num
   }
   return [known[d] ?? d]
 }
+
+/** The posting's link, if it's a web link: job text is hostile, and javascript: or data: links mustn't become clickable. */
+export const postingUrl = (j: Job) => (/^https?:\/\//i.test(j.url.trim()) ? j.url.trim() : '')

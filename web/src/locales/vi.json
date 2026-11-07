@@ -3,7 +3,6 @@
   "Stages": "Các bước",
   "Add job": "Thêm việc",
   "Your jobs": "Việc của bạn",
-  "Old board": "Bảng cũ",
   "Search jobs": "Tìm việc",
   "{n} jobs": "{n} việc",
   "No job matches “{q}”.": "Không có việc nào khớp “{q}”.",
@@ -476,5 +475,8 @@
   "missing or bad token — reload the board": "Phiên làm việc đã cũ. Bạn hãy tải lại trang.",
   "upload a PDF, Word (.docx), Markdown (.md) or HTML CV": "Bạn hãy tải lên CV dạng PDF, Word (.docx), Markdown (.md) hoặc HTML.",
   "no text could be read from this CV (a scanned or image-only PDF has none) — upload it as .docx or .md instead": "Không đọc được chữ trong CV này (PDF quét hoặc chỉ có ảnh sẽ không có chữ). Bạn hãy tải lên dạng .docx hoặc .md.",
-  "this PDF is too heavy to read (it unpacks to far more than its size); export it again, or upload a .docx": "Tệp PDF này quá nặng nên không đọc được. Bạn hãy xuất lại tệp hoặc tải lên dạng .docx."
+  "this PDF is too heavy to read (it unpacks to far more than its size); export it again, or upload a .docx": "Tệp PDF này quá nặng nên không đọc được. Bạn hãy xuất lại tệp hoặc tải lên dạng .docx.",
+  "{n} interviews from {resolved} answered applications · {pending} waiting": "{n} lượt phỏng vấn / {resolved} hồ sơ đã có kết quả · {pending} đang chờ",
+  "You're a fucking superstar 🌟": "Bạn làm tốt lắm 🌟",
+  "Keys: / search · n add a job · Esc close a window · ? this list": "Phím tắt: / tìm việc · n thêm việc · Esc đóng cửa sổ · ? xem danh sách này"
 }

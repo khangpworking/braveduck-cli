@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { Job, TodayGroup } from './api'
-import { dealbreakerText, matches, pay, payUndisclosed, shortCompany, sortJobs, todayEntries } from './jobs'
+import { dealbreakerText, matches, postingUrl, pay, payUndisclosed, shortCompany, sortJobs, todayEntries } from './jobs'
 
 const job = (over: Partial<Job>): Job =>
   ({
@@ -62,4 +62,10 @@ test("the server's deal-breaker tags read as words", () => {
   expect(dealbreakerText('Làm T7')).toEqual(['Works on Saturdays'])
   expect(dealbreakerText('Xa 13km')).toEqual(['{n} km away', { n: 13 }])
   expect(dealbreakerText('Something new')).toEqual(['Something new'])
+})
+
+test('only web links are links', () => {
+  expect(postingUrl(job({ url: ' https://topcv.vn/x ' }))).toBe('https://topcv.vn/x')
+  expect(postingUrl(job({ url: 'javascript:alert(1)' }))).toBe('')
+  expect(postingUrl(job({ url: 'data:text/html,hi' }))).toBe('')
 })

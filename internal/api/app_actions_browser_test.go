@@ -44,7 +44,7 @@ func actionsBoard(t *testing.T, list []jobs.Job) (*store.Store, string, []int64)
 	}
 	ts := httptest.NewServer(Handler(st, svc, testToken))
 	t.Cleanup(ts.Close)
-	return st, ts.URL + AppPath, ids
+	return st, ts.URL + BoardPath, ids
 }
 
 func getJob(t *testing.T, st *store.Store, id int64) jobs.Job {

@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/subtle"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,9 +28,6 @@ import (
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
-
-//go:embed web
-var webFS embed.FS
 
 // Handler builds the http.Handler serving the API and the embedded board.
 //
@@ -111,14 +107,8 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	// Everything else: the embedded web board (index.html + assets), with the
-	// token injected into index.html.
-	sub, _ := fs.Sub(webFS, "web")
-	index := renderIndex(sub, token)
-	files := http.FileServer(http.FS(sub))
-	mux.HandleFunc("GET /{$}", index)
-	mux.HandleFunc("GET /index.html", index)
-	mux.Handle("GET /", files)
+	// Everything else: the embedded board, with the token injected into its
+	// page.
 	mountApp(mux, token)
 
 	return guard(token, mux)
@@ -133,7 +123,7 @@ func BoardLang() string {
 	return "vi"
 }
 
-// tokenMeta is the placeholder in web/index.html that renderIndex fills.
+// tokenMeta is the placeholder in the board's index.html that renderIndex fills.
 const tokenMeta = `<meta name="braveduck-token" content="">`
 
 // renderIndex serves index.html with the per-run token filled in. Never cached:
@@ -141,7 +131,7 @@ const tokenMeta = `<meta name="braveduck-token" content="">`
 func renderIndex(web fs.FS, token string) http.HandlerFunc {
 	raw, err := fs.ReadFile(web, "index.html")
 	if err != nil || !bytes.Contains(raw, []byte(tokenMeta)) {
-		panic("api: web/index.html is missing the braveduck-token meta placeholder")
+		panic("api: the board's index.html is missing the braveduck-token meta placeholder")
 	}
 	page := bytes.Replace(raw, []byte(tokenMeta),
 		[]byte(`<meta name="braveduck-token" content="`+html.EscapeString(token)+`">`), 1)

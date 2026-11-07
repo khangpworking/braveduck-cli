@@ -6,17 +6,16 @@ braveduck is one Go binary with three faces over one core:
 
 - `internal/service`: every operation, implemented once (validation, duplicate
   checks, the activity feed). New behaviour goes here.
-- `cmd/braveduck` (CLI), `internal/api` (REST + the embedded board in
-  `internal/api/web`), `internal/mcp` (MCP tools): thin adapters that only
+- `cmd/braveduck` (CLI), `internal/api` (REST + the embedded board),
+  `internal/mcp` (MCP tools): thin adapters that only
   translate input/output and map service errors.
 - `internal/store`: SQLite. Schema changes are **new entries** appended to
   `migrations` in `store.go`. Never edit a shipped migration.
 - `internal/core/*`: pure logic plus the browser, vault and platform registry.
-- `web/`: the new board (React, TypeScript, Tailwind and shadcn/ui
-  components), replacing `internal/api/web` step by step. It talks to the same
-  REST API. `npm run build` writes it to `internal/api/app`, which is
-  committed: the Go binary embeds it and serves it at `/app/`, so building
-  braveduck needs no Node.
+- `web/`: the board (React, TypeScript, Tailwind and shadcn/ui components).
+  It talks only to the REST API. `npm run build` writes it to
+  `internal/api/app`, which is committed: the Go binary embeds it and serves
+  it at `/`, so building braveduck needs no Node.
 
 Design specs live in `docs/specs/`. If a change alters a spec, update the spec
 in the same PR.
@@ -31,11 +30,10 @@ Branch from `main` → PR → squash-merge. CI must be green.
 gofmt -l .                                   # must print nothing
 go vet ./... && go vet -tags browser ./...
 go mod tidy && git diff --exit-code go.mod go.sum
-for f in internal/api/web/*.js; do node --check "$f"; done   # board JS still parses
 go test -race ./...                           # unit tests (race needs cgo)
 ```
 
-The new board (Node 22):
+The board (Node 22):
 
 ```bash
 cd web && npm ci
@@ -62,16 +60,16 @@ On minimal Linux or WSL, Chromium needs `libnss3` and `libasound2`
 
 Writing board tests:
 
-- Put a new feature's tests in its own `internal/api/*_browser_test.go` file
-  (with `//go:build browser`). Two PRs that both append to
-  `board_browser_test.go` conflict.
-- Click with `clickID(page, id)` or `el.MustEval("() => this.click()")`.
-  rod's pointer `MustClick` waits for the element to be visible, stable and
-  uncovered, and a toast or a reflow can stall it for the full timeout. Only
-  tests that check hit-testing itself (the narrow-viewport test) use real
-  pointer clicks.
-- Every button needs a spoken name: text with letters, or an `aria-label`
-  (`TestBoardButtonsHaveNames`).
+- Put a new feature's tests in its own `internal/api/app_*_browser_test.go`
+  file (with `//go:build browser`); shared helpers are in
+  `browser_helpers_test.go` and `app_browser_test.go` (`appBoard`, `appPage`).
+- Find controls by what the user sees: `page.MustElementR("button", "Add job")`,
+  `aria-label`s, roles. Click with `el.MustEval("() => this.click()")`: rod's
+  pointer `MustClick` waits for the element to be stable and uncovered, and a
+  toast or an animation can stall it. Radix menus open on pointer down, so
+  dispatch a `PointerEvent("pointerdown")` on their trigger.
+- Every control needs a spoken name: text with letters, or an `aria-label`
+  (`TestAppButtonsHaveNames`).
 - Wait for state with `waitUntil` or rod's `MustElement*`, never `time.Sleep`.
   On WSL the suite sometimes freezes in a random test; CI's Linux runners are
   the judge.
@@ -80,8 +78,9 @@ Writing board tests:
 
 - **Never store or log secrets.** Session data only leaves `internal/service`
   into the vault. Tests assert it never appears in API, MCP or log output.
-- **Treat scraped job text as hostile.** Anything the board renders through
-  `innerHTML` goes through `esc()` / `jsArg()` / `safeUrl()`.
+- **Treat scraped job text as hostile.** The board renders it as React text,
+  never as HTML (no `dangerouslySetInnerHTML`), and only `http(s)` posting
+  links become links (`postingUrl`).
 - **Fetch only public URLs** (`scrape.CheckPublicURL`, `publicClient`).
 - Stay on the Go version in `go.mod`: pin dependency versions that need a
   newer Go instead of letting `go get @latest` raise it.
