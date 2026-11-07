@@ -1,0 +1,3 @@
+# The new board's build (web/ → npm run build): generated, so diffs hide it.
+internal/api/app/** linguist-generated=true -diff
+web/package-lock.json linguist-generated=true -diff

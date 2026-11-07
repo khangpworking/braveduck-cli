@@ -9,6 +9,7 @@ import (
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -69,22 +70,42 @@ func TestRejectsNonLoopbackHost(t *testing.T) {
 	}
 }
 
+// Both boards' pages carry the token, are never cached and can't be framed.
 func TestIndexCarriesTokenAndIsntCached(t *testing.T) {
 	ts, _ := newTestServer(t)
-	resp, err := http.Get(ts.URL + "/")
+	for _, path := range []string{"/", AppPath, AppPath + "index.html"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if !strings.Contains(string(body), `<meta name="braveduck-token" content="`+testToken+`">`) {
+			t.Errorf("%s doesn't carry the token", path)
+		}
+		if resp.Header.Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: Cache-Control = %q, want no-store", path, resp.Header.Get("Cache-Control"))
+		}
+		if resp.Header.Get("X-Frame-Options") != "DENY" {
+			t.Errorf("%s can be framed (no X-Frame-Options)", path)
+		}
+	}
+}
+
+// The new board's scripts and styles are served from the embedded build.
+func TestAppServesItsAssets(t *testing.T) {
+	ts, _ := newTestServer(t)
+	assets, err := fs.Glob(appFS, "app/assets/*.js")
+	if err != nil || len(assets) == 0 {
+		t.Fatalf("no script in the embedded build (%v); run npm run build in web/", err)
+	}
+	resp, err := http.Get(ts.URL + AppPath + strings.TrimPrefix(assets[0], "app/"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), `<meta name="braveduck-token" content="`+testToken+`">`) {
-		t.Fatal("index.html doesn't carry the token")
-	}
-	if resp.Header.Get("Cache-Control") != "no-store" {
-		t.Errorf("Cache-Control = %q, want no-store", resp.Header.Get("Cache-Control"))
-	}
-	if resp.Header.Get("X-Frame-Options") != "DENY" {
-		t.Error("board can be framed (no X-Frame-Options)")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
+		t.Errorf("%s: status %d, type %q", assets[0], resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 }
 

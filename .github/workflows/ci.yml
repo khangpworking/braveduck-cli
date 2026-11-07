@@ -40,6 +40,31 @@ jobs:
       - name: unit tests (race detector)
         run: go test -race -count=1 ./...
 
+  web:
+    name: new board (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: types, lint, unit tests
+        run: npm run typecheck && npm run lint && npm test
+      # The Go binary embeds internal/api/app, so it must be this source's build.
+      - name: the committed build matches the source
+        run: |
+          npm run build
+          if [ -n "$(git status --porcelain ../internal/api/app)" ]; then
+            echo "internal/api/app is stale: run npm run build in web/ and commit it"
+            git status --short ../internal/api/app; exit 1
+          fi
+
   browser:
     name: real-browser tests
     runs-on: ubuntu-latest

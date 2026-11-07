@@ -118,6 +118,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("GET /{$}", index)
 	mux.HandleFunc("GET /index.html", index)
 	mux.Handle("GET /", files)
+	mountApp(mux, token)
 
 	return guard(token, mux)
 }
