@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { getSetup, type Job, type Status } from '@/lib/api'
 import { applySite, draftOf, getPlatforms, mailto } from '@/lib/jobApi'
-import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, postingUrl, reasons, sourceName, stageName } from '@/lib/jobs'
+import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, postingUrl, reasons, sourceName, stageName, steps, type Step } from '@/lib/jobs'
 import { locale } from '@/lib/i18n'
 import { N_ } from '@/lib/n'
 import { Button } from '@/components/ui/button'
@@ -201,6 +201,58 @@ function Facts({ job }: { job: Job }) {
         <b className="text-body">{where}</b>
       </Card>
     </div>
+  )
+}
+
+/**
+ * A part of the job's page, with its name: what's near belongs together, and
+ * the space between the parts says where one ends.
+ */
+function Group({ title, first = false, children }: { title: string; first?: boolean; children: React.ReactNode }) {
+  return (
+    <section className={cn('space-y-3', !first && 'pt-6')} aria-label={title}>
+      <h2 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
+const STEP_NAMES: Record<Step['stage'], string> = {
+  saved: N_('Saved'),
+  waiting: N_('Ready to apply'),
+  applied: N_('Applied'),
+  followup: N_('Asked the company'),
+  interview: N_('Interview'),
+  offer: N_('Offer'),
+  closed: N_('Closed'),
+}
+
+/** The steps so far, joined by a line, with the dates braveduck knows. */
+function Timeline({ job }: { job: Job }) {
+  const { t } = useTranslation()
+  const list = steps(job)
+  return (
+    <ol>
+      {list.map((s, i) => {
+        const last = i === list.length - 1
+        return (
+          <li key={s.stage} className="flex gap-3">
+            <span className="flex flex-col items-center">
+              <span className={cn('mt-1 size-4 shrink-0 rounded-full', last ? 'bg-primary ring-4 ring-primary/15' : 'bg-muted-foreground/60')} />
+              {!last && <span className="w-0.5 flex-1 bg-border" />}
+            </span>
+            <span className={cn('pb-4', last && 'pb-0')}>
+              <span className={cn('block', last && 'font-semibold')}>{t(STEP_NAMES[s.stage])}</span>
+              {s.date && (
+                <span className="block text-sm text-muted-foreground">
+                  {new Date(s.date).toLocaleDateString(locale(), { day: 'numeric', month: 'long' })}
+                </span>
+              )}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -439,6 +491,7 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
         </div>
         <NextStep job={job} a={a} />
         {status.length > 0 && <p className="font-medium text-success">{status.join(' · ')}</p>}
+        <Group title={t('How it fits you')} first>
         {early ? (
           <>
             <GradeCard job={job} />
@@ -470,12 +523,20 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
             {t("Couldn't rate this job. braveduck tries again later.")}
           </p>
         )}
-        <div>
+        </Group>
+        <Group title={t('Your part')}>
           <Notes job={job} a={a} />
           {(early || job.status === 'applied') && <Documents job={job} a={a} />}
+        </Group>
+        {job.status !== 'saved' && (
+          <Group title={t('So far')}>
+            <Timeline job={job} />
+          </Group>
+        )}
+        <Group title={t('About the posting')}>
           <AboutJob job={job} />
           <OtherRatings job={job} a={a} />
-        </div>
+        </Group>
         <p className="text-sm text-muted-foreground">
           {t('Found on {source}, {date}', {
             source: job.discovery_source ? t(sourceName(job.discovery_source)) : t('your list'),

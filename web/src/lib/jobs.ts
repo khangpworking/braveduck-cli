@@ -77,13 +77,74 @@ export const shortCompany = (c: string) =>
     .replace(/^\s*(công ty|cty)\s+/i, '')
     .trim() || c
 
-/** Saved jobs: pinned first, then best rated, unrated after, newest first. */
-export function sortJobs(list: Job[]) {
-  const rank = (j: Job) => (j.score_status === 'scored' ? Number(j.score) : -1)
+/** How a list can be ordered. Pinned jobs always come first. */
+export type SortKey = 'fit' | 'newest' | 'pay' | 'near' | 'deadline'
+
+export const SORTS: { id: SortKey; name: string }[] = [
+  { id: 'fit', name: N_('Best fit') },
+  { id: 'newest', name: N_('Newest') },
+  { id: 'pay', name: N_('Highest pay') },
+  { id: 'near', name: N_('Nearest') },
+  { id: 'deadline', name: N_('Closing soonest') },
+]
+
+/**
+ * The top of the pay, in millions of đồng a month, when it can be read:
+ * "16000000 - 22000000 VND/month" → 22, "15-20 triệu" → 20, "$1,500" → null.
+ */
+export function payTop(salary: string): number | null {
+  const s = fold(salary)
+  if (/usd|\$/.test(s)) return null
+  const big = [...s.matchAll(/\d{6,}/g)].map(m => Number(m[0]) / 1e6)
+  if (big.length) return Math.max(...big)
+  if (/trieu|tr\b/.test(s)) {
+    const small = [...s.matchAll(/\d+(?:[.,]\d+)?/g)].map(m => Number(m[0].replace(',', '.')))
+    if (small.length) return Math.max(...small)
+  }
+  return null
+}
+
+/** Days until the posting closes, or null when there's no deadline. */
+const closesIn = (j: Job) => (j.clock?.kind === 'deadline' ? j.clock.days : null)
+
+/**
+ * Orders a list: pinned first, then by key, then newest. Jobs with nothing
+ * to sort by (no pay given, no address, no deadline) go last.
+ */
+export function sortJobs(list: Job[], key: SortKey = 'fit') {
   const time = (j: Job) => Date.parse(j.saved_at || j.created_at) || 0
-  return [...list].sort(
-    (a, b) => Number(b.pinned) - Number(a.pinned) || rank(b) - rank(a) || time(b) - time(a),
-  )
+  const last = (v: number | null, desc = false) => (v === null ? Infinity : desc ? -v : v)
+  const by: Record<SortKey, (j: Job) => number> = {
+    fit: j => (j.score_status === 'scored' ? -Number(j.score) : Infinity),
+    newest: j => -time(j),
+    pay: j => last(payTop(j.salary), true),
+    near: j => last(km(j)),
+    deadline: j => last(closesIn(j)),
+  }
+  return [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned) || by[key](a) - by[key](b) || time(b) - time(a))
+}
+
+export interface Step {
+  stage: Status | 'followup'
+  date: string // "" when braveduck doesn't know when it happened
+}
+
+/**
+ * The steps a job went through, as far as braveduck knows: saved, applied
+ * (the day the no-answer clock started), followed up, and the stage it is
+ * in now. Dates braveduck doesn't have stay empty rather than guessed.
+ */
+export function steps(j: Job): Step[] {
+  const order: Status[] = ['saved', 'waiting', 'applied', 'interview', 'offer', 'closed']
+  const at = order.indexOf(j.status)
+  const out: Step[] = [{ stage: 'saved', date: j.saved_at || j.created_at }]
+  const applied = /^applied:(\d{4}-\d{2}-\d{2})/.exec(j.expires_at)?.[1] ?? ''
+  if (at >= order.indexOf('applied') || applied) out.push({ stage: 'applied', date: applied })
+  if (j.followup_sent_at) out.push({ stage: 'followup', date: j.followup_sent_at })
+  if (j.status === 'interview' || j.status === 'offer') out.push({ stage: 'interview', date: '' })
+  if (j.status === 'offer') out.push({ stage: 'offer', date: '' })
+  if (j.status === 'closed') out.push({ stage: 'closed', date: '' })
+  return out
 }
 
 export type TodayKind = 'follow' | 'deadline' | 'match'

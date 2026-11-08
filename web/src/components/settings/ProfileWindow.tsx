@@ -2,15 +2,16 @@
 // choices, pay) by default; the whole Markdown file for whoever wants it.
 // The server writes only the lines the form owns, and every field the form
 // doesn't show goes back unchanged.
-import { useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, CircleCheck, MapPin } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, CircleCheck, MapPin } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Q, S, openWindow, type Profile, type ProfileForm, type ProfileOptions } from '@/lib/settings'
 import { withDefaults } from '@/lib/money'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Progress } from '@/components/ui/progress'
 import { Textarea } from '@/components/ui/textarea'
 import { Body, ChoiceField, Field, Footer, Loading, MoneyField, Problem, Section, TagsField, Win, afterBlur, useErr, useFresh, type WinProps } from './parts'
 
@@ -107,7 +108,9 @@ function ProfileEditor({ saved, profile, close }: {
             <Textarea id="profile-text" spellCheck={false} value={text} onChange={e => setText(e.target.value)} code className="min-h-96" />
           </Field>
         ) : (
-          <>
+          <Chunked
+            parts={[
+              <Fragment key="1">
             <Section title={t('1. What job do you want?')}>
               <TagsField label={t('Job titles')} hint={t("The roles you'd apply for, e.g. Business Analyst, Kế toán.")} value={form.roles} onChange={set('roles')} />
               <ChoiceField label={t('Level')} value={form.seniority} options={o.seniority} onChange={set('seniority')} />
@@ -121,9 +124,13 @@ function ProfileEditor({ saved, profile, close }: {
                 </Button>
               </p>
             </Section>
+              </Fragment>,
+              <Fragment key="2">
             <Section title={t('2. Pay')}>
               <MoneyField label={t("The least you'd accept")} value={form.min_pay} onChange={set('min_pay')} currencies={o.currencies} periods={o.periods} />
             </Section>
+              </Fragment>,
+              <Fragment key="3">
             <Section title={t('3. Deal-breakers')}>
               <TagsField
                 label={t('A job is a "no" if…')}
@@ -133,11 +140,15 @@ function ProfileEditor({ saved, profile, close }: {
                 onChange={set('deal_breakers')}
               />
             </Section>
+              </Fragment>,
+              <Fragment key="4">
             <Section title={t('4. About you')}>
               <Field label={t('Your experience and skills')} hint={t('Filled in from your CV when you upload one. Edit freely.')} htmlFor="profile-about">
                 <Textarea id="profile-about" rows={6} value={form.about_me} onChange={e => set('about_me')(e.target.value)} className="min-h-36" />
               </Field>
             </Section>
+              </Fragment>,
+              <Fragment key="5">
             <Collapsible>
               <CollapsibleTrigger asChild>
                 <Button variant="outline" className="group h-11 w-full justify-between">
@@ -156,7 +167,9 @@ function ProfileEditor({ saved, profile, close }: {
               </div>
 </CollapsibleContent>
             </Collapsible>
-          </>
+              </Fragment>,
+            ]}
+          />
         )}
         <Button variant="link" size="inline" className="h-11" disabled={save.isPending} onClick={switchMode}>
           {mode === 'form' ? t('Edit as text instead') : t('Back to the form')}
@@ -175,5 +188,45 @@ function ProfileEditor({ saved, profile, close }: {
         </Button>
       </Footer>
     </>
+  )
+}
+
+const PHONE = '(max-width: 760px)'
+
+/**
+ * The form's parts: all on one page on a computer; on a phone one part per
+ * screen, with where you are and a button to the next, so a long form is a
+ * few short ones.
+ */
+function Chunked({ parts }: { parts: React.ReactNode[] }) {
+  const { t } = useTranslation()
+  const [phone, setPhone] = useState(() => matchMedia(PHONE).matches)
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    const m = matchMedia(PHONE)
+    const on = () => setPhone(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  if (!phone) return <>{parts}</>
+  const last = step === parts.length - 1
+  return (
+    <div className="space-y-4" data-chunked>
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-muted-foreground">{t('Part {n} of {total}', { n: step + 1, total: parts.length })}</p>
+        <Progress value={((step + 1) / parts.length) * 100} aria-label={t('Part {n} of {total}', { n: step + 1, total: parts.length })} />
+      </div>
+      {parts[step]}
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" disabled={step === 0} onClick={() => setStep(n => n - 1)}>
+          <ChevronLeft />
+          {t('Back')}
+        </Button>
+        <Button variant={last ? 'outline' : 'default'} disabled={last} onClick={() => setStep(n => n + 1)}>
+          {t('Next')}
+          <ChevronRight />
+        </Button>
+      </div>
+    </div>
   )
 }
