@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { Job, TodayGroup } from './api'
-import { dealbreakerText, matches, postingUrl, pay, payUndisclosed, shortCompany, sortJobs, todayEntries } from './jobs'
+import { dealbreakerText, matches, payTop, postingUrl, pay, payUndisclosed, shortCompany, sortJobs, steps, todayEntries } from './jobs'
 
 const job = (over: Partial<Job>): Job =>
   ({
@@ -68,4 +68,35 @@ test('only web links are links', () => {
   expect(postingUrl(job({ url: ' https://topcv.vn/x ' }))).toBe('https://topcv.vn/x')
   expect(postingUrl(job({ url: 'javascript:alert(1)' }))).toBe('')
   expect(postingUrl(job({ url: 'data:text/html,hi' }))).toBe('')
+})
+
+test('the top of the pay reads in millions', () => {
+  expect(payTop('16000000 - 22000000 VND/month')).toBe(22)
+  expect(payTop('15-20 triệu')).toBe(20)
+  expect(payTop('Up to 12,5 triệu')).toBe(12.5)
+  expect(payTop('Thỏa thuận')).toBeNull()
+  expect(payTop('$1,500')).toBeNull()
+})
+
+test('lists sort by fit, pay, distance and deadline; pinned first, unknowns last', () => {
+  const a = job({ id: 1, score_status: 'scored', score: 4.6, salary: '10 triệu', company_geo_status: 'ok', company_distance_km: 9 })
+  const b = job({ id: 2, score_status: 'scored', score: 3.1, salary: '20 triệu', clock: { kind: 'deadline', state: 'warning', days: 2, date: '' } })
+  const c = job({ id: 3, salary: 'Thỏa thuận', company_geo_status: 'ok', company_distance_km: 2 })
+  const p = job({ id: 4, pinned: true })
+  const ids = (k: Parameters<typeof sortJobs>[1]) => sortJobs([a, b, c, p], k).map(j => j.id)
+  expect(ids('fit')).toEqual([4, 1, 2, 3])
+  expect(ids('pay')).toEqual([4, 2, 1, 3])
+  expect(ids('near')).toEqual([4, 3, 1, 2])
+  expect(ids('deadline')).toEqual([4, 2, 1, 3])
+})
+
+test("a job's steps keep only the dates braveduck knows", () => {
+  const j = job({ status: 'interview', saved_at: '2026-10-20T08:00:00Z', expires_at: 'applied:2026-10-30', followup_sent_at: '2026-11-07T09:00:00Z' })
+  expect(steps(j)).toEqual([
+    { stage: 'saved', date: '2026-10-20T08:00:00Z' },
+    { stage: 'applied', date: '2026-10-30' },
+    { stage: 'followup', date: '2026-11-07T09:00:00Z' },
+    { stage: 'interview', date: '' },
+  ])
+  expect(steps(job({ status: 'saved', saved_at: '2026-11-01' }))).toEqual([{ stage: 'saved', date: '2026-11-01' }])
 })

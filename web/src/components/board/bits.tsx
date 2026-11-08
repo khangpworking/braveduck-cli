@@ -1,5 +1,5 @@
 // Small pieces shared by the list and the detail.
-import { Ban } from 'lucide-react'
+import { Ban, Clock, MessageCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Job } from '@/lib/api'
 import { GRADES, dealbreakerText, grade, km, pay, payUndisclosed, shortCompany } from '@/lib/jobs'
@@ -54,3 +54,30 @@ export function Warning({ job, all = false }: { job: Job; all?: boolean }) {
 }
 
 export const Company = ({ job }: { job: Job }) => <>{shortCompany(job.company)}</>
+
+/**
+ * What's due, in the row itself rather than a banner: a posting closing within
+ * a week, or an application a week without an answer (and no follow-up yet).
+ */
+export function Due({ job }: { job: Job }) {
+  const { t } = useTranslation()
+  const c = job.clock
+  if (c?.kind === 'deadline' && c.days <= 7 && (job.status === 'saved' || job.status === 'waiting')) {
+    const text = c.days < 0 ? t('This posting has closed') : c.days === 0 ? t('Closes today') : c.days === 1 ? t('Closes tomorrow') : t('{n} days left to apply', { n: c.days })
+    return (
+      <span className={cn('mt-1 inline-flex items-center gap-1 text-small font-semibold', c.days <= 1 ? 'text-danger' : 'text-warning')}>
+        <Clock className="size-4" />
+        {text}
+      </span>
+    )
+  }
+  if (c?.kind === 'applied' && job.status === 'applied' && c.days >= 7 && !job.followup_sent_at) {
+    return (
+      <span className="mt-1 inline-flex items-center gap-1 text-small font-semibold text-warning">
+        <MessageCircle className="size-4" />
+        {t('No answer for {n} days', { n: c.days })}
+      </span>
+    )
+  }
+  return null
+}

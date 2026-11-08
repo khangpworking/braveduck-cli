@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, RotateCw, Search, Settings as Gear } from 'lucide-react'
+import { Plus, RotateCw, Search, Settings as Gear, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getJobs, getToday, patchJob, setOnUnauthorized, type Job, type Status } from '@/lib/api'
@@ -12,6 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/sonner'
 import { N_ } from '@/lib/n'
 import { JobRow, TodayCard } from '@/components/board/JobList'
+import { QuickReview } from '@/components/board/QuickReview'
+import { SortMenu, useSort } from '@/components/board/SortMenu'
 import { Nav, NavRail, useMenuOpen, type View } from '@/components/board/Nav'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { useDefaultLayout, useGroupRef } from 'react-resizable-panels'
@@ -43,8 +45,10 @@ export default function App() {
   const jobsQ = useQuery({ queryKey: ['jobs'], queryFn: getJobs })
   const todayQ = useQuery({ queryKey: ['today'], queryFn: getToday })
   const [view, setView] = useState<View>('saved')
+  const [sort, setSort] = useSort(view)
   const [cur, setCur] = useState<number | null>(null)
   const [query, setQuery] = useState('')
+  const [reviewing, setReviewing] = useState(false)
   const [adding, setAdding] = useState(false)
   const [settings, setSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useMenuOpen()
@@ -79,8 +83,8 @@ export default function App() {
   const today = useMemo(() => todayEntries(todayQ.data ?? [], jobs), [todayQ.data, jobs])
   const rows = useMemo(() => {
     if (view === 'today') return today.map(e => e.job)
-    return sortJobs(jobs.filter(j => j.status === view && matches(j, query)))
-  }, [jobs, view, today, query])
+    return sortJobs(jobs.filter(j => j.status === view && matches(j, query)), sort)
+  }, [jobs, view, today, query, sort])
   const current = rows.find(j => j.id === cur) ?? (phone ? null : (rows[0] ?? null))
   const count = (s: Status) => jobs.filter(j => j.status === s).length
 
@@ -177,11 +181,20 @@ export default function App() {
             ))}
           </div>
         ) : (
-          <h2 className="pt-1 text-xl font-semibold">
-            {viewName} <span className="font-normal text-muted-foreground">· {t('{n} jobs', { n: rows.length })}</span>
-          </h2>
+          <div className="flex items-center gap-2 pt-1">
+            <h2 className="flex-1 text-xl font-semibold">
+              {viewName} <span className="font-normal text-muted-foreground">· {t('{n} jobs', { n: rows.length })}</span>
+            </h2>
+            {view !== 'today' && <SortMenu sort={sort} onSort={setSort} />}
+          </div>
         )}
         {search}
+        {(view === 'saved' || view === 'waiting') && rows.length > 1 && (
+          <Button variant="outline" className="w-full" onClick={() => setReviewing(true)}>
+            <Zap />
+            {t('Go through them one by one ({n})', { n: rows.length })}
+          </Button>
+        )}
         {(view === 'applied' || view === 'interview' || view === 'offer') && <Morale />}
       </div>
       <Separator />
@@ -285,6 +298,12 @@ export default function App() {
           const j = jobs.find(x => x.id === id)
           if (j) open(j)
         }}
+      />
+      <QuickReview
+        jobs={rows}
+        open={reviewing}
+        onOpenChange={setReviewing}
+        onMove={(job, to) => save.mutate({ id: job.id, status: to })}
       />
       <Toaster position="bottom-center" />
     </>

@@ -6,7 +6,7 @@ import { shortCompany } from '@/lib/jobs'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Company, GradeBadge, PayKm, Warning } from './bits'
+import { Company, Due, GradeBadge, PayKm, Warning } from './bits'
 
 export function JobRow({ job, current, onOpen }: { job: Job; current: boolean; onOpen: () => void }) {
   const { t } = useTranslation()
@@ -33,7 +33,10 @@ export function JobRow({ job, current, onOpen }: { job: Job; current: boolean; o
         <span className="block text-body">
           <PayKm job={job} />
         </span>
-        <Warning job={job} />
+        <span className="flex flex-wrap gap-x-3">
+          <Due job={job} />
+          <Warning job={job} />
+        </span>
       </span>
     </button>
   )
