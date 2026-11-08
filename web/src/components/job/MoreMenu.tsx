@@ -1,5 +1,5 @@
 // The ⋯ menu on a job: pin, keep, edit details, delete.
-import { useEffect, useState } from 'react'
+import { lazy, useState } from 'react'
 import { Ellipsis, LifeBuoy, Pencil, Pin, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Job } from '@/lib/api'
@@ -8,54 +8,17 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Deferred, WindowLoading } from '@/components/Deferred'
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
 import type { JobActions } from './useJobActions'
+
+const EditDetails = lazy(() => import('./EditDetails').then(m => ({ default: m.EditDetails })))
 
 /** Keep matters only for jobs the clock would close by itself. */
 export const keepable = (j: Job) => !!j.expires_at || j.status === 'applied' || j.status === 'interview'
-
-function EditDetails({ job, a, open, onOpenChange }: { job: Job; a: JobActions; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { t } = useTranslation()
-  const [v, setV] = useState({ title: '', company: '', salary: '', location: '' })
-  useEffect(() => {
-    if (open) setV({ title: job.title, company: job.company, salary: job.salary, location: job.location })
-  }, [open, job])
-  const field = (k: keyof typeof v, label: string) => (
-    <label className="grid gap-1 text-sm font-medium">
-      {label}
-      <Input value={v[k]} onChange={e => setV({ ...v, [k]: e.target.value })} className="h-11" />
-    </label>
-  )
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t('Edit details')}</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-3">
-          {field('title', t('Title'))}
-          {field('company', t('Company'))}
-          {field('salary', t('Pay'))}
-          {field('location', t('Where'))}
-        </div>
-        <DialogFooter>
-          <Button
-            className="h-11"
-            disabled={!v.title.trim() || a.edit.isPending}
-            onClick={() => a.edit.mutate(v, { onSuccess: () => onOpenChange(false) })}
-          >
-            {t('Save')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 export function MoreMenu({ job, a, onDeleted }: { job: Job; a: JobActions; onDeleted: () => void }) {
   const { t } = useTranslation()
@@ -91,7 +54,9 @@ export function MoreMenu({ job, a, onDeleted }: { job: Job; a: JobActions; onDel
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <EditDetails job={job} a={a} open={editing} onOpenChange={setEditing} />
+      <Deferred active={editing} fallback={<WindowLoading title={t('Edit details')} onClose={() => setEditing(false)} />}>
+        <EditDetails job={job} a={a} open={editing} onOpenChange={setEditing} />
+      </Deferred>
       <AlertDialog open={deleting} onOpenChange={setDeleting}>
         <AlertDialogContent>
           <AlertDialogHeader>

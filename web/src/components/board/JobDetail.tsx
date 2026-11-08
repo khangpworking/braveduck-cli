@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, memo, useEffect, useState } from 'react'
 import { ArrowLeft, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleAlert, Copy, Mail, MapPin, Wallet } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -10,17 +10,20 @@ import { N_ } from '@/lib/n'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { AskAI, copy } from '@/components/job/AskAI'
+import { copy } from '@/lib/clipboard'
+import { Deferred, WindowLoading } from '@/components/Deferred'
 import { MoreMenu } from '@/components/job/MoreMenu'
 import { AboutJob, Documents, Notes, OtherRatings } from '@/components/job/Sections'
 import { useJobActions, type JobActions } from '@/components/job/useJobActions'
 import { GradeBadge, Warning } from './bits'
+
+const AskAI = lazy(() => import('@/components/job/AskAI').then(m => ({ default: m.AskAI })))
+const ApplySteps = lazy(() => import('@/components/job/ApplySteps').then(m => ({ default: m.ApplySteps })))
 
 /** What the board does to a job; App owns the saving and the undo. */
 export interface Move {
@@ -297,47 +300,6 @@ function MoveMenu({ job, onMove }: { job: Job; onMove: Move }) {
   )
 }
 
-/** After "Apply on TopCV": what to do in the window that opened. */
-function ApplySteps({ a }: { a: JobActions }) {
-  const { t } = useTranslation()
-  const p = a.prep
-  const steps = p
-    ? [
-        p.site_id === 'topcv' ? t('Click Apply (Ứng tuyển).') : t('Click Apply.'),
-        t('Upload this CV: {file}', { file: p.cv_pdf }),
-        ...(p.cover_letter ? [t('Paste the cover letter (it’s already copied).')] : []),
-        t('Submit it, then close the window.'),
-      ]
-    : []
-  return (
-    <Dialog open={!!p} onOpenChange={o => !o && a.setPrep(null)}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t('A {site} window is opening', { site: p?.site ?? '' })}</DialogTitle>
-          <DialogDescription>{t('You’re logged in there. You submit it yourself:')}</DialogDescription>
-        </DialogHeader>
-        <ol className="list-decimal space-y-2 pl-6 text-body">
-          {steps.map(s => (
-            <li key={s} className="break-words">
-              {s}
-            </li>
-          ))}
-        </ol>
-        <p className="text-muted-foreground">
-          {p?.site_id === 'topcv'
-            ? t('braveduck checks TopCV afterwards and moves the job to Applied if it’s there.')
-            : t('When you close the window, braveduck asks whether you submitted it.')}
-        </p>
-        <DialogFooter>
-          <Button className="h-11" onClick={() => a.setPrep(null)}>
-            {t('OK')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /** The one main action for the job's stage. */
 function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move }) {
   const { t } = useTranslation()
@@ -433,7 +395,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
   )
 }
 
-export function JobDetail({ job, phone, onBack, onMove, onDeleted }: {
+export const JobDetail = memo(function JobDetail({ job, phone, onBack, onMove, onDeleted }: {
   job: Job | null
   phone: boolean
   onBack: () => void
@@ -449,7 +411,7 @@ export function JobDetail({ job, phone, onBack, onMove, onDeleted }: {
     )
   }
   return <WithText key={job.id} job={job} phone={phone} onBack={onBack} onMove={onMove} onDeleted={onDeleted} />
-}
+})
 
 type DetailProps = {
   job: Job
@@ -588,8 +550,14 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
           <MoveMenu job={job} onMove={onMove} />
         </div>
       </div>
-      {a.ask && <AskAI job={job} kind={a.ask.kind} ask={a.ask.ask} onClose={() => a.setAsk(null)} />}
-      <ApplySteps a={a} />
+      {a.ask && (
+        <Deferred active fallback={<WindowLoading title={t(a.ask.kind === 'rate' ? 'Rate this job with your AI' : a.ask.kind === 'cv' ? 'Tailor your CV with your AI' : 'Draft the email with your AI')} className="sm:max-w-xl" onClose={() => a.setAsk(null)} />}>
+          <AskAI job={job} kind={a.ask.kind} ask={a.ask.ask} onClose={() => a.setAsk(null)} />
+        </Deferred>
+      )}
+      <Deferred active={!!a.prep} fallback={<WindowLoading title={t('A {site} window is opening', { site: a.prep?.site ?? '' })} onClose={() => a.setPrep(null)} />}>
+        <ApplySteps a={a} />
+      </Deferred>
     </section>
   )
 }

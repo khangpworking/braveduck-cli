@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { jobChanged, type Job } from '@/lib/api'
 import { saveCV, saveDraft, splitEmail, type Ask } from '@/lib/jobApi'
 import { N_ } from '@/lib/n'
+import { copy } from '@/lib/clipboard'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -19,13 +20,6 @@ const TITLES: Record<AskKind, string> = {
   rate: N_('Rate this job with your AI'),
   cv: N_('Tailor your CV with your AI'),
   draft: N_('Draft the email with your AI'),
-}
-
-export function copy(text: string, t: (k: string) => string) {
-  return navigator.clipboard.writeText(text).then(
-    () => toast(t('Copied.')),
-    () => toast.error(t("Couldn't copy. Select the text and copy it yourself.")),
-  )
 }
 
 export function AskAI({ job, kind, ask, onClose }: { job: Job; kind: AskKind; ask: Ask | null; onClose: () => void }) {

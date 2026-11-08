@@ -70,7 +70,7 @@ func openWin(t *testing.T, page *rod.Page, row, title string) *rod.Element {
 }
 
 func winTitled(page *rod.Page, title string) *rod.Element {
-	page.MustWait(`() => document.querySelectorAll("[role=dialog]").length === 1 && !document.querySelector("[role=dialog] nav")`)
+	page.MustWait(`() => document.querySelectorAll("[role=dialog]").length === 1 && !document.querySelector("[role=dialog] nav, [role=dialog][aria-busy]")`)
 	page.MustElementR("[role=dialog] h2", "^"+title+"$")
 	return page.MustElement("[role=dialog]")
 }
