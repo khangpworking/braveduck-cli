@@ -69,10 +69,12 @@ func (s *Server) scanGroups(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		asked := false
 		for _, g := range gs {
 			if g.Paused {
 				continue
 			}
+			asked = true
 			sg, ok := byKey[g.Key]
 			if !ok {
 				sg = &ScanGroup{Key: g.Key, URL: g.URL, Visibility: g.Visibility, CheckedAt: g.CheckedAt}
@@ -83,6 +85,12 @@ func (s *Server) scanGroups(w http.ResponseWriter, r *http.Request) {
 			if g.CheckedAt > sg.CheckedAt {
 				sg.Visibility, sg.CheckedAt = g.Visibility, g.CheckedAt
 			}
+		}
+		if asked {
+			// The scanner asks at the start of every round: that's its sign of
+			// life on this board, so one that stops (logged out, its browser
+			// gone) shows as Facebook going quiet instead of passing unseen.
+			_ = t.svc.ReportCrawl(r.Context(), "facebook", true, "")
 		}
 	}
 	out := make([]ScanGroup, 0, len(order))
