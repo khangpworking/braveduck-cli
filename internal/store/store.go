@@ -105,6 +105,10 @@ var migrations = []string{
 	 ALTER TABLE jobs ADD COLUMN company_reg_status TEXT;`,
 	// 11: a followed Facebook group can be turned off without unfollowing it.
 	`ALTER TABLE fb_groups ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;`,
+	// 12: look the "not found" companies up again: the first matcher turned
+	// away every name the register holds twice, and most real ones are.
+	`DELETE FROM company_cache WHERE found = 0;
+	 UPDATE jobs SET company_active_date = NULL, company_masothue_url = NULL WHERE company_active_date = 'not_found';`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

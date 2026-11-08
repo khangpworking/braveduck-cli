@@ -48,9 +48,16 @@ func (s *Service) UpdateCompanies(ctx context.Context, maxLookups int) (CompanyR
 	if err != nil {
 		return res, err
 	}
+	// A post from a Facebook group may name the group as its company.
+	groups := map[string]bool{}
+	if gs, err := s.st.FBGroups(ctx); err == nil {
+		for _, g := range gs {
+			groups[company.Key(g.Name)] = true
+		}
+	}
 	for _, j := range all {
 		key := company.Key(j.Company)
-		if j.CompanyActiveDate != "" || j.Status == "closed" || key == "" {
+		if j.CompanyActiveDate != "" || j.Status == "closed" || key == "" || groups[key] {
 			continue
 		}
 		c, cached, err := s.st.GetCompany(ctx, key)

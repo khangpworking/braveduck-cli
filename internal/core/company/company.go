@@ -7,8 +7,10 @@
 // the client keeps every request 2 s apart (across all users of one server),
 // identifies itself, and remembers answers; callers store them too, so each
 // company is looked up once. A name only counts as found when the register
-// has exactly one company with that exact name; anything less is "not
-// found", with a link to the site's search for a person to look themselves.
+// has a company with that exact name; anything less is "not found", with a
+// link to the site's search for a person to look themselves. The register
+// often holds the same name twice (a later, duplicate registration): then
+// the one still operating that started earliest is the company.
 package company
 
 import (
@@ -118,10 +120,46 @@ func (r *Register) find(ctx context.Context, name, key string) (Record, error) {
 			hits = append(hits, m[1])
 		}
 	}
-	if len(hits) != 1 {
-		return Record{}, ErrNotFound // nothing with that exact name, or several
+	switch len(hits) {
+	case 0:
+		return Record{}, ErrNotFound
+	case 1:
+		return r.company(ctx, r.Base+hits[0])
 	}
-	return r.company(ctx, r.Base+hits[0])
+	return r.pick(ctx, hits)
+}
+
+// MaxSameName caps the company pages read when several share the name.
+const MaxSameName = 3
+
+// pick reads the companies sharing a name and returns the one still
+// operating that started earliest; if their pages can't tell them apart
+// (no dates), none.
+func (r *Register) pick(ctx context.Context, hits []string) (Record, error) {
+	var recs []Record
+	for _, h := range hits[:min(len(hits), MaxSameName)] {
+		rec, err := r.company(ctx, r.Base+h)
+		if err != nil {
+			return Record{}, err
+		}
+		recs = append(recs, rec)
+	}
+	if open := slices.DeleteFunc(slices.Clone(recs), func(x Record) bool { return Closed(x.Status) }); len(open) > 0 {
+		recs = open
+	}
+	recs = slices.DeleteFunc(recs, func(x Record) bool { return x.Founded == "" })
+	if len(recs) == 0 {
+		return Record{}, ErrNotFound
+	}
+	return slices.MinFunc(recs, func(a, b Record) int { return strings.Compare(a.Founded, b.Founded) }), nil
+}
+
+// Closed reports whether the register's status says the company has
+// stopped operating ("NNT ngừng hoạt động và đã đóng MST", "NNT tạm ngừng
+// hoạt động", …).
+func Closed(status string) bool {
+	s := strings.ToLower(status)
+	return strings.Contains(s, "ngừng hoạt động") || strings.Contains(s, "đóng mst")
 }
 
 // company reads one company page: its schema.org Organization block, with
