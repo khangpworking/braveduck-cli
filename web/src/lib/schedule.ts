@@ -59,7 +59,7 @@ export function ago(iso: string, now = Date.now()): Msg {
  * it fills the text's {time}. A background task's own error is shown (it
  * says what to fix); a job site's isn't (it's the site's raw reply).
  */
-export function sourceState(sc: SourceSchedule, h: SourceHealth | undefined, now = Date.now()): { text: Msg; when?: Msg; bad: boolean } {
+export function sourceState(sc: Pick<SourceSchedule, 'builtin' | 'task'>, h: SourceHealth | undefined, now = Date.now()): { text: Msg; when?: Msg; bad: boolean } {
   const site = isSite(sc)
   if (!h?.lastRun) return { text: [site ? N_('Not checked yet') : N_("Hasn't run yet")], bad: false }
   if (h.lastError) return { text: [site ? N_("The last check didn't work") : h.lastError], bad: true }

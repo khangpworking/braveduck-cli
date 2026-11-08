@@ -25,6 +25,7 @@ export type Platform = service.PlatformStatus
 export type Location = service.Location
 export type Place = geo.Place
 export type FBGroup = store.FBGroup
+export type BoardSource = service.BoardSource
 export type CrawlReply = wire.CrawlReply
 
 
@@ -57,6 +58,7 @@ export const Q = {
   location: ['location'],
   agentKey: ['agent-key'],
   fbGroups: ['facebook-groups'],
+  sources: ['sources'],
   activity: ['activity'],
 } as const
 
@@ -92,6 +94,9 @@ export const S = {
   removeAgentKey: () => api<{ exists: boolean }>('DELETE', '/agent-key'),
   fbGroups: () => api<FBGroup[]>('GET', '/facebook-groups'),
   unfollow: (key: string) => api<unknown>('DELETE', `/facebook-groups/${encodeURIComponent(key)}`),
+  pauseGroup: (key: string, paused: boolean) => api<FBGroup>('PATCH', `/facebook-groups/${encodeURIComponent(key)}`, { paused }),
+  sources: () => api<BoardSource[]>('GET', '/sources'),
+  setSource: (source: string, on: boolean) => api<BoardSource>('PUT', `/sources/${encodeURIComponent(source)}`, { on }),
   activity: () => api<ActivityEvent[]>('GET', '/activity'),
 }
 

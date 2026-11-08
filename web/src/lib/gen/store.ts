@@ -51,4 +51,5 @@ export interface FBGroup {
   note: string; // why it can't be read, if it can't
   added_at: string;
   checked_at: string;
+  paused: boolean; // the user turned it off: not scanned, its posts not taken
 }

@@ -14,3 +14,12 @@ func (s *server) unfollowFBGroup(w http.ResponseWriter, r *http.Request) {
 	err := s.svc.UnfollowGroup(r.Context(), r.PathValue("key"))
 	reply(w, http.StatusOK, map[string]bool{"unfollowed": true}, err)
 }
+
+func (s *server) pauseFBGroup(w http.ResponseWriter, r *http.Request) {
+	var in GroupPausedRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	g, err := s.svc.PauseGroup(r.Context(), r.PathValue("key"), in.Paused)
+	reply(w, http.StatusOK, g, err)
+}

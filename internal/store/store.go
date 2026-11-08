@@ -103,6 +103,8 @@ var migrations = []string{
 	 );
 	 ALTER TABLE jobs ADD COLUMN company_tax_code TEXT;
 	 ALTER TABLE jobs ADD COLUMN company_reg_status TEXT;`,
+	// 11: a followed Facebook group can be turned off without unfollowing it.
+	`ALTER TABLE fb_groups ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

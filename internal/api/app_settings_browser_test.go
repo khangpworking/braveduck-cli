@@ -466,3 +466,47 @@ func TestAppExportNotifyLanguage(t *testing.T) {
 	tap(page, "[role=dialog] button", "^Tiếng Việt$")
 	page.MustElementR("nav button", "^Cài đặt$")
 }
+
+// A scanner that stopped shows on the board itself, not only in Settings.
+// Turning its source off (its login, if any, stays) takes its jobs off the
+// board's intake and the warning away; one Facebook group turns off alone.
+func TestAppSourceSwitches(t *testing.T) {
+	ctx := context.Background()
+	page, svc := settingsApp(t, appJobs(), 1280, func(svc *service.Service) {
+		svc.ReportCrawl(ctx, "facebook", false, "BrowserUnavailableError: the browser could not be started")
+		svc.FollowGroup(ctx, "https://www.facebook.com/groups/aijobs/")
+	})
+	warn := page.MustElementR(`[data-warning="facebook"]`, "Facebook couldn't check for jobs")
+	if page.MustHas("[role=dialog]") {
+		t.Fatal("the warning needed Settings open")
+	}
+	tap(warn, "button", "^Job sources$") // another tool's source: no Try again here
+	winTitled(page, "Job sources")
+	row := page.MustElement(`[role=dialog] [data-source="facebook"]`)
+	row.MustElement(`[role=switch][aria-label="Facebook: bring its jobs to my board"]`).MustEval(`() => this.click()`)
+	waitUntil(t, func() bool { return !svc.SourceOn(ctx, "facebook") }, "Facebook wasn't turned off")
+	waitText(t, row, "Off — its jobs don’t come to your board")
+	toastSays(page, "Facebook: off")
+	closeWin(page)
+	page.MustWait(`() => !document.querySelector('[data-warning="facebook"]')`)
+	for _, id := range []string{"topcv", "vietnamworks", "careerlink", "joboko"} {
+		if !svc.SourceOn(ctx, id) {
+			t.Errorf("%s went off with Facebook", id)
+		}
+	}
+
+	d := openWin(t, page, "^Facebook groups$", "Facebook groups you follow")
+	d.MustElement(`[data-group="aijobs"] [role=switch]`).MustEval(`() => this.click()`)
+	waitUntil(t, func() bool { g, _, _ := svcGroup(ctx, svc, "aijobs"); return g.Paused }, "the group wasn't turned off")
+	waitText(t, d.MustElement(`[data-group="aijobs"]`), "Off — its posts don’t come to your board")
+}
+
+func svcGroup(ctx context.Context, svc *service.Service, key string) (service.FBGroup, bool, error) {
+	gs, err := svc.FBGroups(ctx)
+	for _, g := range gs {
+		if g.Key == key {
+			return g, true, err
+		}
+	}
+	return service.FBGroup{}, false, err
+}

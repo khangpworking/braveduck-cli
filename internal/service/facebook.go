@@ -64,6 +64,21 @@ func (s *Service) FollowGroup(ctx context.Context, link string) (g FBGroup, adde
 	return g, added, err
 }
 
+// PauseGroup turns a followed group off (paused) or back on: while it's off
+// the scanner doesn't read it for this board and its posts aren't taken.
+func (s *Service) PauseGroup(ctx context.Context, key string, paused bool) (FBGroup, error) {
+	key = strings.ToLower(key)
+	updated, err := s.st.SetFBGroupPaused(ctx, key, paused)
+	if err != nil {
+		return FBGroup{}, err
+	}
+	if !updated {
+		return FBGroup{}, fmt.Errorf("%w: not following that group", ErrNotFound)
+	}
+	g, _, err := s.st.FBGroup(ctx, key)
+	return g, err
+}
+
 // FBGroups lists the followed groups.
 func (s *Service) FBGroups(ctx context.Context) ([]FBGroup, error) { return s.st.FBGroups(ctx) }
 
@@ -130,6 +145,9 @@ func (s *Service) IngestGroupPosts(ctx context.Context, key string, posts []Grou
 	}
 	if !ok || g.Visibility != FBPublic {
 		return 0, ErrGroupNotPublic
+	}
+	if g.Paused || !s.SourceOn(ctx, "facebook") {
+		return 0, nil // turned off: its posts don't come onto the board
 	}
 	sets, err := s.st.AllKeywords(ctx)
 	if err != nil {

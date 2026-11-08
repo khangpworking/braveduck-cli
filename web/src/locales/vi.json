@@ -597,5 +597,11 @@
   "In the business register": "Có trong dữ liệu doanh nghiệp",
   "Tax code {code}": "MST {code}",
   "See it on dulieuphapluat.vn": "Xem trên dulieuphapluat.vn",
-  "Look it up on dulieuphapluat.vn": "Tra cứu trên dulieuphapluat.vn"
+  "Look it up on dulieuphapluat.vn": "Tra cứu trên dulieuphapluat.vn",
+  "Off — its jobs don’t come to your board": "Đang tắt — việc từ đây không lên bảng của bạn",
+  "Off — its posts don’t come to your board": "Đang tắt — bài trong nhóm không lên bảng của bạn",
+  "{group}: take its job posts": "{group}: lấy bài tuyển dụng",
+  "{site}: bring its jobs to my board": "{site}: đưa việc lên bảng",
+  "{site}: its jobs come to your board again": "{site}: việc lại lên bảng của bạn",
+  "{site}: off — its jobs no longer come to your board": "{site}: đã tắt — việc từ đây không lên bảng nữa"
 }

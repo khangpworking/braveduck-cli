@@ -21,6 +21,7 @@ import { JobDetail, type Move } from '@/components/board/JobDetail'
 import { Morale } from '@/components/board/Morale'
 import { Settings } from '@/components/settings/Settings'
 import { GetStarted } from '@/components/settings/GetStarted'
+import { SourceWarnings } from '@/components/settings/SourceAlerts'
 
 const QuickReview = lazy(() => import('@/components/board/QuickReview').then(m => ({ default: m.QuickReview })))
 const AddJob = lazy(() => import('@/components/board/AddJob').then(m => ({ default: m.AddJob })))
@@ -165,6 +166,7 @@ export default function App() {
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-label={viewName}>
       <div className="space-y-3 px-4 pt-3 pb-2">
         <GetStarted />
+        <SourceWarnings />
         {view !== 'today' && (
           <TodayCard items={today} cap={phone ? 1 : 2} onOpen={open} onAll={showToday} />
         )}

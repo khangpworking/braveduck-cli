@@ -80,6 +80,7 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("GET /api/stats", s.getStats)
 	mux.HandleFunc("GET /api/facebook-groups", s.listFBGroups)
 	mux.HandleFunc("DELETE /api/facebook-groups/{key}", s.unfollowFBGroup)
+	mux.HandleFunc("PATCH /api/facebook-groups/{key}", s.pauseFBGroup)
 	mux.HandleFunc("GET /api/agent-key", s.getAgentKey)
 	mux.HandleFunc("POST /api/agent-key", s.newAgentKey)
 	mux.HandleFunc("DELETE /api/agent-key", s.revokeAgentKey)
@@ -93,6 +94,8 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("POST /api/platforms/{name}/sync", s.syncPlatform)
 	mux.HandleFunc("GET /api/keywords", s.getKeywords)
 	mux.HandleFunc("PUT /api/keywords", s.putKeywords)
+	mux.HandleFunc("GET /api/sources", s.listSources)
+	mux.HandleFunc("PUT /api/sources/{source}", s.putSourceOn)
 	mux.HandleFunc("GET /api/crawl-schedule", s.getCrawlSchedule)
 	mux.HandleFunc("PUT /api/crawl-schedule/{source}", s.putCrawlSchedule)
 	mux.HandleFunc("GET /api/rating-config", s.getRatingConfig)
@@ -405,6 +408,22 @@ func (s *server) putCrawlSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	sc, err := s.svc.SetCrawlSchedule(r.Context(), r.PathValue("source"), in.EveryMinutes)
 	reply(w, http.StatusOK, sc, err)
+}
+
+// listSources is each job source and whether its jobs come onto the board.
+func (s *server) listSources(w http.ResponseWriter, r *http.Request) {
+	list, err := s.svc.BoardSources(r.Context())
+	reply(w, http.StatusOK, list, err)
+}
+
+// putSourceOn turns a job source on or off (its login, if any, stays).
+func (s *server) putSourceOn(w http.ResponseWriter, r *http.Request) {
+	var in SourceOnRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	src, err := s.svc.SetSourceOn(r.Context(), r.PathValue("source"), in.On)
+	reply(w, http.StatusOK, src, err)
 }
 
 // listPlatforms is each job site's login status (never session data).

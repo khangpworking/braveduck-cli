@@ -48,6 +48,7 @@ packages:
       - "rating.go"
       - "facebook.go"
       - "stats.go"
+      - "sources.go"
     frontmatter: |
       import type * as jobs from './jobs'
       import type * as store from './store'

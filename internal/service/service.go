@@ -130,6 +130,9 @@ func (s *Service) AddJob(ctx context.Context, in NewJob) (jobs.Job, error) {
 	if strings.TrimSpace(in.Title) == "" {
 		return jobs.Job{}, fmt.Errorf("%w: title is required", ErrInvalid)
 	}
+	if in.Source != "" && !s.SourceOn(ctx, in.Source) {
+		return jobs.Job{}, errSourceOff(in.Source) // a tool feeding the board; a pasted link has no source
+	}
 	j := jobs.Job{
 		Title:           strings.TrimSpace(in.Title),
 		Company:         in.Company,
@@ -517,8 +520,12 @@ func (s *Service) SetKeywords(ctx context.Context, sets keyword.Sets) (keyword.S
 // CrawlStatus reports per-source crawl health and today's find count.
 func (s *Service) CrawlStatus(ctx context.Context) (store.CrawlStatusView, error) {
 	v, err := s.st.CrawlStatus(ctx, s.now(), s.builtinSources())
+	off, _ := s.sourcesOff(ctx)
 	for i, src := range v.Sources {
 		v.Sources[i].Task = isTaskSource(src.Name)
+		if off[src.Name] {
+			v.Sources[i].Healthy = true // turned off: its silence is expected
+		}
 	}
 	return v, err
 }

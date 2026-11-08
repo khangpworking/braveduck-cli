@@ -62,11 +62,17 @@ func (s *Server) scanGroups(w http.ResponseWriter, r *http.Request) {
 	byKey := map[string]*ScanGroup{}
 	var order []string
 	for _, t := range s.tenants() {
+		if !t.svc.SourceOn(r.Context(), "facebook") {
+			continue // this board turned Facebook off
+		}
 		gs, err := t.svc.FBGroups(r.Context())
 		if err != nil {
 			continue
 		}
 		for _, g := range gs {
+			if g.Paused {
+				continue
+			}
 			sg, ok := byKey[g.Key]
 			if !ok {
 				sg = &ScanGroup{Key: g.Key, URL: g.URL, Visibility: g.Visibility, CheckedAt: g.CheckedAt}
