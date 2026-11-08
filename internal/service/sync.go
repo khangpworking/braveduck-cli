@@ -90,6 +90,7 @@ func (s *Service) SyncTopCV(ctx context.Context) (SyncResult, error) {
 	if err != nil {
 		return res, err
 	}
+	topcvOn := s.SourceOn(ctx, "topcv")
 	byTopcvID := map[string]jobs.Job{}
 	board := &dupIndex{keys: map[string][]jobs.Job{}}
 	for _, j := range all {
@@ -120,6 +121,9 @@ func (s *Service) SyncTopCV(ctx context.Context) (SyncResult, error) {
 			}
 		}
 		if !onBoard {
+			if !topcvOn {
+				continue // TopCV is off: keep its jobs' statuses current, add none
+			}
 			if d := a.AppliedDate(); d != "" {
 				nj.ExpiresAt = jobs.AppliedPrefix + d // the apply-silence clock
 			}

@@ -14,6 +14,7 @@ type FBGroup struct {
 	Note       string `json:"note"` // why it can't be read, if it can't
 	AddedAt    string `json:"added_at"`
 	CheckedAt  string `json:"checked_at"`
+	Paused     bool   `json:"paused"` // the user turned it off: not scanned, its posts not taken
 }
 
 // AddFBGroup follows a group; added is false if it was followed already.
@@ -31,7 +32,7 @@ func (s *Store) AddFBGroup(ctx context.Context, key, url string, now time.Time) 
 // FBGroups lists the followed groups, oldest first.
 func (s *Store) FBGroups(ctx context.Context) ([]FBGroup, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT group_key, url, name, visibility, note, added_at, checked_at FROM fb_groups ORDER BY added_at, group_key")
+		"SELECT group_key, url, name, visibility, note, added_at, checked_at, paused FROM fb_groups ORDER BY added_at, group_key")
 	if err != nil {
 		return nil, err
 	}
@@ -39,9 +40,11 @@ func (s *Store) FBGroups(ctx context.Context) ([]FBGroup, error) {
 	out := []FBGroup{}
 	for rows.Next() {
 		var g FBGroup
-		if err := rows.Scan(&g.Key, &g.URL, &g.Name, &g.Visibility, &g.Note, &g.AddedAt, &g.CheckedAt); err != nil {
+		var paused int
+		if err := rows.Scan(&g.Key, &g.URL, &g.Name, &g.Visibility, &g.Note, &g.AddedAt, &g.CheckedAt, &paused); err != nil {
 			return nil, err
 		}
+		g.Paused = paused != 0
 		out = append(out, g)
 	}
 	return out, rows.Err()
@@ -76,4 +79,15 @@ func (s *Store) SetFBGroupStatus(ctx context.Context, key, name, visibility, not
 		   visibility = ?, note = ?, checked_at = ? WHERE group_key = ?`,
 		name, name, visibility, note, now.UTC().Format(time.RFC3339), key)
 	return err
+}
+
+// SetFBGroupPaused turns a followed group off or back on; updated is false
+// if it isn't followed.
+func (s *Store) SetFBGroupPaused(ctx context.Context, key string, paused bool) (updated bool, err error) {
+	res, err := s.db.ExecContext(ctx, "UPDATE fb_groups SET paused = ? WHERE group_key = ?", b2i(paused), key)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }

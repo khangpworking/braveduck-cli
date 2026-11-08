@@ -69,6 +69,17 @@ func TestScannerAPI(t *testing.T) {
 		}
 	}
 
+	// A board that paused a group, or turned Facebook off, doesn't ask for it.
+	bob.PauseGroup(ctx, "ai.jobs", true)
+	carol.SetSourceOn(ctx, "facebook", false)
+	_, body = scan(t, h, scannerKey, "GET", "/groups", "")
+	json.Unmarshal([]byte(body), &groups)
+	if len(groups) != 1 || groups[0].Key != "ai.jobs" || groups[0].Followers != 1 {
+		t.Fatalf("groups with bob's paused and carol's Facebook off = %s", body)
+	}
+	bob.PauseGroup(ctx, "ai.jobs", false)
+	carol.SetSourceOn(ctx, "facebook", true)
+
 	if code, body := scan(t, h, scannerKey, "POST", "/groups/ai.jobs/status", `{"name":"AI Jobs VN","visibility":"public"}`); code != 200 || !strings.Contains(body, `"boards":2`) {
 		t.Fatalf("status = %d %s", code, body)
 	}

@@ -110,6 +110,9 @@ func (s *Service) Crawl(ctx context.Context, source string) (CrawlResult, error)
 	if !ok {
 		return CrawlResult{}, fmt.Errorf("%w: %q isn't a built-in crawler (built-in: %s)", ErrInvalid, source, strings.Join(s.BuiltinCrawlers(), ", "))
 	}
+	if !s.SourceOn(ctx, source) {
+		return CrawlResult{Source: source}, errSourceOff(source)
+	}
 	cs.mu.Lock()
 	if cs.running[source] {
 		cs.mu.Unlock()
@@ -396,6 +399,9 @@ func (s *Service) runDue(ctx context.Context) {
 		}
 		if noTerms && sc.Source != TopCVSyncSource && sc.Source != JevRateSource {
 			continue
+		}
+		if !s.SourceOn(ctx, sc.Source) {
+			continue // turned off on this board: not a failure, just not wanted
 		}
 		if sc.Source == TopCVSyncSource && !s.platformConnected(ctx, "topcv") {
 			continue // nothing to sync without a login; don't flag it as failing

@@ -75,6 +75,18 @@ export interface CrawlReply {
   message: string;
 }
 /**
+ * SourceOnRequest turns a job source on or off for the board.
+ */
+export interface SourceOnRequest {
+  on: boolean;
+}
+/**
+ * GroupPausedRequest turns a followed Facebook group off (paused) or on.
+ */
+export interface GroupPausedRequest {
+  paused: boolean;
+}
+/**
  * ScheduleRequest sets how often a source is crawled (0 = off).
  */
 export interface ScheduleRequest {

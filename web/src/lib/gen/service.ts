@@ -383,6 +383,18 @@ export interface SetupStatus {
 }
 
 //////////
+// source: sources.go
+
+/**
+ * BoardSource is a job source and whether its jobs come onto the board.
+ */
+export interface BoardSource {
+  source: string;
+  name: string;
+  on: boolean;
+}
+
+//////////
 // source: stats.go
 
 /**

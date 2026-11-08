@@ -70,6 +70,16 @@ type CrawlReply struct {
 	Message string               `json:"message"`
 }
 
+// SourceOnRequest turns a job source on or off for the board.
+type SourceOnRequest struct {
+	On bool `json:"on"`
+}
+
+// GroupPausedRequest turns a followed Facebook group off (paused) or on.
+type GroupPausedRequest struct {
+	Paused bool `json:"paused"`
+}
+
 // ScheduleRequest sets how often a source is crawled (0 = off).
 type ScheduleRequest struct {
 	EveryMinutes int `json:"every_minutes"`
