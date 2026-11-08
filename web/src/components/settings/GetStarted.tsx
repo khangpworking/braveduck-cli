@@ -1,6 +1,7 @@
 // Get started: the steps rating and the job search still need, at the top
 // of the list until they're done. Each step is one big button opening its
 // window.
+import { memo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, Rocket } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -8,7 +9,7 @@ import { Q, S, openWindow, stepsLeft } from '@/lib/settings'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
-export function GetStarted() {
+export const GetStarted = memo(function GetStarted() {
   const { t } = useTranslation()
   const setup = useQuery({ queryKey: Q.setup, queryFn: S.setup }).data
   const left = setup ? stepsLeft(setup) : []
@@ -45,4 +46,4 @@ export function GetStarted() {
       </div>
     </Card>
   )
-}
+})

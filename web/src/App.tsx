@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, RotateCw, Search, Settings as Gear, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -12,17 +12,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/sonner'
 import { N_ } from '@/lib/n'
 import { JobRow, TodayCard } from '@/components/board/JobList'
-import { QuickReview } from '@/components/board/QuickReview'
+import { Deferred, WindowLoading } from '@/components/Deferred'
 import { SortMenu, useSort } from '@/components/board/SortMenu'
 import { Nav, NavRail, useMenuOpen, type View } from '@/components/board/Nav'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { useDefaultLayout, useGroupRef } from 'react-resizable-panels'
 import { JobDetail, type Move } from '@/components/board/JobDetail'
-import { AddJob } from '@/components/board/AddJob'
 import { Morale } from '@/components/board/Morale'
 import { Settings } from '@/components/settings/Settings'
 import { GetStarted } from '@/components/settings/GetStarted'
 
+const QuickReview = lazy(() => import('@/components/board/QuickReview').then(m => ({ default: m.QuickReview })))
+const AddJob = lazy(() => import('@/components/board/AddJob').then(m => ({ default: m.AddJob })))
 
 const PHONE = '(max-width: 760px)'
 
@@ -108,7 +109,9 @@ export default function App() {
     },
     [phone],
   )
-  const back = () => (history.state?.job ? history.back() : setPhoneJob(false))
+  const openRow = useCallback((job: Job) => open(job, true), [open])
+  const showToday = useCallback(() => setView('today'), [])
+  const back = useCallback(() => (history.state?.job ? history.back() : setPhoneJob(false)), [])
 
   const save = useMutation({
     mutationFn: ({ id, status }: { id: number; status: Status }) => patchJob(id, { status }),
@@ -116,23 +119,24 @@ export default function App() {
     onError: (e: Error) => toast.error(e.message),
   })
   // Go on to the next job in the list, the way a person works through it.
-  const goNext = (job: Job) => {
+  const goNext = useCallback((job: Job) => {
     const i = rows.findIndex(r => r.id === job.id)
     setCur((rows[i + 1] ?? rows[i - 1])?.id ?? null)
     if (phone) back()
-  }
-  const move: Move = (job, to, opts) => {
+  }, [rows, phone, back])
+  const mutate = save.mutate
+  const move: Move = useCallback((job, to, opts) => {
     if (opts?.next) goNext(job)
-    save.mutate(
+    mutate(
       { id: job.id, status: to },
       {
         onSuccess: () =>
           toast(t('Moved to {stage}', { stage: t(stageName(to)) }), {
-            action: { label: t('Undo'), onClick: () => save.mutate({ id: job.id, status: job.status }) },
+            action: { label: t('Undo'), onClick: () => mutate({ id: job.id, status: job.status }) },
           }),
       },
     )
-  }
+  }, [goNext, mutate, t])
 
   const stageList = [
     { id: 'today' as View, name: N_('Today'), n: today.length },
@@ -162,7 +166,7 @@ export default function App() {
       <div className="space-y-3 px-4 pt-3 pb-2">
         <GetStarted />
         {view !== 'today' && (
-          <TodayCard items={today} cap={phone ? 1 : 2} onOpen={j => open(j)} onAll={() => setView('today')} />
+          <TodayCard items={today} cap={phone ? 1 : 2} onOpen={open} onAll={showToday} />
         )}
         {phone ? (
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 no-scrollbar" role="tablist">
@@ -210,7 +214,7 @@ export default function App() {
             </div>
           ))}
         {rows.map(j => (
-          <JobRow key={j.id} job={j} current={!phone && current?.id === j.id} onOpen={() => open(j, true)} />
+          <JobRow key={j.id} job={j} current={!phone && current?.id === j.id} onOpen={openRow} />
         ))}
         {jobsQ.isSuccess && !rows.length && (
           <p className="p-8 text-center text-muted-foreground">
@@ -273,24 +277,26 @@ export default function App() {
             />
             <ResizablePanel id="detail" minSize={400}>
               <div className="flex h-full">
-                <JobDetail job={current} phone={false} onBack={() => {}} onMove={move} onDeleted={goNext} />
+                <JobDetail job={current} phone={false} onBack={back} onMove={move} onDeleted={goNext} />
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
       )}
-      <AddJob
-        open={adding}
-        onOpenChange={setAdding}
-        onAdded={id => {
-          // The new job arrives with the refetch; show it once it's there.
-          setCur(id)
-          void qc.refetchQueries({ queryKey: ['jobs'] }).then(() => {
-            const j = qc.getQueryData<Job[]>(['jobs'])?.find(x => x.id === id)
-            if (j) open(j)
-          })
-        }}
-      />
+      <Deferred active={adding} fallback={<WindowLoading title={t('Add a job')} onClose={() => setAdding(false)} />}>
+        <AddJob
+          open={adding}
+          onOpenChange={setAdding}
+          onAdded={id => {
+            // The new job arrives with the refetch; show it once it's there.
+            setCur(id)
+            void qc.refetchQueries({ queryKey: ['jobs'] }).then(() => {
+              const j = qc.getQueryData<Job[]>(['jobs'])?.find(x => x.id === id)
+              if (j) open(j)
+            })
+          }}
+        />
+      </Deferred>
       <Settings
         open={settings}
         onOpenChange={setSettings}
@@ -299,12 +305,14 @@ export default function App() {
           if (j) open(j)
         }}
       />
-      <QuickReview
-        jobs={rows}
-        open={reviewing}
-        onOpenChange={setReviewing}
-        onMove={(job, to) => save.mutate({ id: job.id, status: to })}
-      />
+      <Deferred active={reviewing} fallback={<WindowLoading title={t('Go through your jobs')} className="sm:max-w-2xl" onClose={() => setReviewing(false)} />}>
+        <QuickReview
+          jobs={rows}
+          open={reviewing}
+          onOpenChange={setReviewing}
+          onMove={(job, to) => save.mutate({ id: job.id, status: to })}
+        />
+      </Deferred>
       <Toaster position="bottom-center" />
     </>
   )

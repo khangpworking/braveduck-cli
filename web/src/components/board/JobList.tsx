@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { ChevronRight, Clock, MessageCircle, Pin, Star, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Job } from '@/lib/api'
@@ -8,13 +9,13 @@ import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Company, Due, GradeBadge, PayKm, Warning } from './bits'
 
-export function JobRow({ job, current, onOpen }: { job: Job; current: boolean; onOpen: () => void }) {
+export const JobRow = memo(function JobRow({ job, current, onOpen }: { job: Job; current: boolean; onOpen: (job: Job) => void }) {
   const { t } = useTranslation()
   return (
     <button
       type="button"
       data-job={job.id}
-      onClick={onOpen}
+      onClick={() => onOpen(job)}
       aria-current={current || undefined}
       className={cn(
         'flex w-full items-center gap-4 border-b border-l-4 border-l-transparent px-4 py-3.5 text-left transition-colors hover:bg-muted/60',
@@ -40,7 +41,7 @@ export function JobRow({ job, current, onOpen }: { job: Job; current: boolean; o
       </span>
     </button>
   )
-}
+})
 
 const KIND_ICON = { follow: MessageCircle, deadline: Clock, match: Star }
 
@@ -68,7 +69,7 @@ export function useTodayText() {
   }
 }
 
-export function TodayCard({ items, cap, onOpen, onAll }: {
+export const TodayCard = memo(function TodayCard({ items, cap, onOpen, onAll }: {
   items: TodayEntry[]
   cap: number
   onOpen: (j: Job) => void
@@ -116,4 +117,4 @@ export function TodayCard({ items, cap, onOpen, onAll }: {
       </div>
     </Card>
   )
-}
+})
