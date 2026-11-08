@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, RotateCw, Search, Settings as Gear, Sun } from 'lucide-react'
+import { Plus, RotateCw, Search, Settings as Gear } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getJobs, getToday, patchJob, setOnUnauthorized, type Job, type Status } from '@/lib/api'
@@ -10,16 +10,17 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/sonner'
-import { cn } from '@/lib/utils'
 import { N_ } from '@/lib/n'
 import { JobRow, TodayCard } from '@/components/board/JobList'
+import { Nav, NavRail, useMenuOpen, type View } from '@/components/board/Nav'
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
+import { useDefaultLayout, useGroupRef } from 'react-resizable-panels'
 import { JobDetail, type Move } from '@/components/board/JobDetail'
 import { AddJob } from '@/components/board/AddJob'
 import { Morale } from '@/components/board/Morale'
 import { Settings } from '@/components/settings/Settings'
 import { GetStarted } from '@/components/settings/GetStarted'
 
-type View = Status | 'today'
 
 const PHONE = '(max-width: 760px)'
 
@@ -34,27 +35,6 @@ function usePhone() {
   return phone
 }
 
-function NavItem({ active, onClick, label, count }: {
-  active?: boolean
-  onClick: () => void
-  label: React.ReactNode
-  count?: number
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active || undefined}
-      className={cn(
-        'flex h-11 items-center justify-between rounded-lg px-3 text-left text-body hover:bg-muted',
-        active && 'bg-primary font-semibold text-primary-foreground hover:bg-primary/90',
-      )}
-    >
-      <span className="flex items-center gap-2">{label}</span>
-      {count !== undefined && <span className="tabular-nums opacity-70">{count}</span>}
-    </button>
-  )
-}
 
 export default function App() {
   const { t } = useTranslation()
@@ -67,6 +47,9 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [adding, setAdding] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [menuOpen, setMenuOpen] = useMenuOpen()
+  const layout = useDefaultLayout({ id: 'braveduck-board', storage: localStorage })
+  const panels = useGroupRef()
   const [phoneJob, setPhoneJob] = useState(false)
   const [stale, setStale] = useState(false)
   useEffect(() => setOnUnauthorized(() => setStale(true)), [])
@@ -85,7 +68,7 @@ export default function App() {
         e.preventDefault()
         setAdding(true)
       } else if (e.key === '?') {
-        toast(t('Keys: / search · n add a job · Esc close a window · ? this list'))
+        toast(t('Keys: / search · n add a job · [ fold the menu · Esc close a window · ? this list'))
       }
     }
     addEventListener('keydown', onKey)
@@ -153,40 +136,8 @@ export default function App() {
   ]
   const viewName = t(stageList.find(s => s.id === view)!.name)
 
-  const nav = (
-    <nav className="flex w-56 shrink-0 flex-col gap-0.5 border-r bg-muted/40 p-3" aria-label={t('Stages')}>
-      <div className="flex items-center gap-2 px-2 pt-1 pb-3 text-lg font-bold">🦆 braveduck</div>
-      <Button className="mb-3 h-12" onClick={() => setAdding(true)}>
-        <Plus />
-        {t('Add job')}
-      </Button>
-      <NavItem
-        active={view === 'today'}
-        onClick={() => setView('today')}
-        label={
-          <>
-            <Sun className="size-4" />
-            {t('Today')}
-          </>
-        }
-        count={today.length}
-      />
-      <div className="px-3 pt-4 pb-1 text-sm text-muted-foreground">{t('Your jobs')}</div>
-      {STAGES.map(s => (
-        <NavItem key={s.id} active={view === s.id} onClick={() => setView(s.id)} label={t(s.name)} count={count(s.id)} />
-      ))}
-      <div className="flex-1" />
-      <NavItem
-        onClick={() => setSettings(true)}
-        label={
-          <>
-            <Gear className="size-4" />
-            {t('Settings')}
-          </>
-        }
-      />
-    </nav>
-  )
+  const counts = { today: today.length, ...Object.fromEntries(STAGES.map(st => [st.id, count(st.id)])) } as Record<View, number>
+  const navProps = { view, setView, counts, onAdd: () => setAdding(true), onSettings: () => setSettings(true), onFold: () => setMenuOpen(o => !o) }
 
   const search = view !== 'today' && (
     <label className="relative block">
@@ -203,7 +154,7 @@ export default function App() {
   )
 
   const list = (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col md:max-w-xl md:border-r" aria-label={viewName}>
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-label={viewName}>
       <div className="space-y-3 px-4 pt-3 pb-2">
         <GetStarted />
         {view !== 'today' && (
@@ -289,9 +240,30 @@ export default function App() {
         )
       ) : (
         <div className="flex h-dvh">
-          {nav}
-          {list}
-          <JobDetail job={current} phone={false} onBack={() => {}} onMove={move} onDeleted={goNext} />
+          {menuOpen ? <Nav {...navProps} /> : <NavRail {...navProps} />}
+          {/* The list and the job share the rest; drag the bar between them
+              (remembered), double-click it to even them out again. */}
+          <ResizablePanelGroup
+            id="braveduck-board"
+            defaultLayout={layout.defaultLayout}
+            onLayoutChanged={layout.onLayoutChanged}
+            groupRef={panels}
+          >
+            <ResizablePanel id="list" defaultSize="40" minSize={320}>
+              {list}
+            </ResizablePanel>
+            <ResizableHandle
+              withHandle
+              aria-label={t('Drag to make the list or the job wider')}
+              title={t('Drag to resize · double-click to reset')}
+              onDoubleClick={() => panels.current?.setLayout({ list: 40, detail: 60 })}
+            />
+            <ResizablePanel id="detail" minSize={400}>
+              <div className="flex h-full">
+                <JobDetail job={current} phone={false} onBack={() => {}} onMove={move} onDeleted={goNext} />
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       )}
       <AddJob

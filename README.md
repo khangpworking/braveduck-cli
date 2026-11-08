@@ -56,8 +56,9 @@ braveduck serve        # web board on http://127.0.0.1:8080
 
 A new board walks you through the same steps (**Get started**: CV → what
 you're looking for → search terms). Everything else is under **⚙ Settings**.
-On the board, `/` searches, `n` adds a job, Esc closes a window and `?` lists
-the shortcuts.
+On the board, `/` searches, `n` adds a job, `[` folds the menu into icons,
+Esc closes a window and `?` lists the shortcuts. Drag the bar between the list
+and the job to make either wider.
 
 Data lives in `~/.braveduck/braveduck.db` (override with `--db` or `BRAVEDUCK_DB`).
 `braveduck doctor` checks your setup (including whether the board is running).

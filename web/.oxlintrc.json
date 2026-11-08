@@ -46,7 +46,8 @@
       "rules": {
         "shadcn/no-arbitrary-values": "off",
         "shadcn/no-inline-styles": "off",
-        "shadcn/no-unknown-classes": "off"
+        "shadcn/no-unknown-classes": "off",
+        "shadcn/no-restyle": "off"
       }
     }
   ]
