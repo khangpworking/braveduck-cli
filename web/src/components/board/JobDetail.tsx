@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils'
 import { copy } from '@/lib/clipboard'
 import { Deferred, WindowLoading } from '@/components/Deferred'
+import { SiteIcon } from '@/components/SiteIcon'
 import { MoreMenu } from '@/components/job/MoreMenu'
 import { AboutJob, Documents, Notes, OtherRatings } from '@/components/job/Sections'
 import { useJobActions, type JobActions } from '@/components/job/useJobActions'
@@ -381,6 +382,7 @@ function MainAction({ job, a, onMove }: { job: Job; a: JobActions; onMove: Move 
     if (canAssist) {
       return (
         <Button size="xl" className="w-full" disabled={a.apply.isPending} onClick={() => a.apply.mutate()}>
+          <SiteIcon id={site.id} className="size-5 rounded bg-white" />
           {t('Apply on {site}', { site: site.name })}
         </Button>
       )
@@ -547,6 +549,7 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
           <OtherRatings job={job} a={a} />
         </Group>
         <p className="text-sm text-muted-foreground">
+          <SiteIcon id={job.discovery_source} className="mr-1.5" />
           {t('Found on {source}, {date}', {
             source: job.discovery_source ? t(sourceName(job.discovery_source)) : t('your list'),
             date: found.toLocaleDateString(locale(), { day: 'numeric', month: 'long' }),
