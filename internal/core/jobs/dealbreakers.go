@@ -71,7 +71,18 @@ func GeoDealbreakers(j Job, now time.Time, maxKM float64) []string {
 			}
 		}
 	}
+	if companyClosed(j.CompanyRegStatus) {
+		out = append(out, "Cty ngừng hoạt động")
+	}
 	return out
+}
+
+// companyClosed reports whether the business register says the company has
+// stopped operating ("NNT ngừng hoạt động và đã đóng MST", "NNT tạm ngừng
+// hoạt động", …).
+func companyClosed(status string) bool {
+	s := strings.ToLower(status)
+	return strings.Contains(s, "ngừng hoạt động") || strings.Contains(s, "đóng mst")
 }
 
 // Dealbreakers returns the combined text + geo dealbreaker labels for a job.

@@ -202,9 +202,13 @@ export function dealbreakerText(d: string): [string, Record<string, string | num
     'Làm T7': N_('Works on Saturdays'),
     'Lương thỏa thuận': N_('Pay not stated'),
     'Cty <2 năm': N_('Company under 2 years old'),
+    'Cty ngừng hoạt động': N_('Company has stopped operating'),
   }
   return [known[d] ?? d]
 }
+
+/** The company's page in the business register (or its search), only if it's really there. */
+export const registerUrl = (j: Job) => (j.company_info_url.startsWith('https://dulieuphapluat.vn/') ? j.company_info_url : '')
 
 /** The posting's link, if it's a web link: job text is hostile, and javascript: or data: links mustn't become clickable. */
 export const postingUrl = (j: Job) => (/^https?:\/\//i.test(j.url.trim()) ? j.url.trim() : '')

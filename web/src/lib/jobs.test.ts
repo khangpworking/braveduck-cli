@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { Job, TodayGroup } from './api'
-import { dealbreakerText, matches, payTop, postingUrl, pay, payUndisclosed, shortCompany, sortJobs, steps, todayEntries } from './jobs'
+import { dealbreakerText, matches, payTop, postingUrl, pay, registerUrl, payUndisclosed, shortCompany, sortJobs, steps, todayEntries } from './jobs'
 
 const job = (over: Partial<Job>): Job =>
   ({
@@ -99,4 +99,13 @@ test("a job's steps keep only the dates braveduck knows", () => {
     { stage: 'interview', date: '' },
   ])
   expect(steps(job({ status: 'saved', saved_at: '2026-11-01' }))).toEqual([{ stage: 'saved', date: '2026-11-01' }])
+})
+
+test("only the business register's own pages become a company link", () => {
+  const page = 'https://dulieuphapluat.vn/cong-cu/ma-so-thue/0309542960-x.html'
+  expect(registerUrl(job({ company_info_url: page }))).toBe(page)
+  expect(registerUrl(job({ company_info_url: 'https://dulieuphapluat.vn.evil.example/x' }))).toBe('')
+  expect(registerUrl(job({ company_info_url: 'javascript:alert(1)' }))).toBe('')
+  expect(registerUrl(job({ company_info_url: '' }))).toBe('')
+  expect(dealbreakerText('Cty ngừng hoạt động')).toEqual(['Company has stopped operating'])
 })

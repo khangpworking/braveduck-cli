@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/api"
+	"github.com/khangpworking/braveduck-cli/internal/core/company"
 	"github.com/khangpworking/braveduck-cli/internal/service"
 	"github.com/khangpworking/braveduck-cli/internal/store"
 )
@@ -70,7 +71,9 @@ func cmdServe(ctx context.Context, st *store.Store, svc *service.Service, args [
 		_ = srv.Shutdown(sc)
 	}()
 
-	// Built-in crawlers run on their schedules while the board is up.
+	// Built-in crawlers run on their schedules while the board is up, and
+	// the jobs' companies are looked up in the business register.
+	svc.SetCompanyRegister(company.New())
 	go svc.RunScheduler(ctx, time.Minute)
 
 	fmt.Printf("braveduck board on %s  (Ctrl-C to stop)\n", url)

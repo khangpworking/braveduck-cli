@@ -146,14 +146,30 @@ export interface Job {
   topcv_status: string;
   vnw_status: string;
   /**
-   * Geo/company signals used by geoDealbreakers. Resolve async on pin.
+   * Geo/company signals used by geoDealbreakers, filled in the background.
    */
-  company_active_date: string; // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
   company_distance_km: number /* float64 */; // meaningful only when CompanyGeoStatus == "ok"
   company_geo_status: string; // "" / pending / ok / no_address / geocode_failed
-  company_masothue_url: string;
-  company_masothue_name: string;
+  /**
+   * What the business register says about the company (core/company):
+   * CompanyActiveDate is the day it started operating (YYYY-MM-DD), ""
+   * until it's looked up, CompanyNotFound or CompanyNoDate. CompanyInfoURL
+   * is its page, or the register's search when there's no single match.
+   */
+  company_active_date: string;
+  company_info_url: string;
+  company_legal_name: string;
+  company_tax_code: string;
+  company_reg_status: string; // the register's words, e.g. "NNT đang hoạt động"
 }
+/**
+ * CompanyActiveDate's sentinels.
+ */
+export const CompanyNotFound = "not_found"; // no single company with that exact name
+/**
+ * CompanyActiveDate's sentinels.
+ */
+export const CompanyNoDate = "no_date"; // found, but the register gives no date
 /**
  * ModelRating is a saved per-model verdict; only the configured default
  * model's verdict also owns the job's top-level board badge.

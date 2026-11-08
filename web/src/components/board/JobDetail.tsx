@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { getJob, getSetup, type Job, type Status } from '@/lib/api'
 import { applySite, draftOf, getPlatforms, mailto } from '@/lib/jobApi'
-import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, postingUrl, reasons, sourceName, stageName, steps, type Step } from '@/lib/jobs'
+import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, postingUrl, reasons, registerUrl, sourceName, stageName, steps, type Step } from '@/lib/jobs'
 import { locale } from '@/lib/i18n'
 import { N_ } from '@/lib/n'
 import { Button } from '@/components/ui/button'
@@ -173,6 +173,31 @@ function Reasons({ job, a }: { job: Job; a: JobActions }) {
         {job.score_status === 'scored' ? t('Rate it again') : t('Rate it now')}
       </Button>
     </div>
+  )
+}
+
+/** What the business register says about the company, and its page there. */
+function Registered({ job }: { job: Job }) {
+  const { t } = useTranslation()
+  const link = registerUrl(job)
+  if (!link) return null
+  const d = job.company_active_date
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T00:00:00`) : null
+  const found = d !== 'not_found'
+  return (
+    <p className="text-small text-muted-foreground">
+      {!found
+        ? t('Not in the business register by this name')
+        : day
+          ? t('In business since {date}', { date: day.toLocaleDateString(locale(), { day: 'numeric', month: 'numeric', year: 'numeric' }) })
+          : t('In the business register')}
+      {found && job.company_tax_code && <> · {t('Tax code {code}', { code: job.company_tax_code })}</>}
+      {' · '}
+      <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline underline-offset-2">
+        {found ? t('See it on dulieuphapluat.vn') : t('Look it up on dulieuphapluat.vn')}
+        <ArrowUpRight className="size-3.5" />
+      </a>
+    </p>
   )
 }
 
@@ -469,6 +494,7 @@ function Detail({ job, phone, onBack, onMove, onDeleted }: {
           <div className="min-w-0 flex-1">
             <h1 className="text-title leading-tight font-semibold tracking-tight">{job.title}</h1>
             <p className="text-body text-muted-foreground">{job.company}</p>
+            <Registered job={job} />
           </div>
           <MoreMenu job={job} a={a} onDeleted={() => onDeleted(job)} />
         </div>

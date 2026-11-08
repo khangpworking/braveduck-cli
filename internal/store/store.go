@@ -88,6 +88,21 @@ var migrations = []string{
 	   added_at   TEXT NOT NULL,
 	   checked_at TEXT NOT NULL DEFAULT ''
 	 );`,
+	// 10: the business register (core/company): each company name is looked
+	// up once (company_cache, "not found" included), and each job keeps what
+	// it said. The older company_masothue_* columns hold its page and name.
+	`CREATE TABLE IF NOT EXISTS company_cache (
+	   name_key TEXT PRIMARY KEY,
+	   found    INTEGER NOT NULL,
+	   tax_code TEXT NOT NULL DEFAULT '',
+	   name     TEXT NOT NULL DEFAULT '',
+	   founded  TEXT NOT NULL DEFAULT '',
+	   status   TEXT NOT NULL DEFAULT '',
+	   url      TEXT NOT NULL DEFAULT '',
+	   at       TEXT NOT NULL
+	 );
+	 ALTER TABLE jobs ADD COLUMN company_tax_code TEXT;
+	 ALTER TABLE jobs ADD COLUMN company_reg_status TEXT;`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the
@@ -175,7 +190,8 @@ const selectCols = `
   COALESCE(expires_at,''), COALESCE(followup_sent_at,''), saved_at, created_at, updated_at,
   COALESCE(topcv_status,''), COALESCE(vnw_status,''),
   COALESCE(company_active_date,''), company_distance_km, COALESCE(company_geo_status,''),
-  COALESCE(company_masothue_url,''), COALESCE(company_masothue_name,'')`
+  COALESCE(company_masothue_url,''), COALESCE(company_masothue_name,''),
+  COALESCE(company_tax_code,''), COALESCE(company_reg_status,'')`
 
 func scanJob(sc interface{ Scan(...any) error }) (jobs.Job, error) {
 	var j jobs.Job
@@ -196,7 +212,8 @@ func scanJob(sc interface{ Scan(...any) error }) (jobs.Job, error) {
 		&j.ExpiresAt, &j.FollowupSentAt, &j.SavedAt, &j.CreatedAt, &j.UpdatedAt,
 		&j.TopcvStatus, &j.VnwStatus,
 		&j.CompanyActiveDate, &dist, &j.CompanyGeoStatus,
-		&j.CompanyMasothueURL, &j.CompanyMasothueName,
+		&j.CompanyInfoURL, &j.CompanyLegalName,
+		&j.CompanyTaxCode, &j.CompanyRegStatus,
 	)
 	if err != nil {
 		return jobs.Job{}, err
@@ -224,6 +241,7 @@ var writeCols = []string{
 	"topcv_status", "vnw_status",
 	"company_active_date", "company_distance_km", "company_geo_status",
 	"company_masothue_url", "company_masothue_name",
+	"company_tax_code", "company_reg_status",
 }
 
 func writeArgs(j jobs.Job) []any {
@@ -244,7 +262,8 @@ func writeArgs(j jobs.Job) []any {
 		j.ExpiresAt, j.FollowupSentAt, j.SavedAt, j.CreatedAt, j.UpdatedAt,
 		j.TopcvStatus, j.VnwStatus,
 		j.CompanyActiveDate, nf(j.CompanyDistanceKM, j.HasDistance), j.CompanyGeoStatus,
-		j.CompanyMasothueURL, j.CompanyMasothueName,
+		j.CompanyInfoURL, j.CompanyLegalName,
+		j.CompanyTaxCode, j.CompanyRegStatus,
 	}
 }
 
@@ -436,6 +455,13 @@ func (s *Store) Patch(ctx context.Context, id int64, p JobPatch, now time.Time) 
 	}
 	if p.Keep != nil {
 		set, args = append(set, "keep = ?"), append(args, b2i(*p.Keep))
+	}
+	if p.Company != nil {
+		// A new name is a new company: look it up again (SQLite reads the
+		// old row on the right of SET, so company is still the old name).
+		for _, col := range []string{"company_active_date", "company_masothue_url", "company_masothue_name", "company_tax_code", "company_reg_status"} {
+			set, args = append(set, col+" = CASE WHEN company IS ? THEN "+col+" END"), append(args, *p.Company)
+		}
 	}
 	for col, v := range map[string]*string{
 		"notes": p.Notes, "title": p.Title, "company": p.Company, "salary": p.Salary, "location": p.Location,
