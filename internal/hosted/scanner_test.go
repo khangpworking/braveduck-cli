@@ -69,6 +69,14 @@ func TestScannerAPI(t *testing.T) {
 		}
 	}
 
+	// Each round's ask is the scanner's sign of life on the boards it reads for.
+	for name, svc := range map[string]*service.Service{"alice": alice, "bob": bob, "carol": carol} {
+		v, _ := svc.CrawlStatus(ctx)
+		if len(v.Sources) != 1 || v.Sources[0].Name != "facebook" || !v.Sources[0].Healthy || v.Sources[0].LastRun == "" {
+			t.Errorf("%s: Facebook after the scanner asked = %+v", name, v.Sources)
+		}
+	}
+
 	// A board that paused a group, or turned Facebook off, doesn't ask for it.
 	bob.PauseGroup(ctx, "ai.jobs", true)
 	carol.SetSourceOn(ctx, "facebook", false)
