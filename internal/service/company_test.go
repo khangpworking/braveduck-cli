@@ -114,3 +114,18 @@ func TestRegisterTroubleIsRetried(t *testing.T) {
 		t.Fatalf("back up: %+v; want it asked again", res)
 	}
 }
+
+// A post from a Facebook group may give the group's name as its company;
+// that isn't a company to look up.
+func TestAGroupsNameIsNotACompany(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	reg := &fakeRegister{}
+	s.SetCompanyRegister(reg)
+	s.FollowGroup(ctx, "https://www.facebook.com/groups/1329241984892387/")
+	s.SetGroupStatus(ctx, "1329241984892387", "Việc làm AI Engineer -Việt Nam", FBPublic, "")
+	s.AddJob(ctx, NewJob{Title: "AI Engineer", Company: "Việc làm AI Engineer -Việt Nam", Source: "facebook"})
+	if res, _ := s.UpdateCompanies(ctx, 10); res.Lookups != 0 || len(reg.asked) != 0 {
+		t.Fatalf("looked up a group's name: %+v %q", res, reg.asked)
+	}
+}

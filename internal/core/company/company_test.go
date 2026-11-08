@@ -37,18 +37,26 @@ const companyPage = `<script type="application/ld+json">{"@context":"https://sch
 <tr><td class="tax-detail-label">Ngày bắt đầu hoạt động</td><td class="tax-detail-value">20/10/2009</td></tr>`
 
 func site(t *testing.T, search, company string) (*Register, *atomic.Int32) {
+	return siteWith(t, search, map[string]string{"0309542960": company})
+}
+
+// siteWith serves the search page and one company page per tax code.
+func siteWith(t *testing.T, search string, pages map[string]string) (*Register, *atomic.Int32) {
 	t.Helper()
 	var hits atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		switch {
-		case r.URL.Path == "/cong-cu/tra-cuu-ma-so-thue.html":
+		if r.URL.Path == "/cong-cu/tra-cuu-ma-so-thue.html" {
 			w.Write([]byte(search))
-		case strings.HasPrefix(r.URL.Path, "/cong-cu/ma-so-thue/0309542960-"):
-			w.Write([]byte(company))
-		default:
-			http.NotFound(w, r)
+			return
 		}
+		for mst, page := range pages {
+			if strings.HasPrefix(r.URL.Path, "/cong-cu/ma-so-thue/"+mst+"-") {
+				w.Write([]byte(page))
+				return
+			}
+		}
+		http.NotFound(w, r)
 	}))
 	t.Cleanup(ts.Close)
 	reg := New()
@@ -89,12 +97,27 @@ func TestAccentsMakeADifferentCompany(t *testing.T) {
 	}
 }
 
-func TestTwoCompaniesWithTheNameIsNotFound(t *testing.T) {
+// The register often holds a name twice (a later, duplicate registration):
+// the company is the one still operating that started earliest.
+func TestSameNameTwicePicksTheEarliestOperating(t *testing.T) {
 	twice := strings.Replace(searchPage, "3701071364-cong-ty-tnhh-san-xuat-thuong-mai-an-thien.html\" class=\"tax-company-link\">\n        CÔNG TY TNHH SẢN XUẤT THƯƠNG MẠI AN THIÊN",
-		"0309542961-cong-ty-tnhh-thuong-mai-san-xuat-thien-an.html\" class=\"tax-company-link\">\n        CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN", 1)
-	reg, _ := site(t, twice, companyPage)
-	if _, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("two companies with one name: %v, want ErrNotFound", err)
+		"0309542961-cong-ty-tnhh-thuong-mai-san-xuat-thien-an.html\" class=\"tax-company-link\">\n        Công Ty TNHH Thương Mại Sản Xuất Thiên Ấn", 1)
+	later := strings.NewReplacer(`"taxID":"0309542960","foundingDate":"2009-10-20"`, `"taxID":"0309542961","foundingDate":"2016-01-05"`).Replace(companyPage)
+	older := strings.Replace(companyPage, `"foundingDate":"2009-10-20"`, `"foundingDate":"2001-02-03"`, 1)
+	closed := strings.Replace(older, "NNT đã được cấp MST", "NNT ngừng hoạt động và đã đóng MST", 1)
+	for _, c := range []struct {
+		name         string
+		first        string
+		wantTax, day string
+	}{
+		{"the earlier one", older, "0309542960", "2001-02-03"},
+		{"the later one, the earlier having closed", closed, "0309542961", "2016-01-05"},
+	} {
+		reg, _ := siteWith(t, twice, map[string]string{"0309542960": c.first, "0309542961": later})
+		rec, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN")
+		if err != nil || rec.TaxCode != c.wantTax || rec.Founded != c.day {
+			t.Errorf("%s: got %s %s, %v; want %s %s", c.name, rec.TaxCode, rec.Founded, err, c.wantTax, c.day)
+		}
 	}
 }
 

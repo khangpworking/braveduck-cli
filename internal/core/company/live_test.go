@@ -19,6 +19,12 @@ func TestLiveRegister(t *testing.T) {
 		t.Fatalf("Thiên Ấn: %+v, %v", rec, err)
 	}
 	t.Logf("found: %+v", rec)
+	// The register holds this name twice; the company is the 2005 one.
+	if rec, err := reg.Find(context.Background(), "CÔNG TY CỔ PHẦN VIỄN THÔNG FPT"); err != nil || rec.TaxCode != "0101778163" {
+		t.Errorf("FPT Telecom: %+v, %v", rec, err)
+	} else {
+		t.Logf("found: %+v", rec)
+	}
 	if _, err := reg.Find(context.Background(), "FPT Software"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a brand name: %v, want ErrNotFound", err)
 	}
