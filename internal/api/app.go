@@ -42,6 +42,12 @@ func mountApp(mux *http.ServeMux, token string) {
 			notFound(w, r)
 			return
 		}
+		// Built files carry a hash of their content in their name, so a
+		// browser (and Cloudflare) can keep them for good: a new build
+		// has new names.
+		if strings.HasPrefix(name, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
 		files.ServeHTTP(w, r)
 	})
 	mux.HandleFunc("GET /app/", func(w http.ResponseWriter, r *http.Request) {

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, RotateCw, Search, Settings as Gear, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { getJobs, getToday, patchJob, setOnUnauthorized, type Job, type Status } from '@/lib/api'
+import { getJobs, getToday, jobChanged, patchJob, setOnUnauthorized, type Job, type Status } from '@/lib/api'
 import { STAGES, matches, sortJobs, stageName, todayEntries } from '@/lib/jobs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -112,7 +112,7 @@ export default function App() {
 
   const save = useMutation({
     mutationFn: ({ id, status }: { id: number; status: Status }) => patchJob(id, { status }),
-    onSuccess: () => qc.invalidateQueries(),
+    onSuccess: (_, v) => jobChanged(qc, v.id),
     onError: (e: Error) => toast.error(e.message),
   })
   // Go on to the next job in the list, the way a person works through it.

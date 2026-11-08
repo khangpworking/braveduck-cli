@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { getJobs } from '@/lib/api'
+import { getJobsFull } from '@/lib/api'
 import { FILTERS, Q, S, type Keywords } from '@/lib/settings'
 import { mentionCount } from '@/lib/tags'
 import { locale } from '@/lib/i18n'
@@ -35,7 +35,8 @@ function KeywordsForm({ saved, close }: { saved: Keywords; close: () => void }) 
   const { t } = useTranslation()
   const err = useErr()
   const qc = useQueryClient()
-  const jobs = useQuery({ queryKey: ['jobs'], queryFn: getJobs }).data ?? []
+  // Counting words in postings needs their text, which the list leaves out.
+  const jobs = useQuery({ queryKey: ['jobs', 'full'], queryFn: getJobsFull }).data ?? []
   const [lists, setLists] = useState<Keywords>(() => {
     const out: Keywords = { ...saved, search_queries: saved.search_queries ?? [] }
     for (const [key] of FILTERS) out[key] = saved[key] ?? []

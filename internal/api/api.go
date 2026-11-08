@@ -192,11 +192,20 @@ type server struct {
 	hub *hub
 }
 
+// listJobs answers GET /api/jobs. With ?view=list it leaves out what only
+// a job's own page shows (the posting's full text, its AI summary, the email
+// draft): the board's list refetches on every change, and that text is most
+// of the payload. GET /api/jobs/{id} has everything.
 func (s *server) listJobs(w http.ResponseWriter, r *http.Request) {
 	list, err := s.svc.ListJobs(r.Context(), service.ListFilter{
 		Status: r.URL.Query().Get("status"),
 		Source: r.URL.Query().Get("source"),
 	})
+	if err == nil && r.URL.Query().Get("view") == "list" {
+		for i := range list {
+			list[i].FullJD, list[i].AISummary, list[i].DraftEmail = "", "", ""
+		}
+	}
 	reply(w, http.StatusOK, list, err)
 }
 

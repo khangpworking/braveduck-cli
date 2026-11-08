@@ -1,6 +1,7 @@
 // The board's only way to the server: JSON over /api with the per-run token
 // the Go server writes into the page (internal/api/api.go renderIndex).
 
+import type { QueryClient } from '@tanstack/react-query'
 import type * as jobs from './gen/jobs'
 import type * as service from './gen/service'
 import type * as wire from './gen/api'
@@ -56,7 +57,23 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   return data as T
 }
 
-export const getJobs = () => api<Job[]>('GET', '/jobs')
+/**
+ * The jobs for the list: without the posting's full text, its AI summary and
+ * the email draft, which only a job's own page shows (getJob). The list
+ * refetches on every change, and that text is most of the payload.
+ */
+export const getJobs = () => api<Job[]>('GET', '/jobs?view=list')
+/** Every job with all its text (for counting words in postings). */
+export const getJobsFull = () => api<Job[]>('GET', '/jobs')
+/** One job with everything. */
+export const getJob = (id: number) => api<Job>('GET', `/jobs/${id}`)
+
+/** What a change to one job can affect: the lists, Today, the funnel, that job. */
+export function jobChanged(qc: QueryClient, id?: number) {
+  for (const key of [['jobs'], ['today'], ['stats'], id === undefined ? ['job'] : ['job', id]]) {
+    void qc.invalidateQueries({ queryKey: key })
+  }
+}
 export const getToday = () => api<TodayGroup[]>('GET', '/today')
 export const getSetup = () => api<Setup>('GET', '/setup')
 export const patchJob = (id: number, p: JobPatch) => api<Job>('PATCH', `/jobs/${id}`, p)

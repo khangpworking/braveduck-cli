@@ -141,6 +141,10 @@ func TestAppServesItsAssets(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
 		t.Errorf("%s: status %d, type %q", assets[0], resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
+	// Hashed names: kept for good. The pages themselves never are.
+	if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("%s: Cache-Control = %q, want immutable", assets[0], cc)
+	}
 }
 
 func TestPinAndKeepToggle(t *testing.T) {

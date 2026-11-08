@@ -101,3 +101,14 @@ func TestAppProfileInPartsOnAPhone(t *testing.T) {
 	clickText(page, "[data-chunked] button", "^Next")
 	page.MustElementR("[data-chunked]", "Part 2 of 5[\\s\\S]*2. Pay")
 }
+
+// The list leaves the posting's long text out; the job's page fetches it.
+func TestAppJobPageFetchesItsText(t *testing.T) {
+	_, _, url := appBoard(t, []jobs.Job{{Title: "Accountant", Status: "saved", AISummary: "- Closes the books every month\n- Works with SAP"}})
+	page := appPage(t, url, 1280)
+	if strings.Contains(page.MustEval(`() => JSON.stringify(window.performance.getEntriesByType("resource").map(r => r.name))`).String(), "/api/jobs\"") {
+		t.Error("the board fetched the full job list")
+	}
+	clickText(page, "button", "About the job")
+	page.MustElementR("section[aria-label='Accountant'] li", "Closes the books every month")
+}
