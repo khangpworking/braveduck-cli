@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import type { Job } from '@/lib/api'
+import { jobChanged, type Job } from '@/lib/api'
 import { saveCV, saveDraft, splitEmail, type Ask } from '@/lib/jobApi'
 import { N_ } from '@/lib/n'
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,7 @@ export function AskAI({ job, kind, ask, onClose }: { job: Job; kind: AskKind; as
   const save = useMutation({
     mutationFn: () => (kind === 'cv' ? saveCV(job.id, text) : saveDraft(job.id, splitEmail(text))),
     onSuccess: () => {
-      void qc.invalidateQueries()
+      jobChanged(qc, job.id)
       toast(kind === 'cv' ? t('CV saved.') : t('Draft saved. Check it before you send it.'))
       onClose()
     },

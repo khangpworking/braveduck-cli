@@ -65,6 +65,29 @@ func TestListAndGet(t *testing.T) {
 	}
 }
 
+// The list view leaves out the long text only a job's own page shows; the
+// full list and the job itself still have it.
+func TestListViewIsLight(t *testing.T) {
+	ts, st := newTestServer(t)
+	if _, err := st.Add(context.Background(), jobs.Job{Title: "Accountant", FullJD: "A long posting…", AISummary: "- point", DraftEmail: `{"to":"hr@x.vn"}`, Notes: "call Lan", Status: "saved"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var light, full []jobs.Job
+	getJSON(t, ts.URL+"/api/jobs?view=list", &light)
+	getJSON(t, ts.URL+"/api/jobs", &full)
+	if l := light[0]; l.FullJD != "" || l.AISummary != "" || l.DraftEmail != "" || l.Title != "Accountant" || l.Notes != "call Lan" {
+		t.Errorf("light = %+v", l)
+	}
+	if f := full[0]; f.FullJD == "" || f.AISummary == "" || f.DraftEmail == "" {
+		t.Errorf("full list lost its text: %+v", f)
+	}
+	var one jobs.Job
+	getJSON(t, ts.URL+"/api/jobs/1", &one)
+	if one.FullJD == "" || one.DraftEmail == "" {
+		t.Errorf("the job lost its text: %+v", one)
+	}
+}
+
 func TestPatchMovesLaneAndPins(t *testing.T) {
 	ts, st := newTestServer(t)
 	if _, err := st.Add(context.Background(), jobs.Job{Title: "X"}, time.Now()); err != nil {

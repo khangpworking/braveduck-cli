@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ApiError, type Job, type JobPatch } from '@/lib/api'
+import { ApiError, jobChanged, type Job, type JobPatch } from '@/lib/api'
 import * as jobApi from '@/lib/jobApi'
 import { N_ } from '@/lib/n'
 import type { AskKind } from './AskAI'
@@ -12,7 +12,7 @@ import type { AskKind } from './AskAI'
 export function useJobActions(job: Job) {
   const { t } = useTranslation()
   const qc = useQueryClient()
-  const done = () => void qc.invalidateQueries()
+  const done = () => jobChanged(qc, job.id)
   const fail = (what: string) => (e: Error) => toast.error(t(what, { error: t(e.message) }))
   const [ask, setAsk] = useState<{ kind: AskKind; ask: jobApi.Ask } | null>(null)
   const [prep, setPrep] = useState<jobApi.ApplyPrep | null>(null)

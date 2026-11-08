@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleAlert, Copy, Mail, MapPin, Wallet } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { getSetup, type Job, type Status } from '@/lib/api'
+import { getJob, getSetup, type Job, type Status } from '@/lib/api'
 import { applySite, draftOf, getPlatforms, mailto } from '@/lib/jobApi'
 import { GRADES, STAGES, grade, isOpen, km, pay, payUndisclosed, postingUrl, reasons, sourceName, stageName, steps, type Step } from '@/lib/jobs'
 import { locale } from '@/lib/i18n'
@@ -448,7 +448,28 @@ export function JobDetail({ job, phone, onBack, onMove, onDeleted }: {
       </div>
     )
   }
-  return <Detail key={job.id} job={job} phone={phone} onBack={onBack} onMove={onMove} onDeleted={onDeleted} />
+  return <WithText key={job.id} job={job} phone={phone} onBack={onBack} onMove={onMove} onDeleted={onDeleted} />
+}
+
+type DetailProps = {
+  job: Job
+  phone: boolean
+  onBack: () => void
+  onMove: Move
+  onDeleted: (j: Job) => void
+}
+
+/**
+ * The list's copy of a job leaves out its long text (the posting, its AI
+ * summary, the email draft); the page fetches the job once to fill it in,
+ * and keeps everything else from the list, which is never staler.
+ */
+function WithText(p: DetailProps) {
+  const full = useQuery({ queryKey: ['job', p.job.id], queryFn: () => getJob(p.job.id) }).data
+  const job = full
+    ? { ...p.job, jd_full: full.jd_full, jd_ai_summary: full.jd_ai_summary, draft_email: full.draft_email }
+    : p.job
+  return <Detail {...p} job={job} />
 }
 
 function Detail({ job, phone, onBack, onMove, onDeleted }: {
