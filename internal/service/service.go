@@ -53,7 +53,9 @@ type Service struct {
 	jevDaily    int            // see SetJevDailyLimit
 	maxJobs     int            // see SetMaxJobs
 	fbw         fbReader       // see SetFBWatcher
+	reg         companyFinder  // see SetCompanyRegister
 	distRunning atomic.Bool    // an UpdateDistances pass is running
+	coRunning   atomic.Bool    // an UpdateCompanies pass is running
 	jevMu       sync.Mutex     // makes checking and counting a Jev call one step
 
 	// fetch extracts a JobPosting from a listing URL; swapped in tests so they

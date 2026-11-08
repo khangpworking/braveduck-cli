@@ -44,6 +44,7 @@ import (
 
 	"github.com/khangpworking/braveduck-cli/internal/api"
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
+	"github.com/khangpworking/braveduck-cli/internal/core/company"
 	"github.com/khangpworking/braveduck-cli/internal/core/fbwatcher"
 	mcpserver "github.com/khangpworking/braveduck-cli/internal/mcp"
 	"github.com/khangpworking/braveduck-cli/internal/service"
@@ -80,6 +81,11 @@ type Options struct {
 	// FBWatcher reads Facebook posts and groups for every user (fb-watcher's
 	// API, shared and rate-limited by it); nil leaves it off.
 	FBWatcher *fbwatcher.Client
+
+	// Companies looks every user's companies up in the business register
+	// (one client, so its 2-second gap holds for the whole server); nil
+	// leaves it off.
+	Companies *company.Register
 
 	// Owner is the user whose computer this is (when the server runs on
 	// someone's own machine): job-site logins, assisted apply and CV files
@@ -303,6 +309,9 @@ func (s *Server) open(name string) (*tenant, error) {
 	svc.SetJevDailyLimit(s.opts.JevDaily)
 	svc.SetMaxJobs(s.opts.MaxJobs)
 	svc.SetFBWatcher(s.opts.FBWatcher)
+	if s.opts.Companies != nil {
+		svc.SetCompanyRegister(s.opts.Companies)
+	}
 
 	tok := make([]byte, 32)
 	if _, err := rand.Read(tok); err != nil {

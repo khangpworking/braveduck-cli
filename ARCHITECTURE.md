@@ -33,10 +33,12 @@ supported links, SSRF guard), `crawl` (VietnamWorks API, CareerLink),
 passphrase), `browser` (go-rod over a self-provisioned Chromium: login
 windows, assisted-apply windows, PDF printing, page fetching), `topcv`
 (read-only application history), `geo` (OSM Nominatim, cached),
+`company` (the business register on dulieuphapluat.vn, by company name, cached),
 `jev` (TypeSafe's Jev decision model), `apply`, `markdown`.
 
 **Background work** (`service.RunScheduler`, while the board runs): built-in
-crawlers on their schedules, TopCV status sync, Jev rating, an hourly sweep
+crawlers on their schedules, TopCV status sync, Jev rating, each job's
+company looked up once in the business register, an hourly sweep
 that moves expired jobs to Closed, and a daily database backup. External
 tools (fb-watcher) report their runs with `braveduck crawl-report`.
 
@@ -306,11 +308,13 @@ CREATE TABLE jobs (
   topcv_status          TEXT,
   vnw_status             TEXT,
 
-  company_active_date   TEXT,
+  company_active_date   TEXT,                 -- business register: YYYY-MM-DD / 'not_found' / 'no_date' / NULL (not looked up)
   company_distance_km   REAL,
   company_geo_status    TEXT,
-  company_masothue_url  TEXT,
-  company_masothue_name TEXT,
+  company_masothue_url  TEXT,                 -- the company's register page (or its search); JSON company_info_url
+  company_masothue_name TEXT,                 -- its registered name; JSON company_legal_name
+  company_tax_code      TEXT,                 -- migration 10
+  company_reg_status    TEXT,                 -- migration 10: the register's status words
 
   created_at             TEXT NOT NULL,
   updated_at             TEXT NOT NULL

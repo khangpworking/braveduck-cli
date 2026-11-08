@@ -112,3 +112,29 @@ func TestAppJobPageFetchesItsText(t *testing.T) {
 	clickText(page, "button", "About the job")
 	page.MustElementR("section[aria-label='Accountant'] li", "Closes the books every month")
 }
+
+// The business register's answer sits under the company's name, linking to
+// the company's page there; with no match, to the register's search.
+func TestAppJobPageShowsTheCompanyRegister(t *testing.T) {
+	_, _, url := appBoard(t, []jobs.Job{
+		{Title: "Accountant", Company: "Công ty TNHH Thiên Ấn", Status: "saved", CompanyActiveDate: "2009-10-20", CompanyTaxCode: "0309542960",
+			CompanyInfoURL: "https://dulieuphapluat.vn/cong-cu/ma-so-thue/0309542960-x.html", CompanyRegStatus: "NNT đã được cấp MST"},
+		{Title: "Developer", Company: "FPT Software", Status: "saved", CompanyActiveDate: jobs.CompanyNotFound,
+			CompanyInfoURL: "https://dulieuphapluat.vn/cong-cu/tra-cuu-ma-so-thue.html?keyword=FPT+SOFTWARE"},
+	})
+	page := appPage(t, url, 1280)
+	clickText(page, "[data-job]", "Accountant")
+	p := page.MustElementR("section[aria-label='Accountant'] p", "In business since")
+	if got := p.MustText(); !strings.Contains(got, "20/10/2009") || !strings.Contains(got, "Tax code 0309542960") {
+		t.Errorf("register line: %q", got)
+	}
+	a := p.MustElement("a")
+	if href, target := a.MustAttribute("href"), a.MustAttribute("target"); *href != "https://dulieuphapluat.vn/cong-cu/ma-so-thue/0309542960-x.html" || *target != "_blank" {
+		t.Errorf("company link: %s (target %s)", *href, *target)
+	}
+	clickText(page, "[data-job]", "Developer")
+	a = page.MustElementR("section[aria-label='Developer'] p a", "Look it up on dulieuphapluat.vn")
+	if href := a.MustAttribute("href"); !strings.Contains(*href, "tra-cuu-ma-so-thue.html?keyword=") {
+		t.Errorf("search link: %s", *href)
+	}
+}

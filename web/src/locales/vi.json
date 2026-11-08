@@ -590,5 +590,12 @@
   "Newest": "Mới nhất",
   "Highest pay": "Lương cao nhất",
   "Nearest": "Gần nhà nhất",
-  "Closing soonest": "Sắp hết hạn"
+  "Closing soonest": "Sắp hết hạn",
+  "Company has stopped operating": "Công ty đã ngừng hoạt động",
+  "Not in the business register by this name": "Không tìm thấy tên này trong dữ liệu doanh nghiệp",
+  "In business since {date}": "Hoạt động từ {date}",
+  "In the business register": "Có trong dữ liệu doanh nghiệp",
+  "Tax code {code}": "MST {code}",
+  "See it on dulieuphapluat.vn": "Xem trên dulieuphapluat.vn",
+  "Look it up on dulieuphapluat.vn": "Tra cứu trên dulieuphapluat.vn"
 }

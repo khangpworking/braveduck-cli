@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/browser"
+	"github.com/khangpworking/braveduck-cli/internal/core/company"
 	"github.com/khangpworking/braveduck-cli/internal/core/fbwatcher"
 	"github.com/khangpworking/braveduck-cli/internal/hosted"
 )
@@ -75,7 +76,7 @@ func cmdServeHosted(ctx context.Context, args []string) error {
 	h, err := hosted.New(srvCtx, hosted.Options{
 		Dir: *users, UserHeader: *header, Secret: secret,
 		MaxUsers: *maxUsers, LogoutURL: *logout, JevDaily: *jevDaily, MaxJobs: *maxJobs, UsersFile: *usersFile, Tick: time.Minute,
-		AccessTeam: *accessTeam, AccessAUD: *accessAUD, FBWatcher: fbw, Owner: *owner,
+		AccessTeam: *accessTeam, AccessAUD: *accessAUD, FBWatcher: fbw, Owner: *owner, Companies: company.New(),
 	})
 	if err != nil {
 		return err

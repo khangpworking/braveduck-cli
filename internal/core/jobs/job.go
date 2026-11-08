@@ -81,14 +81,27 @@ type Job struct {
 	TopcvStatus string `json:"topcv_status"`
 	VnwStatus   string `json:"vnw_status"`
 
-	// Geo/company signals used by geoDealbreakers. Resolve async on pin.
-	CompanyActiveDate   string  `json:"company_active_date"` // masothue "Ngày hoạt động", YYYY-MM-DD or a sentinel
-	CompanyDistanceKM   float64 `json:"company_distance_km"` // meaningful only when CompanyGeoStatus == "ok"
-	HasDistance         bool    `json:"-"`                   // distinguishes 0 km from "not set"
-	CompanyGeoStatus    string  `json:"company_geo_status"`  // "" / pending / ok / no_address / geocode_failed
-	CompanyMasothueURL  string  `json:"company_masothue_url"`
-	CompanyMasothueName string  `json:"company_masothue_name"`
+	// Geo/company signals used by geoDealbreakers, filled in the background.
+	CompanyDistanceKM float64 `json:"company_distance_km"` // meaningful only when CompanyGeoStatus == "ok"
+	HasDistance       bool    `json:"-"`                   // distinguishes 0 km from "not set"
+	CompanyGeoStatus  string  `json:"company_geo_status"`  // "" / pending / ok / no_address / geocode_failed
+
+	// What the business register says about the company (core/company):
+	// CompanyActiveDate is the day it started operating (YYYY-MM-DD), ""
+	// until it's looked up, CompanyNotFound or CompanyNoDate. CompanyInfoURL
+	// is its page, or the register's search when there's no single match.
+	CompanyActiveDate string `json:"company_active_date"`
+	CompanyInfoURL    string `json:"company_info_url"`
+	CompanyLegalName  string `json:"company_legal_name"`
+	CompanyTaxCode    string `json:"company_tax_code"`
+	CompanyRegStatus  string `json:"company_reg_status"` // the register's words, e.g. "NNT đang hoạt động"
 }
+
+// CompanyActiveDate's sentinels.
+const (
+	CompanyNotFound = "not_found" // no single company with that exact name
+	CompanyNoDate   = "no_date"   // found, but the register gives no date
+)
 
 // ModelRating is a saved per-model verdict; only the configured default
 // model's verdict also owns the job's top-level board badge.
