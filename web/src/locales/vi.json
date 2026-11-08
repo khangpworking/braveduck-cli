@@ -478,7 +478,6 @@
   "this PDF is too heavy to read (it unpacks to far more than its size); export it again, or upload a .docx": "Tệp PDF này quá nặng nên không đọc được. Bạn hãy xuất lại tệp hoặc tải lên dạng .docx.",
   "{n} interviews from {resolved} answered applications · {pending} waiting": "{n} lượt phỏng vấn / {resolved} hồ sơ đã có kết quả · {pending} đang chờ",
   "You're a fucking superstar 🌟": "Bạn làm tốt lắm 🌟",
-  "Keys: / search · n add a job · Esc close a window · ? this list": "Phím tắt: / tìm việc · n thêm việc · Esc đóng cửa sổ · ? xem danh sách này",
   "Every job graded A to F": "Mỗi việc đều được chấm A–F",
   "Graded against your CV and what you want, with the reasons in plain words. The best fits come first.": "So với CV và mong muốn của bạn, kèm lý do dễ hiểu. Việc hợp nhất luôn ở trên cùng.",
   "Today, at a glance": "Hôm nay làm gì, nhìn là biết",
@@ -558,5 +557,12 @@
   "braveduck couldn't read this post — paste its text under the link": "braveduck chưa đọc được bài này. Bạn dán nội dung bài ngay dưới link nhé.",
   "reading Facebook is busy right now — try again in {n} minutes, or paste the post's text under the link": "Đang đọc Facebook hơi nhiều, bạn thử lại sau {n} phút, hoặc dán nội dung bài ngay dưới link.",
   "paste a job link or description": "Dán link hoặc nội dung tin tuyển dụng.",
-  "the board is full ({n} jobs) — delete some old ones first": "Bảng việc đã đầy ({n} việc). Xóa bớt việc cũ trước nhé."
+  "the board is full ({n} jobs) — delete some old ones first": "Bảng việc đã đầy ({n} việc). Xóa bớt việc cũ trước nhé.",
+  "Open the menu": "Mở menu",
+  "Open the menu ( [ )": "Mở menu ( [ )",
+  "Fold the menu away": "Thu gọn menu",
+  "Fold the menu away ( [ )": "Thu gọn menu ( [ )",
+  "Drag to make the list or the job wider": "Kéo để nới rộng danh sách hoặc phần chi tiết",
+  "Drag to resize · double-click to reset": "Kéo để đổi độ rộng · bấm đúp để về mặc định",
+  "Keys: / search · n add a job · [ fold the menu · Esc close a window · ? this list": "Phím tắt: / tìm việc · n thêm việc · [ thu gọn menu · Esc đóng cửa sổ · ? xem danh sách này"
 }
