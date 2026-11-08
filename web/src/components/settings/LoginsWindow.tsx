@@ -9,6 +9,7 @@ import { N_ } from '@/lib/n'
 import { locale } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { SiteIcon } from '@/components/SiteIcon'
 import { confirm } from './Confirm'
 import { Body, CloseButton, Footer, Loading, Problem, Win, useErr, useFresh, type WinProps } from './parts'
 
@@ -91,7 +92,8 @@ function LoginsBody({ hosted }: { hosted: boolean }) {
           return (
             <div key={p.id} data-platform={p.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b py-3 last:border-b-0">
               <div className="min-w-0">
-                <div className="font-semibold">
+                <div className="flex flex-wrap items-center gap-x-2 font-semibold">
+                  <SiteIcon id={p.id} className="size-5" />
                   {p.name} {p.account && <span className="font-normal text-muted-foreground">{p.account}</span>}
                 </div>
                 <div className={cn('text-small', tone)}>{t(label)}</div>

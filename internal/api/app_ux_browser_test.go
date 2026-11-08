@@ -138,3 +138,24 @@ func TestAppJobPageShowsTheCompanyRegister(t *testing.T) {
 		t.Errorf("search link: %s", *href)
 	}
 }
+
+// Job sites show their own icon, bundled with the board: in the list (named
+// for screen readers, as nothing else there says the site), and next to the
+// site's name on the job's page.
+func TestAppSiteIcons(t *testing.T) {
+	_, _, url := appBoard(t, appJobs())
+	page := appPage(t, url, 1280)
+	icon := page.MustElement("[data-job] img[data-site-icon=topcv]")
+	if alt := icon.MustAttribute("alt"); *alt != "TopCV" {
+		t.Errorf("list icon alt = %q, want the site's name", *alt)
+	}
+	clickText(page, "[data-job]", "Accountant")
+	page.MustElementR("section[aria-label='Accountant'] p", "Found on TopCV").MustElement("img[data-site-icon=topcv]")
+	broken := page.MustEval(`() => [...document.querySelectorAll('img[data-site-icon]')].filter(i => !i.complete || i.naturalWidth === 0 || !i.src.startsWith(location.origin + '/assets/') && !i.src.startsWith('data:image/png')).map(i => i.src).join(' ')`).Str()
+	if broken != "" {
+		t.Errorf("icons that didn't load from the board itself: %s", broken)
+	}
+	if n := page.MustEval(`() => document.querySelectorAll('[data-job] img[data-site-icon]').length`).Int(); n != 1 {
+		t.Errorf("%d list icons, want 1 (the one job found on a known site)", n)
+	}
+}

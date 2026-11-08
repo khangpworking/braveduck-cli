@@ -15,6 +15,7 @@ import { N_ } from '@/lib/n'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
+import { SiteIcon } from '@/components/SiteIcon'
 import { Body, CloseButton, Footer, Loading, Problem, Select, Win, useErr, useFresh, useMsg, type WinProps } from './parts'
 
 // Background tasks have no site name of their own.
@@ -135,7 +136,10 @@ function SourcesBody() {
     return (
       <div key={sc.source} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b py-3 last:border-b-0" data-source={sc.source}>
         <div className="min-w-0">
-          <div className="font-semibold">{t(sc.name)}</div>
+          <div className="flex items-center gap-2 font-semibold">
+            <SiteIcon id={sc.source} className="size-5" />
+            {t(sc.name)}
+          </div>
           <div className={cn('text-small', st.bad ? 'font-medium text-danger' : 'text-muted-foreground')}>
             {t(st.text[0], { time: st.when ? msg(st.when) : '' })}
           </div>

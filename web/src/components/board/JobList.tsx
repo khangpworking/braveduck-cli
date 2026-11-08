@@ -3,10 +3,11 @@ import { ChevronRight, Clock, MessageCircle, Pin, Star, Sun } from 'lucide-react
 import { useTranslation } from 'react-i18next'
 import type { Job } from '@/lib/api'
 import type { TodayEntry } from '@/lib/jobs'
-import { shortCompany } from '@/lib/jobs'
+import { shortCompany, sourceName } from '@/lib/jobs'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { SiteIcon } from '@/components/SiteIcon'
 import { Company, Due, GradeBadge, PayKm, Warning } from './bits'
 
 export const JobRow = memo(function JobRow({ job, current, onOpen }: { job: Job; current: boolean; onOpen: (job: Job) => void }) {
@@ -28,8 +29,11 @@ export const JobRow = memo(function JobRow({ job, current, onOpen }: { job: Job;
           {job.pinned && <Pin className="size-4 shrink-0 text-muted-foreground" aria-label={t('Pinned')} />}
           <span className="truncate">{job.title}</span>
         </span>
-        <span className="block truncate text-small text-muted-foreground">
-          <Company job={job} />
+        <span className="flex items-center gap-1.5 text-small text-muted-foreground">
+          <SiteIcon id={job.discovery_source} label={t(sourceName(job.discovery_source))} />
+          <span className="truncate">
+            <Company job={job} />
+          </span>
         </span>
         <span className="block text-body">
           <PayKm job={job} />
