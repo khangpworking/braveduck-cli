@@ -30,6 +30,7 @@ type Record struct {
 	Founded string // the day it started operating, YYYY-MM-DD; "" if the page doesn't say
 	Status  string // the register's own words, e.g. "NNT đang hoạt động"
 	URL     string // the company's page on the site
+	Address string // its registered address
 }
 
 // ErrNotFound means the register has no single company with that exact name.
@@ -188,9 +189,21 @@ func (r *Register) find(ctx context.Context, name, province string) (Record, err
 	return unique(matches)
 }
 
+// unique is the one company among matches. The register sometimes lists one
+// company twice (the same name at the same registered address under two tax
+// codes, e.g. FPT Telecom): that's one company, which started on the earlier
+// date. Different addresses are different companies: no answer.
 func unique(matches []Record) (Record, error) {
 	if len(matches) == 1 {
 		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		addr := Key(matches[0].Address)
+		same := addr != "" && !slices.ContainsFunc(matches, func(m Record) bool { return Key(m.Address) != addr })
+		dated := slices.DeleteFunc(slices.Clone(matches), func(m Record) bool { return m.Founded == "" })
+		if same && len(dated) > 0 {
+			return slices.MinFunc(dated, func(a, b Record) int { return strings.Compare(a.Founded, b.Founded) }), nil
+		}
 	}
 	return Record{}, ErrNotFound
 }
@@ -260,7 +273,7 @@ func parseCompany(page fetchedPage) (Record, string, string, error) {
 			} `json:"address"`
 		}
 		if json.Unmarshal([]byte(m[1]), &o) == nil && o.Type == "Organization" && o.TaxID != "" {
-			rec = Record{TaxCode: o.TaxID, Name: cmp.Or(o.LegalName, o.Name), Founded: o.FoundingDate}
+			rec = Record{TaxCode: o.TaxID, Name: cmp.Or(o.LegalName, o.Name), Founded: o.FoundingDate, Address: o.Address.StreetAddress}
 			alternate, province = o.AlternateName, Province(o.Address.StreetAddress)
 			break
 		}

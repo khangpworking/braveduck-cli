@@ -276,3 +276,23 @@ func TestEnglishCandidateAndTotalRequestLimits(t *testing.T) {
 		})
 	}
 }
+
+// One company listed twice (same name, same registered address, two tax
+// codes, as FPT Telecom is) is one company: its earlier date.
+func TestOneCompanyListedTwiceIsOne(t *testing.T) {
+	const addr = "Tầng 2, tòa nhà FPT Cầu Giấy, số 17 phố Duy Tân, Phường Cầu Giấy, TP Hà Nội, Việt Nam."
+	search := `<div class="tax-result-list">` + searchResult("0105977674", legalName) + searchResult("0101778163", legalName) + `</div>`
+	later := strings.Replace(detail("0105977674", legalName, "", addr), "2021-11-15", "2012-08-22", 1)
+	earlier := strings.Replace(detail("0101778163", legalName, "", addr), "2021-11-15", "2005-09-21", 1)
+	reg, _ := siteWith(t, search, map[string]string{"0105977674": later, "0101778163": earlier})
+	rec, err := reg.Find(context.Background(), legalName, "Duy Tân, Cầu Giấy, Hà Nội")
+	if err != nil || rec.TaxCode != "0101778163" || rec.Founded != "2005-09-21" {
+		t.Fatalf("got %+v, %v; want the 2005 record", rec, err)
+	}
+	// Same name and province but another address: two companies, no answer.
+	other := strings.Replace(later, "số 17 phố Duy Tân", "số 9 phố Lý Thường Kiệt", 1)
+	reg, _ = siteWith(t, search, map[string]string{"0105977674": other, "0101778163": earlier})
+	if _, err := reg.Find(context.Background(), legalName, "Hà Nội"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("two addresses: %v, want not found", err)
+	}
+}
