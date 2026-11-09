@@ -33,7 +33,8 @@ supported links, SSRF guard), `crawl` (VietnamWorks API, CareerLink),
 passphrase), `browser` (go-rod over a self-provisioned Chromium: login
 windows, assisted-apply windows, PDF printing, page fetching), `topcv`
 (read-only application history), `geo` (OSM Nominatim, cached),
-`company` (the business register on dulieuphapluat.vn, by company name, cached),
+`company` (dulieuphapluat.vn: exact legal names, province checks for duplicate names
+and English aliases, verified redirects; cached by name and province),
 `jev` (TypeSafe's Jev decision model), `apply`, `markdown`.
 
 **Background work** (`service.RunScheduler`, while the board runs): built-in

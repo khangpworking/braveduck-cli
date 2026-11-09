@@ -188,7 +188,7 @@ function Registered({ job }: { job: Job }) {
   return (
     <p className="text-small text-muted-foreground">
       {!found
-        ? t('Not in the business register by this name')
+        ? t('No exact match on dulieuphapluat.vn')
         : day
           ? t('In business since {date}', { date: day.toLocaleDateString(locale(), { day: 'numeric', month: 'numeric', year: 'numeric' }) })
           : t('In the business register')}
