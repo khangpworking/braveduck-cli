@@ -109,6 +109,10 @@ var migrations = []string{
 	// away every name the register holds twice, and most real ones are.
 	`DELETE FROM company_cache WHERE found = 0;
 	 UPDATE jobs SET company_active_date = NULL, company_masothue_url = NULL WHERE company_active_date = 'not_found';`,
+	// 13: recheck every answer with province matching and verified identities.
+	`DELETE FROM company_cache;
+	 UPDATE jobs SET company_active_date = NULL, company_masothue_url = NULL,
+	   company_masothue_name = NULL, company_tax_code = NULL, company_reg_status = NULL;`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

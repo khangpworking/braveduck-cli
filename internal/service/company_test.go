@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
 	"github.com/khangpworking/braveduck-cli/internal/core/company"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
+	"github.com/khangpworking/braveduck-cli/internal/store"
 )
 
 type fakeRegister struct {
@@ -16,7 +18,7 @@ type fakeRegister struct {
 	asked []string
 }
 
-func (f *fakeRegister) Find(_ context.Context, name string) (company.Record, error) {
+func (f *fakeRegister) Find(_ context.Context, name, _ string) (company.Record, error) {
 	f.asked = append(f.asked, name)
 	if f.down {
 		return company.Record{}, errors.New("business register: HTTP 503")
@@ -127,5 +129,119 @@ func TestAGroupsNameIsNotACompany(t *testing.T) {
 	s.AddJob(ctx, NewJob{Title: "AI Engineer", Company: "Việc làm AI Engineer -Việt Nam", Source: "facebook"})
 	if res, _ := s.UpdateCompanies(ctx, 10); res.Lookups != 0 || len(reg.asked) != 0 {
 		t.Fatalf("looked up a group's name: %+v %q", res, reg.asked)
+	}
+}
+
+type registerFunc func(context.Context, string, string) (company.Record, error)
+
+func (f registerFunc) Find(ctx context.Context, name, location string) (company.Record, error) {
+	return f(ctx, name, location)
+}
+
+func TestLookupDoesNotOverwriteAnEditOrAnAnswer(t *testing.T) {
+	for _, answered := range []bool{false, true} {
+		t.Run(fmt.Sprint(answered), func(t *testing.T) {
+			s := newSvc(t)
+			ctx := context.Background()
+			j, err := s.AddJob(ctx, NewJob{Title: "Kế toán", Company: thienAn})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.SetCompanyRegister(registerFunc(func(ctx context.Context, name, location string) (company.Record, error) {
+				if answered {
+					changed, err := s.st.SetJobCompany(ctx, j.ID, name, "2001-01-01", store.CompanyInfo{TaxCode: "0101778163"})
+					if err != nil || !changed {
+						t.Fatalf("concurrent answer: %v, %v", changed, err)
+					}
+				} else {
+					if _, err := s.UpdateJob(ctx, j.ID, Patch{Company: ptr("New employer")}); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return company.Record{TaxCode: "0309542960", Founded: "2009-10-20", Name: thienAn}, nil
+			}))
+			res, err := s.UpdateCompanies(ctx, 10)
+			if err != nil || res.Filled != 0 || res.Lookups != 1 {
+				t.Fatalf("stale lookup: %+v, %v", res, err)
+			}
+			got, err := s.GetJob(ctx, j.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if answered {
+				if got.CompanyActiveDate != "2001-01-01" || got.CompanyTaxCode != "0101778163" {
+					t.Fatalf("overwrote newer answer: %+v", got)
+				}
+			} else if got.Company != "New employer" || got.CompanyActiveDate != "" || got.CompanyTaxCode != "" {
+				t.Fatalf("attached old identity to edited company: %+v", got)
+			}
+		})
+	}
+}
+
+func TestCachedAnswerAlsoGuardsTheSnapshotName(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	target, err := s.st.Add(ctx, jobs.Job{Title: "Older job", Company: thienAn, SavedAt: "2026-10-01T00:00:00Z"}, s.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.st.Add(ctx, jobs.Job{Title: "Newer job", Company: "Trigger", SavedAt: "2026-11-01T00:00:00Z"}, s.now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.st.PutCompany(ctx, company.LookupKey(thienAn, ""), store.CompanyInfo{Found: true, Founded: "2009-10-20", TaxCode: "0309542960"}, s.now()); err != nil {
+		t.Fatal(err)
+	}
+	s.SetCompanyRegister(registerFunc(func(ctx context.Context, name, location string) (company.Record, error) {
+		if name != "Trigger" {
+			t.Fatalf("cached name was queried: %s", name)
+		}
+		if _, err := s.UpdateJob(ctx, target, Patch{Company: ptr("Edited employer")}); err != nil {
+			t.Fatal(err)
+		}
+		return company.Record{}, company.ErrNotFound
+	}))
+	res, err := s.UpdateCompanies(ctx, 10)
+	if err != nil || res.Filled != 1 || res.Lookups != 1 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	got, err := s.GetJob(ctx, target)
+	if err != nil || got.Company != "Edited employer" || got.CompanyActiveDate != "" {
+		t.Fatalf("stale cached answer: %+v, %v", got, err)
+	}
+}
+
+func TestPersistentCompanyCacheUsesWorkplaceProvince(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+	var asked []string
+	s.SetCompanyRegister(registerFunc(func(ctx context.Context, name, location string) (company.Record, error) {
+		asked = append(asked, location)
+		switch location {
+		case "Hà Nội":
+			return company.Record{TaxCode: "0101778163", Founded: "2005-01-01"}, nil
+		case "TP HCM":
+			return company.Record{TaxCode: "0310409233", Founded: "2010-10-26"}, nil
+		default:
+			return company.Record{}, company.ErrNotFound
+		}
+	}))
+	for i, tc := range []struct{ location, want string }{
+		{"Remote", ""}, {"Hà Nội", "0101778163"}, {"TP HCM", "0310409233"}, {"Bình Dương", "0310409233"},
+	} {
+		id, err := s.st.Add(ctx, jobs.Job{Title: fmt.Sprint(i), Company: thienAn, Location: tc.location}, s.now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res, err := s.UpdateCompanies(ctx, 10); err != nil || res.Filled != 1 {
+			t.Fatalf("%+v, %v", res, err)
+		}
+		got, err := s.GetJob(ctx, id)
+		if err != nil || got.CompanyTaxCode != tc.want {
+			t.Fatalf("%s: %+v, %v", tc.location, got, err)
+		}
+	}
+	if !slices.Equal(asked, []string{"Remote", "Hà Nội", "TP HCM"}) {
+		t.Fatalf("looked up %q", asked)
 	}
 }

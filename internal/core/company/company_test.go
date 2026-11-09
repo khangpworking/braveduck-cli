@@ -67,7 +67,7 @@ func siteWith(t *testing.T, search string, pages map[string]string) (*Register, 
 func TestFindTheOneWithThatName(t *testing.T) {
 	reg, hits := site(t, searchPage, companyPage)
 	// Lower case and short forms, the way a posting writes it.
-	rec, err := reg.Find(context.Background(), "Cty TNHH TM SX Thiên Ấn")
+	rec, err := reg.Find(context.Background(), "Cty TNHH TM SX Thiên Ấn", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestFindTheOneWithThatName(t *testing.T) {
 	}
 	// Asked again (any board on this server): no request.
 	before := hits.Load()
-	if _, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN"); err != nil || hits.Load() != before {
+	if _, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN", ""); err != nil || hits.Load() != before {
 		t.Fatalf("second lookup: err %v, %d more requests", err, hits.Load()-before)
 	}
 }
@@ -89,41 +89,17 @@ func TestFindTheOneWithThatName(t *testing.T) {
 func TestAccentsMakeADifferentCompany(t *testing.T) {
 	reg, _ := site(t, searchPage, companyPage)
 	// THIÊN AN is a different company, and its page isn't the one read.
-	if _, err := reg.Find(context.Background(), "Công ty TNHH Thương mại Sản xuất Thiên"); !errors.Is(err, ErrNotFound) {
+	if _, err := reg.Find(context.Background(), "Công ty TNHH Thương mại Sản xuất Thiên", ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a name no result has exactly: %v, want ErrNotFound", err)
 	}
-	if _, err := reg.Find(context.Background(), "FPT Software"); !errors.Is(err, ErrNotFound) {
+	if _, err := reg.Find(context.Background(), "FPT Software", ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a brand name: %v, want ErrNotFound", err)
-	}
-}
-
-// The register often holds a name twice (a later, duplicate registration):
-// the company is the one still operating that started earliest.
-func TestSameNameTwicePicksTheEarliestOperating(t *testing.T) {
-	twice := strings.Replace(searchPage, "3701071364-cong-ty-tnhh-san-xuat-thuong-mai-an-thien.html\" class=\"tax-company-link\">\n        CÔNG TY TNHH SẢN XUẤT THƯƠNG MẠI AN THIÊN",
-		"0309542961-cong-ty-tnhh-thuong-mai-san-xuat-thien-an.html\" class=\"tax-company-link\">\n        Công Ty TNHH Thương Mại Sản Xuất Thiên Ấn", 1)
-	later := strings.NewReplacer(`"taxID":"0309542960","foundingDate":"2009-10-20"`, `"taxID":"0309542961","foundingDate":"2016-01-05"`).Replace(companyPage)
-	older := strings.Replace(companyPage, `"foundingDate":"2009-10-20"`, `"foundingDate":"2001-02-03"`, 1)
-	closed := strings.Replace(older, "NNT đã được cấp MST", "NNT ngừng hoạt động và đã đóng MST", 1)
-	for _, c := range []struct {
-		name         string
-		first        string
-		wantTax, day string
-	}{
-		{"the earlier one", older, "0309542960", "2001-02-03"},
-		{"the later one, the earlier having closed", closed, "0309542961", "2016-01-05"},
-	} {
-		reg, _ := siteWith(t, twice, map[string]string{"0309542960": c.first, "0309542961": later})
-		rec, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN")
-		if err != nil || rec.TaxCode != c.wantTax || rec.Founded != c.day {
-			t.Errorf("%s: got %s %s, %v; want %s %s", c.name, rec.TaxCode, rec.Founded, err, c.wantTax, c.day)
-		}
 	}
 }
 
 func TestDateFromTheTableWhenTheBlockHasNone(t *testing.T) {
 	reg, _ := site(t, searchPage, strings.Replace(companyPage, `,"foundingDate":"2009-10-20"`, "", 1))
-	rec, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN")
+	rec, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN", "")
 	if err != nil || rec.Founded != "2009-10-20" {
 		t.Fatalf("got %q, %v; want the table's 20/10/2009", rec.Founded, err)
 	}
@@ -132,7 +108,7 @@ func TestDateFromTheTableWhenTheBlockHasNone(t *testing.T) {
 func TestTroubleIsNotRemembered(t *testing.T) {
 	reg, hits := site(t, "<html>Just a moment...</html>", companyPage)
 	for range 2 {
-		if _, err := reg.Find(context.Background(), "Thiên Ấn"); err == nil || errors.Is(err, ErrNotFound) {
+		if _, err := reg.Find(context.Background(), "Thiên Ấn", ""); err == nil || errors.Is(err, ErrNotFound) {
 			t.Fatalf("a page that isn't the search: %v, want an error that isn't ErrNotFound", err)
 		}
 	}
@@ -145,7 +121,7 @@ func TestRequestsKeepTheirDistance(t *testing.T) {
 	reg, _ := site(t, searchPage, companyPage)
 	reg.Interval = 150 * time.Millisecond
 	start := time.Now()
-	if _, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN"); err != nil {
+	if _, err := reg.Find(context.Background(), "CÔNG TY TNHH THƯƠNG MẠI SẢN XUẤT THIÊN ẤN", ""); err != nil {
 		t.Fatal(err)
 	}
 	if d := time.Since(start); d < 150*time.Millisecond {

@@ -1,16 +1,7 @@
-// Package company looks a company up in Vietnam's business register, by its
-// name as a job posting gives it, through dulieuphapluat.vn's public tax-code
-// pages: when it started operating, its tax code, its registered name and
-// whether it's still operating.
-//
-// The site allows these pages in robots.txt with a 2-second crawl delay, so
-// the client keeps every request 2 s apart (across all users of one server),
-// identifies itself, and remembers answers; callers store them too, so each
-// company is looked up once. A name only counts as found when the register
-// has a company with that exact name; anything less is "not found", with a
-// link to the site's search for a person to look themselves. The register
-// often holds the same name twice (a later, duplicate registration): then
-// the one still operating that started earliest is the company.
+// Package company checks exact legal names on dulieuphapluat.vn, using the
+// workplace province to resolve duplicate names and confirm English aliases.
+// Redirects are verified, every request is paced 2 s apart, and each lookup
+// uses at most five requests; unresolved names keep a link to the site's search.
 package company
 
 import (
@@ -39,10 +30,13 @@ type Record struct {
 	Founded string // the day it started operating, YYYY-MM-DD; "" if the page doesn't say
 	Status  string // the register's own words, e.g. "NNT đang hoạt động"
 	URL     string // the company's page on the site
+	Address string // its registered address
 }
 
 // ErrNotFound means the register has no single company with that exact name.
 var ErrNotFound = errors.New("company not found in the business register")
+
+var errNameMismatch = errors.New("company page: name does not match the lookup")
 
 // Site is the default register.
 const Site = "https://dulieuphapluat.vn"
@@ -58,7 +52,7 @@ type Register struct {
 	last time.Time
 
 	seenMu sync.Mutex
-	seen   map[string]result // answers by Key, shared by every board on this server
+	seen   map[string]result // answers by LookupKey, shared by every board on this server
 }
 
 type result struct {
@@ -82,10 +76,10 @@ func SearchURL(name string) string {
 	return Site + "/cong-cu/tra-cuu-ma-so-thue.html?keyword=" + url.QueryEscape(Key(name))
 }
 
-// Find looks name up: a search, then the one company page whose name matches.
-func (r *Register) Find(ctx context.Context, name string) (Record, error) {
-	key := Key(name)
-	if key == "" {
+// Find looks up a name, using the workplace province when the name is ambiguous.
+func (r *Register) Find(ctx context.Context, name, location string) (Record, error) {
+	key := LookupKey(name, location)
+	if Key(name) == "" {
 		return Record{}, ErrNotFound
 	}
 	r.seenMu.Lock()
@@ -94,7 +88,7 @@ func (r *Register) Find(ctx context.Context, name string) (Record, error) {
 	if ok {
 		return res.rec, res.err
 	}
-	rec, err := r.find(ctx, name, key)
+	rec, err := r.find(ctx, name, Province(location))
 	if err == nil || errors.Is(err, ErrNotFound) {
 		r.seenMu.Lock()
 		if r.seen == nil || len(r.seen) >= 5000 {
@@ -106,52 +100,152 @@ func (r *Register) Find(ctx context.Context, name string) (Record, error) {
 	return rec, err
 }
 
-func (r *Register) find(ctx context.Context, name, key string) (Record, error) {
-	page, err := r.get(ctx, r.Base+"/cong-cu/tra-cuu-ma-so-thue.html?keyword="+url.QueryEscape(Key(name)))
+const searchPath = "/cong-cu/tra-cuu-ma-so-thue.html"
+const maxRequests = 5
+
+func (r *Register) find(ctx context.Context, name, province string) (Record, error) {
+	budget := maxRequests
+	key := Key(name)
+	page, err := r.get(ctx, r.Base+searchPath+"?keyword="+url.QueryEscape(key), &budget)
 	if err != nil {
 		return Record{}, err
 	}
-	if !strings.Contains(page, "tax-result-list") && !strings.Contains(page, "tax-search-result-summary") {
-		return Record{}, errors.New("company search: the page has changed")
+	if companyURLRE.MatchString(page.url.Path) {
+		return acceptPage(page, key, province, false)
 	}
-	var hits []string
-	for _, m := range resultRE.FindAllStringSubmatch(page, -1) {
-		if Key(html.UnescapeString(m[2])) == key && !slices.Contains(hits, m[1]) {
-			hits = append(hits, m[1])
-		}
+	hits, err := searchHits(page.body, func(n string) bool { return n == key })
+	if err != nil {
+		return Record{}, err
 	}
-	switch len(hits) {
-	case 0:
-		return Record{}, ErrNotFound
-	case 1:
-		return r.company(ctx, r.Base+hits[0])
-	}
-	return r.pick(ctx, hits)
-}
-
-// MaxSameName caps the company pages read when several share the name.
-const MaxSameName = 3
-
-// pick reads the companies sharing a name and returns the one still
-// operating that started earliest; if their pages can't tell them apart
-// (no dates), none.
-func (r *Register) pick(ctx context.Context, hits []string) (Record, error) {
-	var recs []Record
-	for _, h := range hits[:min(len(hits), MaxSameName)] {
-		rec, err := r.company(ctx, r.Base+h)
+	if len(hits) == 1 {
+		page, err := r.get(ctx, r.Base+hits[0], &budget)
 		if err != nil {
 			return Record{}, err
 		}
-		recs = append(recs, rec)
+		return acceptPage(page, key, province, false)
 	}
-	if open := slices.DeleteFunc(slices.Clone(recs), func(x Record) bool { return Closed(x.Status) }); len(open) > 0 {
-		recs = open
+	if len(hits) > 1 {
+		// Never pick from a partial set of same-name companies.
+		if province == "" || len(hits) > budget {
+			return Record{}, ErrNotFound
+		}
+		var matches []Record
+		for _, hit := range hits {
+			page, err := r.get(ctx, r.Base+hit, &budget)
+			if err != nil {
+				return Record{}, err
+			}
+			rec, err := acceptPage(page, key, province, true)
+			if err == nil {
+				matches = append(matches, rec)
+			} else if !errors.Is(err, ErrNotFound) {
+				return Record{}, err
+			}
+		}
+		return unique(matches)
 	}
-	recs = slices.DeleteFunc(recs, func(x Record) bool { return x.Founded == "" })
-	if len(recs) == 0 {
+
+	distinctive := englishName(key)
+	if distinctive == "" || province == "" {
 		return Record{}, ErrNotFound
 	}
-	return slices.MinFunc(recs, func(a, b Record) int { return strings.Compare(a.Founded, b.Founded) }), nil
+	page, err = r.get(ctx, r.Base+searchPath+"?keyword="+url.QueryEscape(distinctive), &budget)
+	if err != nil {
+		return Record{}, err
+	}
+	if companyURLRE.MatchString(page.url.Path) {
+		return acceptPage(page, key, province, true)
+	}
+	hits, err = searchHits(page.body, func(n string) bool {
+		for _, word := range strings.Fields(distinctive) {
+			if !strings.Contains(" "+n+" ", " "+word+" ") {
+				return false
+			}
+		}
+		return true
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	var matches []Record
+	var mismatch error
+	for _, hit := range hits[:min(len(hits), 3)] {
+		page, err := r.get(ctx, r.Base+hit, &budget)
+		if err != nil {
+			return Record{}, err
+		}
+		rec, err := acceptPage(page, key, province, true)
+		if err == nil {
+			matches = append(matches, rec)
+		} else if errors.Is(err, errNameMismatch) {
+			mismatch = err
+		} else if !errors.Is(err, ErrNotFound) {
+			return Record{}, err
+		}
+	}
+	if len(matches) == 0 && mismatch != nil {
+		return Record{}, mismatch
+	}
+	return unique(matches)
+}
+
+// unique is the one company among matches. The register sometimes lists one
+// company twice (the same name at the same registered address under two tax
+// codes, e.g. FPT Telecom): that's one company, which started on the earlier
+// date. Different addresses are different companies: no answer.
+func unique(matches []Record) (Record, error) {
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		addr := Key(matches[0].Address)
+		same := addr != "" && !slices.ContainsFunc(matches, func(m Record) bool { return Key(m.Address) != addr })
+		dated := slices.DeleteFunc(slices.Clone(matches), func(m Record) bool { return m.Founded == "" })
+		if same && len(dated) > 0 {
+			return slices.MinFunc(dated, func(a, b Record) int { return strings.Compare(a.Founded, b.Founded) }), nil
+		}
+	}
+	return Record{}, ErrNotFound
+}
+
+func searchHits(body string, match func(string) bool) ([]string, error) {
+	if !strings.Contains(body, "tax-result-list") && !strings.Contains(body, "tax-search-result-summary") {
+		return nil, errors.New("company search: the page has changed")
+	}
+	var hits []string
+	for _, m := range resultRE.FindAllStringSubmatch(body, -1) {
+		if match(Key(html.UnescapeString(m[2]))) && !slices.Contains(hits, m[1]) {
+			hits = append(hits, m[1])
+		}
+	}
+	return hits, nil
+}
+
+// English legal forms are stripped only for discovery, never for identity.
+func englishName(key string) string {
+	for _, suffix := range []string{"JOINT STOCK COMPANY", "COMPANY LIMITED", "CO LTD", "JSC", "CORPORATION"} {
+		if s, ok := strings.CutSuffix(key, " "+suffix); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func acceptPage(page fetchedPage, key, province string, requireProvince bool) (Record, error) {
+	rec, alternate, registeredProvince, err := parseCompany(page)
+	if err != nil {
+		return Record{}, err
+	}
+	if Key(rec.Name) != key {
+		if englishName(key) == "" || Key(alternate) != key {
+			return Record{}, errNameMismatch
+		}
+		requireProvince = true
+	}
+	if (requireProvince || englishName(key) != "") && (province == "" || registeredProvince != province) {
+		return Record{}, ErrNotFound
+	}
+	return rec, nil
 }
 
 // Closed reports whether the register's status says the company has
@@ -162,79 +256,122 @@ func Closed(status string) bool {
 	return strings.Contains(s, "ngừng hoạt động") || strings.Contains(s, "đóng mst")
 }
 
-// company reads one company page: its schema.org Organization block, with
-// the table rows as a fallback for the date.
-func (r *Register) company(ctx context.Context, link string) (Record, error) {
-	page, err := r.get(ctx, link)
-	if err != nil {
-		return Record{}, err
-	}
+// parseCompany reads only company metadata, never representative details.
+func parseCompany(page fetchedPage) (Record, string, string, error) {
 	var rec Record
-	for _, m := range jsonLDRE.FindAllStringSubmatch(page, -1) {
+	var alternate, province string
+	for _, m := range jsonLDRE.FindAllStringSubmatch(page.body, -1) {
 		var o struct {
-			Type         string `json:"@type"`
-			Name         string `json:"name"`
-			LegalName    string `json:"legalName"`
-			TaxID        string `json:"taxID"`
-			FoundingDate string `json:"foundingDate"`
-			URL          string `json:"url"`
+			Type          string `json:"@type"`
+			Name          string `json:"name"`
+			LegalName     string `json:"legalName"`
+			AlternateName string `json:"alternateName"`
+			TaxID         string `json:"taxID"`
+			FoundingDate  string `json:"foundingDate"`
+			Address       struct {
+				StreetAddress string `json:"streetAddress"`
+			} `json:"address"`
 		}
 		if json.Unmarshal([]byte(m[1]), &o) == nil && o.Type == "Organization" && o.TaxID != "" {
-			rec = Record{TaxCode: o.TaxID, Name: cmp.Or(o.LegalName, o.Name), Founded: o.FoundingDate, URL: o.URL}
+			rec = Record{TaxCode: o.TaxID, Name: cmp.Or(o.LegalName, o.Name), Founded: o.FoundingDate, Address: o.Address.StreetAddress}
+			alternate, province = o.AlternateName, Province(o.Address.StreetAddress)
 			break
 		}
 	}
 	if rec.TaxCode == "" {
-		return Record{}, errors.New("company page: no company data on it (the page has changed)")
+		return Record{}, "", "", errors.New("company page: no company data on it (the page has changed)")
 	}
-	if !dayRE.MatchString(rec.Founded) {
-		rec.Founded = ""
-		if m := startedRE.FindStringSubmatch(page); m != nil {
+	if m := companyURLRE.FindStringSubmatch(page.url.Path); m == nil || m[1] != rec.TaxCode {
+		return Record{}, "", "", errors.New("company page: tax ID does not match its URL")
+	}
+	if rec.Founded == "" {
+		if m := startedRE.FindStringSubmatch(page.body); m != nil {
 			rec.Founded = m[3] + "-" + m[2] + "-" + m[1]
 		}
 	}
-	if m := statusRE.FindStringSubmatch(page); m != nil {
+	if rec.Founded != "" {
+		if _, err := time.Parse("2006-01-02", rec.Founded); err != nil {
+			return Record{}, "", "", fmt.Errorf("company page: invalid founding date: %w", err)
+		}
+	}
+	if m := statusRE.FindStringSubmatch(page.body); m != nil {
 		rec.Status = strings.Join(strings.Fields(html.UnescapeString(tagRE.ReplaceAllString(m[1], " "))), " ")
 	}
-	if !strings.HasPrefix(rec.URL, Site+"/") {
-		rec.URL = strings.Replace(link, r.Base, Site, 1)
-	}
-	return rec, nil
+	rec.URL = Site + page.url.Path
+	return rec, alternate, province, nil
 }
 
 var (
 	// A search result: the company's page (on the site itself) and its name.
-	resultRE  = regexp.MustCompile(`<a href="(?:https://dulieuphapluat\.vn)?(/cong-cu/ma-so-thue/[0-9]{10}(?:-[0-9]{3})?-[a-z0-9-]+\.html)" class="tax-company-link">([^<]*)</a>`)
-	jsonLDRE  = regexp.MustCompile(`<script[^>]+application/ld\+json[^>]*>([\s\S]*?)</script>`)
-	startedRE = regexp.MustCompile(`Ngày bắt đầu hoạt động</td>\s*<td class="tax-detail-value[^"]*">\s*(\d{2})/(\d{2})/(\d{4})`)
-	statusRE  = regexp.MustCompile(`<span class="tax-detail-meta-label">Trạng thái</span>\s*<span[^>]*>([\s\S]*?)</span>`)
-	tagRE     = regexp.MustCompile(`<[^>]+>`)
-	dayRE     = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	resultRE     = regexp.MustCompile(`<a href="(?:https://dulieuphapluat\.vn)?(/cong-cu/ma-so-thue/[0-9]{10}(?:-[0-9]{3})?-[a-z0-9-]+\.html)" class="tax-company-link">([^<]*)</a>`)
+	jsonLDRE     = regexp.MustCompile(`<script[^>]+application/ld\+json[^>]*>([\s\S]*?)</script>`)
+	startedRE    = regexp.MustCompile(`Ngày bắt đầu hoạt động</td>\s*<td class="tax-detail-value[^"]*">\s*(\d{2})/(\d{2})/(\d{4})`)
+	statusRE     = regexp.MustCompile(`<span class="tax-detail-meta-label">Trạng thái</span>\s*<span[^>]*>([\s\S]*?)</span>`)
+	tagRE        = regexp.MustCompile(`<[^>]+>`)
+	companyURLRE = regexp.MustCompile(`^/cong-cu/ma-so-thue/([0-9]{10}(?:-[0-9]{3})?)-[a-z0-9-]+\.html$`)
 )
 
-func (r *Register) get(ctx context.Context, link string) (string, error) {
-	if err := r.wait(ctx); err != nil {
-		return "", err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
+type fetchedPage struct {
+	url  *url.URL
+	body string
+}
+
+func (r *Register) get(ctx context.Context, link string, budget *int) (fetchedPage, error) {
+	base, err := url.Parse(r.Base)
 	if err != nil {
-		return "", err
+		return fetchedPage{}, err
 	}
-	req.Header.Set("User-Agent", r.UserAgent)
-	req.Header.Set("Accept", "text/html")
-	resp, err := r.Client.Do(req)
+	u, err := url.Parse(link)
 	if err != nil {
-		return "", fmt.Errorf("business register: %w", err)
+		return fetchedPage{}, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("business register: HTTP %d", resp.StatusCode)
+	client := *r.Client
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	for hops := 0; ; hops++ {
+		if u.Scheme != base.Scheme || u.Host != base.Host || u.User != nil ||
+			(u.Path != searchPath && !companyURLRE.MatchString(u.Path)) {
+			return fetchedPage{}, errors.New("business register: unsafe redirect URL")
+		}
+		if *budget == 0 {
+			return fetchedPage{}, errors.New("business register: lookup request budget exhausted")
+		}
+		if err := r.wait(ctx); err != nil {
+			return fetchedPage{}, err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return fetchedPage{}, err
+		}
+		req.Header.Set("User-Agent", r.UserAgent)
+		req.Header.Set("Accept", "text/html")
+		*budget--
+		resp, err := client.Do(req)
+		if err != nil {
+			return fetchedPage{}, fmt.Errorf("business register: %w", err)
+		}
+		switch resp.StatusCode {
+		case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+			resp.Body.Close()
+			if hops >= 2 {
+				return fetchedPage{}, errors.New("business register: too many redirects")
+			}
+			u, err = resp.Location()
+			if err != nil {
+				return fetchedPage{}, fmt.Errorf("business register: %w", err)
+			}
+			continue
+		case http.StatusOK:
+			b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+			resp.Body.Close()
+			if err != nil {
+				return fetchedPage{}, fmt.Errorf("business register: %w", err)
+			}
+			return fetchedPage{u, string(b)}, nil
+		default:
+			resp.Body.Close()
+			return fetchedPage{}, fmt.Errorf("business register: HTTP %d", resp.StatusCode)
+		}
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return "", fmt.Errorf("business register: %w", err)
-	}
-	return string(b), nil
 }
 
 // wait enforces the minimum gap between requests across goroutines.

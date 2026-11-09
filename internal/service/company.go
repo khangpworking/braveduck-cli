@@ -17,7 +17,7 @@ import (
 
 // companyFinder is the register; swapped in tests.
 type companyFinder interface {
-	Find(ctx context.Context, name string) (company.Record, error)
+	Find(ctx context.Context, name, location string) (company.Record, error)
 }
 
 // SetCompanyRegister turns the lookups on (`braveduck serve`; nil turns them
@@ -60,6 +60,7 @@ func (s *Service) UpdateCompanies(ctx context.Context, maxLookups int) (CompanyR
 		if j.CompanyActiveDate != "" || j.Status == "closed" || key == "" || groups[key] {
 			continue
 		}
+		key = company.LookupKey(j.Company, j.Location)
 		c, cached, err := s.st.GetCompany(ctx, key)
 		if err != nil {
 			return res, err
@@ -70,7 +71,7 @@ func (s *Service) UpdateCompanies(ctx context.Context, maxLookups int) (CompanyR
 				continue
 			}
 			res.Lookups++
-			rec, err := s.reg.Find(ctx, j.Company)
+			rec, err := s.reg.Find(ctx, j.Company, j.Location)
 			switch {
 			case errors.Is(err, company.ErrNotFound):
 				c = store.CompanyInfo{URL: company.SearchURL(j.Company)}
@@ -93,10 +94,13 @@ func (s *Service) UpdateCompanies(ctx context.Context, maxLookups int) (CompanyR
 		case date == "":
 			date = jobs.CompanyNoDate
 		}
-		if err := s.st.SetJobCompany(ctx, j.ID, date, c); err != nil {
+		changed, err := s.st.SetJobCompany(ctx, j.ID, j.Company, date, c)
+		if err != nil {
 			return res, err
 		}
-		res.Filled++
+		if changed {
+			res.Filled++
+		}
 	}
 	return res, nil
 }

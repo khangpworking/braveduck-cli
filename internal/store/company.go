@@ -45,11 +45,17 @@ func (s *Store) PutCompany(ctx context.Context, key string, c CompanyInfo, now t
 }
 
 // SetJobCompany records on a job what the register said; activeDate is the
-// founding day or one of the jobs.Company* sentinels.
-func (s *Store) SetJobCompany(ctx context.Context, id int64, activeDate string, c CompanyInfo) error {
-	_, err := s.db.ExecContext(ctx,
+// founding day or one of the jobs.Company* sentinels. A stale lookup cannot
+// overwrite an edited name or an answer written while it was in flight.
+func (s *Store) SetJobCompany(ctx context.Context, id int64, name, activeDate string, c CompanyInfo) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE jobs SET company_active_date = ?, company_masothue_url = ?, company_masothue_name = ?,
-		   company_tax_code = ?, company_reg_status = ? WHERE id = ?`,
-		activeDate, c.URL, c.Name, c.TaxCode, c.Status, id)
-	return err
+		   company_tax_code = ?, company_reg_status = ?
+		 WHERE id = ? AND company IS ? AND COALESCE(company_active_date, '') = ''`,
+		activeDate, c.URL, c.Name, c.TaxCode, c.Status, id, name)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
