@@ -20,7 +20,9 @@ func TestLiveRegister(t *testing.T) {
 	}
 	t.Logf("found: %+v", rec)
 	for _, tc := range []struct{ name, location, tax string }{
-		{"CÔNG TY CỔ PHẦN VIỄN THÔNG FPT", "Hà Nội", "0101778163"},
+		{"CÔNG TY CỔ PHẦN VIỄN THÔNG FPT", "Đà Nẵng", "0101778163"},            // listed twice in one ward; a branch
+		{"Công Ty CP Diana Unicharm", "Bình Chánh, Hồ Chí Minh", "0100507058"}, // listed twice; a factory elsewhere
+		{"Công Ty TNHH Lửa Á Châu", "Đức Nhuận, Hồ Chí Minh", "0315089499"},    // two companies; the ward says which
 		{"CÔNG TY CỔ PHẦN CÔNG NGHỆ PREP", "Hà Nội", "0109817671"},
 		{"BOSCH GLOBAL SOFTWARE TECHNOLOGIES COMPANY LIMITED", "Etown Building, 364 Cong Hoa, Tan Binh, Ho Chi Minh", "0310409233"},
 	} {
