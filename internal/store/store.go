@@ -113,6 +113,10 @@ var migrations = []string{
 	`DELETE FROM company_cache;
 	 UPDATE jobs SET company_active_date = NULL, company_masothue_url = NULL,
 	   company_masothue_name = NULL, company_tax_code = NULL, company_reg_status = NULL;`,
+	// 14: look the "not found" companies up again: same-name records are now
+	// told apart by ward, and a workplace in another province is a branch.
+	`DELETE FROM company_cache WHERE found = 0;
+	 UPDATE jobs SET company_active_date = NULL, company_masothue_url = NULL WHERE company_active_date = 'not_found';`,
 }
 
 // Open opens (creating if needed) the database at path and migrates it to the

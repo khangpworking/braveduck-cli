@@ -184,7 +184,8 @@ func TestEnglishDiscoveryRequiresIdentityAndProvince(t *testing.T) {
 		{"wrong province", englishBosch, "Ha Noi", "HCM", false, ""},
 		{"unknown register", englishBosch, "", "HCM", false, ""},
 		{"unknown workplace", englishBosch, "HCM", "Remote", false, ""},
-		{"different English name", "BOSCH SERVICE COMPANY LIMITED", "HCM", "HCM", true, ""},
+		// Another company's name is an answer (no match), not trouble to retry.
+		{"different English name", "BOSCH SERVICE COMPANY LIMITED", "HCM", "HCM", false, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var requests atomic.Int32
@@ -289,10 +290,38 @@ func TestOneCompanyListedTwiceIsOne(t *testing.T) {
 	if err != nil || rec.TaxCode != "0101778163" || rec.Founded != "2005-09-21" {
 		t.Fatalf("got %+v, %v; want the 2005 record", rec, err)
 	}
-	// Same name and province but another address: two companies, no answer.
-	other := strings.Replace(later, "số 17 phố Duy Tân", "số 9 phố Lý Thường Kiệt", 1)
+	// The same ward written another way is still the one company, and the
+	// workplace can be a branch in another province.
+	other := strings.Replace(later, "Tầng 2, tòa nhà FPT Cầu Giấy, số 17 phố Duy Tân", "Toà FPT, 17 Duy Tân", 1)
 	reg, _ = siteWith(t, search, map[string]string{"0105977674": other, "0101778163": earlier})
+	if rec, err := reg.Find(context.Background(), legalName, "Hải Châu, Đà Nẵng"); err != nil || rec.TaxCode != "0101778163" {
+		t.Fatalf("a branch in Đà Nẵng: %+v, %v; want the 2005 record", rec, err)
+	}
+	// Another ward in the same province: two companies, no answer.
+	apart := strings.Replace(later, "Phường Cầu Giấy", "Phường Hoàng Mai", 1)
+	reg, _ = siteWith(t, search, map[string]string{"0105977674": apart, "0101778163": earlier})
 	if _, err := reg.Find(context.Background(), legalName, "Hà Nội"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("two addresses: %v, want not found", err)
+		t.Fatalf("two wards: %v, want not found", err)
+	}
+}
+
+// Two different companies with one name in one city: the workplace's ward
+// says which (Lửa Á Châu: one in old Ward 25, one in Đức Nhuận).
+func TestTheWorkplaceWardPicksAmongSameNames(t *testing.T) {
+	search := `<div class="tax-result-list">` + searchResult("0310174951", legalName) + searchResult("0315089499", legalName) + `</div>`
+	old := strings.Replace(detail("0310174951", legalName, "", "Phòng 102, số 441/15B Điện Biên Phủ, Phường 25(Hết hiệu lực), TP Hồ Chí Minh, Việt Nam."), "2021-11-15", "2010-08-01", 1)
+	now := strings.Replace(detail("0315089499", legalName, "", "72/24 Phan Đăng Lưu, Phường Đức Nhuận, TP Hồ Chí Minh, Việt Nam."), "2021-11-15", "2018-06-04", 1)
+	pages := map[string]string{"0310174951": old, "0315089499": now}
+	for _, tc := range []struct{ location, want string }{
+		{"Đức Nhuận, Hồ Chí Minh", "0315089499"},
+		{"Phường 25, Bình Thạnh, Hồ Chí Minh", "0310174951"},
+		{"25 Lê Lợi, Quận 1, Hồ Chí Minh", ""}, // a house number isn't a ward
+		{"Hồ Chí Minh", ""},
+	} {
+		reg, _ := siteWith(t, search, pages)
+		rec, err := reg.Find(context.Background(), legalName, tc.location)
+		if tc.want == "" && !errors.Is(err, ErrNotFound) || tc.want != "" && rec.TaxCode != tc.want {
+			t.Errorf("%s: %s, %v; want %q", tc.location, rec.TaxCode, err, tc.want)
+		}
 	}
 }

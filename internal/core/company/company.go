@@ -88,7 +88,7 @@ func (r *Register) Find(ctx context.Context, name, location string) (Record, err
 	if ok {
 		return res.rec, res.err
 	}
-	rec, err := r.find(ctx, name, Province(location))
+	rec, err := r.find(ctx, name, location)
 	if err == nil || errors.Is(err, ErrNotFound) {
 		r.seenMu.Lock()
 		if r.seen == nil || len(r.seen) >= 5000 {
@@ -103,7 +103,8 @@ func (r *Register) Find(ctx context.Context, name, location string) (Record, err
 const searchPath = "/cong-cu/tra-cuu-ma-so-thue.html"
 const maxRequests = 5
 
-func (r *Register) find(ctx context.Context, name, province string) (Record, error) {
+func (r *Register) find(ctx context.Context, name, location string) (Record, error) {
+	province := Province(location)
 	budget := maxRequests
 	key := Key(name)
 	page, err := r.get(ctx, r.Base+searchPath+"?keyword="+url.QueryEscape(key), &budget)
@@ -111,7 +112,7 @@ func (r *Register) find(ctx context.Context, name, province string) (Record, err
 		return Record{}, err
 	}
 	if companyURLRE.MatchString(page.url.Path) {
-		return acceptPage(page, key, province, false)
+		return redirected(acceptPage(page, key, province, false))
 	}
 	hits, err := searchHits(page.body, func(n string) bool { return n == key })
 	if err != nil {
@@ -126,23 +127,24 @@ func (r *Register) find(ctx context.Context, name, province string) (Record, err
 	}
 	if len(hits) > 1 {
 		// Never pick from a partial set of same-name companies.
-		if province == "" || len(hits) > budget {
+		if len(hits) > budget {
 			return Record{}, ErrNotFound
 		}
-		var matches []Record
+		var same []Record
 		for _, hit := range hits {
 			page, err := r.get(ctx, r.Base+hit, &budget)
 			if err != nil {
 				return Record{}, err
 			}
-			rec, err := acceptPage(page, key, province, true)
-			if err == nil {
-				matches = append(matches, rec)
-			} else if !errors.Is(err, ErrNotFound) {
+			rec, _, _, err := parseCompany(page)
+			if err != nil {
 				return Record{}, err
 			}
+			if Key(rec.Name) == key {
+				same = append(same, rec)
+			}
 		}
-		return unique(matches)
+		return pickSameName(same, location)
 	}
 
 	distinctive := englishName(key)
@@ -154,7 +156,7 @@ func (r *Register) find(ctx context.Context, name, province string) (Record, err
 		return Record{}, err
 	}
 	if companyURLRE.MatchString(page.url.Path) {
-		return acceptPage(page, key, province, true)
+		return redirected(acceptPage(page, key, province, true))
 	}
 	hits, err = searchHits(page.body, func(n string) bool {
 		for _, word := range strings.Fields(distinctive) {
@@ -168,41 +170,63 @@ func (r *Register) find(ctx context.Context, name, province string) (Record, err
 		return Record{}, err
 	}
 	var matches []Record
-	var mismatch error
 	for _, hit := range hits[:min(len(hits), 3)] {
 		page, err := r.get(ctx, r.Base+hit, &budget)
 		if err != nil {
 			return Record{}, err
 		}
-		rec, err := acceptPage(page, key, province, true)
+		// Candidates found by a few words of the name: another name is just
+		// another company, not a broken page.
+		rec, err := redirected(acceptPage(page, key, province, true))
 		if err == nil {
 			matches = append(matches, rec)
-		} else if errors.Is(err, errNameMismatch) {
-			mismatch = err
 		} else if !errors.Is(err, ErrNotFound) {
 			return Record{}, err
 		}
 	}
-	if len(matches) == 0 && mismatch != nil {
-		return Record{}, mismatch
-	}
-	return unique(matches)
+	return pickSameName(matches, location)
 }
 
-// unique is the one company among matches. The register sometimes lists one
-// company twice (the same name at the same registered address under two tax
-// codes, e.g. FPT Telecom): that's one company, which started on the earlier
-// date. Different addresses are different companies: no answer.
-func unique(matches []Record) (Record, error) {
-	if len(matches) == 1 {
-		return matches[0], nil
+// redirected treats a page the site sent us to (or one found by a few
+// words of the name) that names another company as no match: asking again
+// gives the same page, so it's an answer, not trouble to retry.
+func redirected(rec Record, err error) (Record, error) {
+	if errors.Is(err, errNameMismatch) {
+		return Record{}, ErrNotFound
 	}
-	if len(matches) > 1 {
-		addr := Key(matches[0].Address)
-		same := addr != "" && !slices.ContainsFunc(matches, func(m Record) bool { return Key(m.Address) != addr })
-		dated := slices.DeleteFunc(slices.Clone(matches), func(m Record) bool { return m.Founded == "" })
-		if same && len(dated) > 0 {
+	return rec, err
+}
+
+// pickSameName is the one company among several with the searched name,
+// judged by their registered addresses from coarse to fine:
+//   - all in one ward: one company listed twice under two tax codes (the
+//     register does this: FPT Telecom, Diana Unicharm), which started on
+//     the earliest date;
+//   - else the one whose ward the workplace address names (two Lửa Á Châu
+//     companies in Ho Chi Minh City; the job is in Đức Nhuận);
+//   - else the one in the workplace's province.
+//
+// Anything less clear is no answer.
+func pickSameName(recs []Record, location string) (Record, error) {
+	switch len(recs) {
+	case 0:
+		return Record{}, ErrNotFound
+	case 1:
+		return recs[0], nil
+	}
+	ward, prov := Ward(recs[0].Address), Province(recs[0].Address)
+	if ward != "" && !slices.ContainsFunc(recs, func(r Record) bool { return Ward(r.Address) != ward || Province(r.Address) != prov }) {
+		if dated := slices.DeleteFunc(slices.Clone(recs), func(r Record) bool { return r.Founded == "" }); len(dated) > 0 {
 			return slices.MinFunc(dated, func(a, b Record) int { return strings.Compare(a.Founded, b.Founded) }), nil
+		}
+	}
+	at := fold(location)
+	if in := slices.DeleteFunc(slices.Clone(recs), func(r Record) bool { return !namesWard(at, Ward(r.Address)) }); len(in) == 1 {
+		return in[0], nil
+	}
+	if p := Province(location); p != "" {
+		if in := slices.DeleteFunc(slices.Clone(recs), func(r Record) bool { return Province(r.Address) != p }); len(in) == 1 {
+			return in[0], nil
 		}
 	}
 	return Record{}, ErrNotFound

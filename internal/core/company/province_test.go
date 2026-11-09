@@ -21,3 +21,17 @@ func TestProvince(t *testing.T) {
 		}
 	}
 }
+
+func TestWard(t *testing.T) {
+	for in, want := range map[string]string{
+		"Tầng 2, số 17 phố Duy Tân, Phường Cầu Giấy, TP Hà Nội, Việt Nam.":          "cau giay",
+		"441/15B Điện Biên Phủ, Phường 25(Hết hiệu lực), TP Hồ Chí Minh, Việt Nam.": "25",
+		"Thôn 3, Xã Đông Anh, TP Hà Nội":                                            "dong anh",
+		"123 Xã Đàn, TP Hà Nội":                                                     "",
+		"TP Hồ Chí Minh":                                                            "",
+	} {
+		if got := Ward(in); got != want {
+			t.Errorf("Ward(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

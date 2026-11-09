@@ -43,7 +43,54 @@ var provinces = [][]string{
 // Addresses run from street to province, so prefer the last named province
 // (a street or ward can itself be named after another province).
 func Province(address string) string {
-	s := strings.Map(func(r rune) rune {
+	s := fold(address)
+	province, last := "", -1
+	for _, names := range provinces {
+		for _, name := range names {
+			if i := strings.LastIndex(s, " "+name+" "); i > last {
+				province, last = names[0], i
+			}
+		}
+	}
+	return province
+}
+
+// Ward is the ward (phường), commune (xã) or special zone in a registered
+// address ("…, Phường Cầu Giấy, TP Hà Nội, Việt Nam." → "cau giay"), folded
+// like fold; "" if it names none.
+func Ward(address string) string {
+	parts := strings.Split(address, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		p := parts[i]
+		if j := strings.IndexAny(p, "("); j >= 0 {
+			p = p[:j] // "Phường 25(Hết hiệu lực)"
+		}
+		f := strings.TrimSpace(fold(p))
+		for _, kind := range []string{"phuong ", "xa ", "dac khu "} {
+			if name, ok := strings.CutPrefix(f, kind); ok && name != "" {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+// namesWard reports whether a folded workplace address names ward. A
+// numbered ward ("Phường 25") must be named as one, not just as a number.
+func namesWard(at, ward string) bool {
+	if ward == "" {
+		return false
+	}
+	if strings.Trim(ward, "0123456789") == "" {
+		return strings.Contains(at, " phuong "+ward+" ") || strings.Contains(at, " p "+ward+" ")
+	}
+	return strings.Contains(at, " "+ward+" ")
+}
+
+// fold lowercases s, drops accents and punctuation, and pads it with spaces
+// so whole words can be found with " word ".
+func fold(s string) string {
+	s = strings.Map(func(r rune) rune {
 		if unicode.Is(unicode.Mn, r) {
 			return -1
 		}
@@ -54,17 +101,8 @@ func Province(address string) string {
 			return ' '
 		}
 		return r
-	}, norm.NFD.String(strings.ToLower(address)))
-	s = " " + strings.Join(strings.Fields(s), " ") + " "
-	province, last := "", -1
-	for _, names := range provinces {
-		for _, name := range names {
-			if i := strings.LastIndex(s, " "+name+" "); i > last {
-				province, last = names[0], i
-			}
-		}
-	}
-	return province
+	}, norm.NFD.String(strings.ToLower(s)))
+	return " " + strings.Join(strings.Fields(s), " ") + " "
 }
 
 // LookupKey scopes both caches to the name and the workplace's province.
