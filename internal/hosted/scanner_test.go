@@ -69,11 +69,26 @@ func TestScannerAPI(t *testing.T) {
 		}
 	}
 
-	// Each round's ask is the scanner's sign of life on the boards it reads for.
+	// Asking for the groups says nothing about the scans: only /health does.
+	for name, svc := range map[string]*service.Service{"alice": alice, "bob": bob, "carol": carol} {
+		if v, _ := svc.CrawlStatus(ctx); len(v.Sources) != 0 {
+			t.Errorf("%s: Facebook's health after only asking for groups = %+v", name, v.Sources)
+		}
+	}
+	if code, _ := scan(t, h, scannerKey, "POST", "/health", `{}`); code != http.StatusBadRequest {
+		t.Fatalf("health without ok: %d", code)
+	}
+	if code, body := scan(t, h, scannerKey, "POST", "/health", `{"ok":false,"error":"WorkerTimeout on 2 groups"}`); code != 200 || !strings.Contains(body, `"boards":3`) {
+		t.Fatalf("failed round = %d %s", code, body)
+	}
+	if v, _ := alice.CrawlStatus(ctx); len(v.Sources) != 1 || v.Sources[0].Healthy || v.Sources[0].LastError != "WorkerTimeout on 2 groups" {
+		t.Fatalf("alice after a failed round = %+v", v.Sources)
+	}
+	scan(t, h, scannerKey, "POST", "/health", `{"ok":true}`)
 	for name, svc := range map[string]*service.Service{"alice": alice, "bob": bob, "carol": carol} {
 		v, _ := svc.CrawlStatus(ctx)
-		if len(v.Sources) != 1 || v.Sources[0].Name != "facebook" || !v.Sources[0].Healthy || v.Sources[0].LastRun == "" {
-			t.Errorf("%s: Facebook after the scanner asked = %+v", name, v.Sources)
+		if len(v.Sources) != 1 || !v.Sources[0].Healthy {
+			t.Errorf("%s after a good round = %+v", name, v.Sources)
 		}
 	}
 

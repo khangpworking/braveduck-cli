@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/khangpworking/braveduck-cli/internal/service"
@@ -36,6 +37,7 @@ func (s *Server) Scanner(key string) http.Handler {
 	mux.HandleFunc("GET /groups", s.scanGroups)
 	mux.HandleFunc("POST /groups/{key}/status", s.scanStatus)
 	mux.HandleFunc("POST /groups/{key}/posts", s.scanPosts)
+	mux.HandleFunc("POST /health", s.scanHealth)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if subtle.ConstantTimeCompare([]byte(got), []byte(key)) != 1 {
@@ -69,12 +71,10 @@ func (s *Server) scanGroups(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		asked := false
 		for _, g := range gs {
 			if g.Paused {
 				continue
 			}
-			asked = true
 			sg, ok := byKey[g.Key]
 			if !ok {
 				sg = &ScanGroup{Key: g.Key, URL: g.URL, Visibility: g.Visibility, CheckedAt: g.CheckedAt}
@@ -85,12 +85,6 @@ func (s *Server) scanGroups(w http.ResponseWriter, r *http.Request) {
 			if g.CheckedAt > sg.CheckedAt {
 				sg.Visibility, sg.CheckedAt = g.Visibility, g.CheckedAt
 			}
-		}
-		if asked {
-			// The scanner asks at the start of every round: that's its sign of
-			// life on this board, so one that stops (logged out, its browser
-			// gone) shows as Facebook going quiet instead of passing unseen.
-			_ = t.svc.ReportCrawl(r.Context(), "facebook", true, "")
 		}
 	}
 	out := make([]ScanGroup, 0, len(order))
@@ -142,4 +136,41 @@ func (s *Server) scanPosts(w http.ResponseWriter, r *http.Request) {
 		added += n
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"added": added, "boards": boards})
+}
+
+// scanHealth records how the scanner's round went on every board it reads
+// for (Facebook on, a group not paused): {"ok": true} when its scans worked,
+// {"ok": false, "error": "…"} when they didn't. A scanner that stops sending
+// it shows on the board as Facebook going quiet; one that sends failures
+// shows the failure. Asking for the groups proves nothing about the scans.
+func (s *Server) scanHealth(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		OK    *bool  `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.OK == nil {
+		writeErr(w, http.StatusBadRequest, `expected {"ok": true|false, "error": "…"}`)
+		return
+	}
+	reason := ""
+	if !*in.OK {
+		reason = strings.TrimSpace(in.Error)
+		if reason == "" {
+			reason = "the Facebook scanner's round failed"
+		}
+	}
+	boards := 0
+	for _, t := range s.tenants() {
+		if !t.svc.SourceOn(r.Context(), "facebook") {
+			continue
+		}
+		gs, err := t.svc.FBGroups(r.Context())
+		if err != nil || !slices.ContainsFunc(gs, func(g service.FBGroup) bool { return !g.Paused }) {
+			continue
+		}
+		if err := t.svc.ReportCrawl(r.Context(), "facebook", *in.OK, reason); err == nil {
+			boards++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"boards": boards})
 }
