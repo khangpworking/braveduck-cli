@@ -21,6 +21,8 @@ export type BaseCV = service.BaseCV
 export type BaseCVReply = wire.BaseCVReply
 export type RatingConfig = wire.RatingConfig
 export type Jev = wire.JevState
+export type Decision = service.DecisionSettings
+export type DecisionUpdate = service.DecisionUpdate
 export type Platform = service.PlatformStatus
 export type Location = service.Location
 export type Place = geo.Place
@@ -54,6 +56,7 @@ export const Q = {
   crawlStatus: ['crawl-status'],
   rating: ['rating-config'],
   jev: ['jev'],
+  decision: ['decision'],
   platforms: ['platforms'],
   location: ['location'],
   agentKey: ['agent-key'],
@@ -80,6 +83,8 @@ export const S = {
   saveRating: (c: RatingConfig) => api<RatingConfig>('PUT', '/rating-config', c),
   jev: () => api<Jev>('GET', '/jev').catch((): Jev => ({ available: false, opt_out: false })),
   setJev: (opt_out: boolean) => api<Jev>('PUT', '/jev', { opt_out }),
+  decision: () => api<Decision>('GET', '/decision'),
+  saveDecision: (u: DecisionUpdate) => api<Decision>('PUT', '/decision', u),
   platforms: () => api<Platform[]>('GET', '/platforms'),
   connect: (id: string) => api<Platform>('POST', `/platforms/${encodeURIComponent(id)}/login`),
   disconnect: (id: string) => api<{ deleted: boolean }>('DELETE', `/platforms/${encodeURIComponent(id)}/login`),

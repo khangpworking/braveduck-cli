@@ -82,7 +82,7 @@ type LeadVerdict struct {
 
 // classifyLead asks Jev what a post is.
 func (s *Service) classifyLead(ctx context.Context, j jobs.Job) (LeadVerdict, error) {
-	c, err := s.jevClient()
+	c, _, serverKey, err := s.decisionClient(ctx)
 	if err != nil {
 		return LeadVerdict{}, err
 	}
@@ -92,8 +92,10 @@ func (s *Service) classifyLead(ctx context.Context, j jobs.Job) (LeadVerdict, er
 	if len(text) > maxJD {
 		text = text[:maxJD]
 	}
-	if err := s.takeJevCall(ctx); err != nil {
-		return LeadVerdict{}, err // the post is kept, as on any Jev error
+	if serverKey {
+		if err := s.takeJevCall(ctx); err != nil {
+			return LeadVerdict{}, err // the post is kept, as on any Jev error
+		}
 	}
 	ans, err := c.Ask(ctx, text, leadQuestion)
 	if err != nil {

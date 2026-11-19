@@ -77,3 +77,43 @@ func TestLoadKey(t *testing.T) {
 		t.Fatalf("env key = %q %q", k, src)
 	}
 }
+
+func TestNewClef(t *testing.T) {
+	c := NewClef("cf-token", "BD23A6717746B9B4EBB6F4C3C84727C7", Clef)
+	if c.Model != Clef || c.Endpoint != "https://api.cloudflare.com/client/v4/accounts/bd23a6717746b9b4ebb6f4c3c84727c7/ai/run/@cf/cloudflare/clef" {
+		t.Fatalf("clef client = %q %q", c.Model, c.Endpoint)
+	}
+	if c := NewClef("t", "bd23a6717746b9b4ebb6f4c3c84727c7", "gpt-4"); c.Model != ClefFlash {
+		t.Fatalf("unknown model fell back to %q, want %q", c.Model, ClefFlash)
+	}
+	if !ValidAccountID("bd23a6717746b9b4ebb6f4c3c84727c7") || ValidAccountID("bd23") || ValidAccountID("../../x") {
+		t.Fatal("ValidAccountID")
+	}
+}
+
+func TestAskClefUnwrapsWorkersAIResult(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte(`{"result":{"answers":{"fit":{"type":"choice","choice":"F","probabilities":{"A":0.0748,"F":0.9252},"confidence":0.72}},"model":"clef-flash"},"success":true,"errors":[],"messages":[]}`))
+	}))
+	defer srv.Close()
+	c := NewClef("cf-secret-777", "bd23a6717746b9b4ebb6f4c3c84727c7", ClefFlash)
+	c.Endpoint = srv.URL
+	a, err := c.Ask(context.Background(), "a job", qs)
+	if err != nil || a["fit"].Choice != "F" {
+		t.Fatalf("ask = %+v, %v", a, err)
+	}
+	if got["model"] != ClefFlash {
+		t.Fatalf("request model = %v, want %s", got["model"], ClefFlash)
+	}
+	fail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope "+r.Header.Get("Authorization"), http.StatusForbidden)
+	}))
+	defer fail.Close()
+	c.Endpoint = fail.URL
+	_, err = c.Ask(context.Background(), "x", qs)
+	if err == nil || !strings.HasPrefix(err.Error(), "clef: HTTP 403") || strings.Contains(err.Error(), "cf-secret-777") {
+		t.Fatalf("error = %v (must name clef, say 403, and never contain the token)", err)
+	}
+}

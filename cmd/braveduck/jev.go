@@ -26,16 +26,31 @@ func cmdJev(ctx context.Context, svc *service.Service, args []string) error {
 			return err
 		}
 		role := "not used (run: braveduck jev enable)"
-		if service.IsJevModel(cfg.DefaultModel) {
+		if service.IsDecisionModel(cfg.DefaultModel) {
 			role = "default rater — scores new jobs automatically while the board runs"
 		} else {
 			for _, m := range cfg.Models {
-				if service.IsJevModel(m) {
+				if service.IsDecisionModel(m) {
 					role = "challenger"
 				}
 			}
 		}
-		fmt.Printf("key:  %s\nrole: %s\nsends: your full profile + each job's text to api.typesafe.ai\n", src, role)
+		dec, err := svc.DecisionSettings(ctx)
+		if err != nil {
+			return err
+		}
+		if dec.Provider == service.ProviderClef {
+			src = "none — paste a Cloudflare Workers AI token and account ID in ⚙ Settings → Rating"
+			if dec.Clef.Saved {
+				src = "Cloudflare Workers AI token pasted in Settings (sealed)"
+			}
+			fmt.Printf("model: %s (Clef, Cloudflare)\nkey:  %s\nrole: %s\nsends: your full profile + each job's text to api.cloudflare.com (Workers AI)\n", dec.Model, src, role)
+		} else {
+			if dec.Jev.Saved {
+				src = "pasted in Settings (sealed)"
+			}
+			fmt.Printf("model: %s (Jev, TypeSafe)\nkey:  %s\nrole: %s\nsends: your full profile + each job's text to api.typesafe.ai\n", dec.Model, src, role)
+		}
 		fmt.Printf("lead check: new posts from %s (not-a-job at ≥%.0f%% → Closed)\n", strings.Join(svc.LeadCheckSources(ctx), ", "), 100*service.LeadCheckThreshold)
 		return nil
 	case "enable":

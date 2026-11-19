@@ -71,17 +71,6 @@ func (s *Service) takeJevCall(ctx context.Context) error {
 // real API with the user's key.
 var loadJevKey = jev.LoadKey
 
-func (s *Service) jevClient() (jevAsker, error) {
-	if s.jev != nil {
-		return s.jev, nil
-	}
-	key, _, err := loadJevKey()
-	if err != nil {
-		return nil, err
-	}
-	return jev.New(key), nil
-}
-
 // IsJevModel reports whether a rater id is a Jev model.
 func IsJevModel(id string) bool { return strings.HasPrefix(id, "jev-") }
 
@@ -138,22 +127,28 @@ func jevState(b RatingBrief) string {
 // JevVerdict turns Jev's answers into a verdict: expected score, letter from
 // the score, and reasons from the sub-answers.
 func JevVerdict(id int64, ans map[string]jev.Answer) Verdict {
+	return decisionVerdict(id, jev.DefaultModel, ans)
+}
+
+// decisionVerdict is JevVerdict for any decision model (Jev or Clef), which
+// answer the same questions in the same shape.
+func decisionVerdict(id int64, model string, ans map[string]jev.Answer) Verdict {
 	score := 0.0
 	for letter, p := range ans["fit"].Probabilities {
 		score += p * letterValue[letter]
 	}
 	score = math.Round(score*10) / 10
-	reasons := []string{fmt.Sprintf("Jev: %s (%.0f%% sure)", ans["fit"].Choice, 100*ans["fit"].Confidence())}
+	reasons := []string{fmt.Sprintf("%s: %s (%.0f%% sure)", providerName(model), ans["fit"].Choice, 100*ans["fit"].Confidence())}
 	for _, q := range []string{"skills", "role", "seniority", "pay", "dealbreaker"} {
 		if l, ok := jevLabels[q][ans[q].Choice]; ok {
 			reasons = append(reasons, l)
 		}
 	}
-	return Verdict{JobID: id, Model: jev.DefaultModel, Score: score, Letter: rating.LetterForScore(score), Reasoning: strings.Join(reasons, " • ")}
+	return Verdict{JobID: id, Model: model, Score: score, Letter: rating.LetterForScore(score), Reasoning: strings.Join(reasons, " • ")}
 }
 
-// JevRate rates job id with Jev now and stores the verdict (the badge, when
-// Jev is the default rater).
+// JevRate rates job id now with the chosen decision model (Jev or Clef) and
+// stores the verdict (the badge, when it is the default rater).
 func (s *Service) JevRate(ctx context.Context, id int64) (jobs.Job, error) {
 	if out, err := s.JevOptedOut(ctx); err != nil {
 		return jobs.Job{}, err
@@ -164,18 +159,20 @@ func (s *Service) JevRate(ctx context.Context, id int64) (jobs.Job, error) {
 	if err != nil {
 		return jobs.Job{}, err
 	}
-	c, err := s.jevClient()
+	c, model, serverKey, err := s.decisionClient(ctx)
 	if err != nil {
 		return jobs.Job{}, err
 	}
-	if err := s.takeJevCall(ctx); err != nil {
-		return jobs.Job{}, err
+	if serverKey {
+		if err := s.takeJevCall(ctx); err != nil {
+			return jobs.Job{}, err
+		}
 	}
 	ans, err := c.Ask(ctx, jevState(b), jevQuestions)
 	if err != nil {
 		return jobs.Job{}, err
 	}
-	return s.SubmitRating(ctx, JevVerdict(id, ans))
+	return s.SubmitRating(ctx, decisionVerdict(id, model, ans))
 }
 
 // JevRateQueue rates up to limit unrated jobs with Jev (oldest first). It
@@ -194,10 +191,10 @@ func (s *Service) JevRateQueue(ctx context.Context, limit int) (rated int, err e
 	return rated, nil
 }
 
-// jevIsDefault reports whether the board badge belongs to a Jev model.
+// jevIsDefault reports whether the board badge belongs to a decision model.
 func (s *Service) jevIsDefault(ctx context.Context) bool {
 	c, err := s.raterConfig(ctx)
-	return err == nil && IsJevModel(c.DefaultModel)
+	return err == nil && IsDecisionModel(c.DefaultModel)
 }
 
 // jevOptOutKey is the settings key set when the user chose not to send their
@@ -228,7 +225,7 @@ func (s *Service) SetJevOptOut(ctx context.Context, out bool) error {
 // (or the out-of-box rater) take over, so Rate asks their own AI instead.
 func (s *Service) raterConfig(ctx context.Context) (rating.Config, error) {
 	cfg, err := s.RatingConfig(ctx)
-	if err != nil || !IsJevModel(cfg.DefaultModel) {
+	if err != nil || !IsDecisionModel(cfg.DefaultModel) {
 		return cfg, err
 	}
 	if out, err := s.JevOptedOut(ctx); err != nil || !out {
@@ -236,17 +233,16 @@ func (s *Service) raterConfig(ctx context.Context) (rating.Config, error) {
 	}
 	var models []string
 	for _, m := range cfg.Models {
-		if !IsJevModel(m) {
+		if !IsDecisionModel(m) {
 			models = append(models, m)
 		}
 	}
 	return rating.Normalize(rating.Config{ABEnabled: cfg.ABEnabled && len(models) > 1, Models: models}), nil
 }
 
-// JevAvailable reports whether a Jev key (or client) is there to rate with.
-func (s *Service) JevAvailable() bool {
-	_, err := s.jevClient()
-	return err == nil
+// JevAvailable reports whether the chosen decision model has a key to rate with.
+func (s *Service) JevAvailable(ctx context.Context) bool {
+	return s.decisionKeyAvailable(ctx)
 }
 
 // autoEnableJev makes Jev the rater on a board that has a Jev key and where the
@@ -264,10 +260,8 @@ func (s *Service) autoEnableJev(ctx context.Context) bool {
 	if err != nil || chosen {
 		return false
 	}
-	if s.jev == nil {
-		if _, _, err := loadJevKey(); err != nil {
-			return false
-		}
+	if !s.decisionKeyAvailable(ctx) {
+		return false
 	}
 	_, err = s.EnableJev(ctx)
 	return err == nil
@@ -280,7 +274,7 @@ func (s *Service) runJevRate(ctx context.Context) (CrawlResult, error) {
 	if !s.autoEnableJev(ctx) {
 		return res, nil
 	}
-	if _, err := s.jevClient(); err != nil {
+	if _, _, _, err := s.decisionClient(ctx); err != nil {
 		return res, err
 	}
 	n, err := s.JevRateQueue(ctx, 20)
@@ -291,23 +285,25 @@ func (s *Service) runJevRate(ctx context.Context) (CrawlResult, error) {
 	return res, err
 }
 
-// EnableJev makes Jev the default rater (the badge) and keeps the current
-// raters as A/B challengers, up to the 3-model cap.
+// EnableJev makes the chosen decision model (Jev or Clef) the default rater
+// (the badge) and keeps the other raters as A/B challengers, up to the
+// 3-model cap.
 func (s *Service) EnableJev(ctx context.Context) (rating.Config, error) {
-	if _, err := s.jevClient(); err != nil {
+	_, model, _, err := s.decisionClient(ctx)
+	if err != nil {
 		return rating.Config{}, err
 	}
 	cur, err := s.RatingConfig(ctx)
 	if err != nil {
 		return rating.Config{}, err
 	}
-	models := []string{jev.DefaultModel}
+	models := []string{model}
 	for _, m := range cur.Models {
-		if m != jev.DefaultModel && len(models) < rating.MaxModels {
+		if !IsDecisionModel(m) && len(models) < rating.MaxModels {
 			models = append(models, m)
 		}
 	}
-	return s.SetRatingConfig(ctx, rating.Config{ABEnabled: len(models) > 1, Models: models, DefaultModel: jev.DefaultModel})
+	return s.SetRatingConfig(ctx, rating.Config{ABEnabled: len(models) > 1, Models: models, DefaultModel: model})
 }
 
 // JevKeySource says where the Jev key would come from ("" when none), for doctor.

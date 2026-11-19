@@ -102,6 +102,8 @@ func Handler(st *store.Store, svc *service.Service, token string) http.Handler {
 	mux.HandleFunc("PUT /api/rating-config", s.putRatingConfig)
 	mux.HandleFunc("GET /api/jev", s.getJev)
 	mux.HandleFunc("PUT /api/jev", s.putJev)
+	mux.HandleFunc("GET /api/decision", s.getDecision)
+	mux.HandleFunc("PUT /api/decision", s.putDecision)
 	mux.HandleFunc("GET /api/crawl-status", s.getCrawlStatus)
 	mux.HandleFunc("GET /api/activity", s.getActivity)
 	mux.HandleFunc("GET /api/events", s.events)
@@ -313,7 +315,7 @@ func (s *server) putRatingConfig(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) jevState(r *http.Request) (JevState, error) {
 	out, err := s.svc.JevOptedOut(r.Context())
-	return JevState{Available: s.svc.JevAvailable(), OptOut: out}, err
+	return JevState{Available: s.svc.JevAvailable(r.Context()), OptOut: out}, err
 }
 
 func (s *server) getJev(w http.ResponseWriter, r *http.Request) {
@@ -331,6 +333,23 @@ func (s *server) putJev(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := s.jevState(r)
+	reply(w, http.StatusOK, v, err)
+}
+
+// getDecision reports the decision model in use (Jev or Clef) and whether
+// each has a key. Keys are write-only: they're never sent back.
+func (s *server) getDecision(w http.ResponseWriter, r *http.Request) {
+	v, err := s.svc.DecisionSettings(r.Context())
+	reply(w, http.StatusOK, v, err)
+}
+
+// putDecision saves pasted keys, the Clef account and model, and the provider.
+func (s *server) putDecision(w http.ResponseWriter, r *http.Request) {
+	var in service.DecisionUpdate
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := s.svc.SetDecisionSettings(r.Context(), in)
 	reply(w, http.StatusOK, v, err)
 }
 
