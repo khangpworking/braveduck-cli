@@ -108,7 +108,7 @@ func NewServer(svc *service.Service) *mcp.Server {
 	add(srv, "follow_facebook_group", "Follow a Facebook group by its link (facebook.com/groups/…). braveduck's scanner checks whether it's public; a public group's new posts that match the user's search terms then come to the board by themselves. A private group's posts are only for its members: the user pastes the ones they want (add_job with the post link and text).", write, t.followGroup)
 	add(srv, "list_facebook_groups", "The Facebook groups the user follows, each with its name and visibility (checking, public, private or unavailable).", readOnly, t.listGroups)
 	add(srv, "unfollow_facebook_group", "Stop following a Facebook group (by its key from list_facebook_groups). Jobs already on the board stay.", destructive, t.unfollowGroup)
-	add(srv, "rate_with_jev", "Rate one job now with Jev (TypeSafe AI's decision model): A-F with probabilities and criterion-based reasons. Sends the user's profile and the job text to api.typesafe.ai.", write, t.rateWithJev)
+	add(srv, "rate_with_jev", "Rate one job now with the board's decision model, Jev (TypeSafe AI) or Clef (Cloudflare Workers AI), whichever the user picked in Settings → Rating: A-F with probabilities and criterion-based reasons. Sends the user's profile and the job text to that service.", write, t.rateWithJev)
 	add(srv, "set_rating_config", "Set which model ids (1-3) score jobs, which one is the default (owns the badge), and whether A/B challengers run.", idempotentWrite, t.setRatingConfig)
 
 	// Surfaced so an agent can see the whole pipeline; each fails honestly

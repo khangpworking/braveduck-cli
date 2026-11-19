@@ -103,6 +103,47 @@ export interface SourceSchedule {
 }
 
 //////////
+// source: decision.go
+
+/**
+ * Decision providers.
+ */
+export const ProviderJev = "jev";
+/**
+ * Decision providers.
+ */
+export const ProviderClef = "clef";
+/**
+ * KeyState says whether a provider has a key, never the key itself.
+ */
+export interface KeyState {
+  saved: boolean; // pasted in Settings (sealed in the vault)
+  source?: string; // the key in use: "settings", an env var or a file path; "" when none
+}
+/**
+ * DecisionSettings is what Settings → Rating shows about the decision models.
+ */
+export interface DecisionSettings {
+  provider: 'jev' | 'clef';
+  model: string; // the rater id its verdicts carry
+  jev: KeyState;
+  clef: KeyState;
+  clef_account_id?: string; // not a secret
+  clef_model: 'clef-flash' | 'clef';
+}
+/**
+ * DecisionUpdate changes the decision settings; a nil field is left alone and
+ * an empty key removes the pasted one.
+ */
+export interface DecisionUpdate {
+  provider?: 'jev' | 'clef';
+  jev_key?: string;
+  clef_token?: string;
+  clef_account_id?: string;
+  clef_model?: 'clef-flash' | 'clef';
+}
+
+//////////
 // source: documents.go
 
 /**

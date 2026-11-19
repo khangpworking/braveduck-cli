@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/khangpworking/braveduck-cli/internal/core/jev"
 	"github.com/khangpworking/braveduck-cli/internal/core/jobs"
 	"github.com/khangpworking/braveduck-cli/internal/core/rating"
 )
@@ -240,14 +239,14 @@ func (s *Service) RequestRating(ctx context.Context, id int64, model string) (Ra
 		}
 		model = cfg.DefaultModel
 	}
-	if IsJevModel(model) {
+	if IsDecisionModel(model) {
 		j, err := s.JevRate(ctx, id)
 		if err != nil {
 			return RatingRequest{}, err
 		}
-		// JevRate records the actual supported Jev model, including when it
-		// is a challenger and leaves the top-level board badge unchanged.
-		return RatingRequest{Model: jev.DefaultModel, Rated: true, Job: &j}, nil
+		// JevRate records the decision model in use (Jev or Clef), including
+		// when it is a challenger and leaves the top-level board badge unchanged.
+		return RatingRequest{Model: s.decisionModel(ctx), Rated: true, Job: &j}, nil
 	}
 	b, err := s.RateBrief(ctx, id)
 	if err != nil {

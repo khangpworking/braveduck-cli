@@ -95,6 +95,43 @@ func New(key string) *Client {
 	}
 }
 
+// Clef models: Cloudflare's decision models on Workers AI. They take Jev's
+// request and answer in Jev's shape, wrapped in Cloudflare's {"result": …}.
+const (
+	ClefFlash = "clef-flash" // fast; the default
+	Clef      = "clef"       // larger and slower, for careful ratings
+)
+
+// IsClefModel reports whether id is one of the Clef models.
+func IsClefModel(id string) bool { return id == ClefFlash || id == Clef }
+
+var accountIDRE = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
+
+// ValidAccountID reports whether s looks like a Cloudflare account ID.
+func ValidAccountID(s string) bool { return accountIDRE.MatchString(s) }
+
+// NewClef returns a client for a Clef model on Workers AI, with a Cloudflare
+// API token that has Workers AI permission on accountID.
+func NewClef(token, accountID, model string) *Client {
+	if !IsClefModel(model) {
+		model = ClefFlash
+	}
+	return &Client{
+		Endpoint: "https://api.cloudflare.com/client/v4/accounts/" + strings.ToLower(accountID) + "/ai/run/@cf/cloudflare/" + model,
+		Model:    model,
+		Key:      token,
+		HTTP:     &http.Client{Timeout: 60 * time.Second},
+	}
+}
+
+// name is the service in error messages: "clef" or "jev".
+func (c *Client) name() string {
+	if IsClefModel(c.Model) {
+		return "clef"
+	}
+	return "jev"
+}
+
 var bearerRE = regexp.MustCompile(`(?i)bearer\s+\S+`)
 
 func (c *Client) redact(s string) string {
@@ -117,7 +154,7 @@ func (c *Client) Ask(ctx context.Context, state string, questions map[string]Que
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("jev: %s", c.redact(err.Error()))
+		return nil, fmt.Errorf("%s: %s", c.name(), c.redact(err.Error()))
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -126,18 +163,25 @@ func (c *Client) Ask(ctx context.Context, state string, questions map[string]Que
 		if len(msg) > 200 {
 			msg = msg[:200]
 		}
-		return nil, fmt.Errorf("jev: HTTP %d: %s", resp.StatusCode, c.redact(msg))
+		return nil, fmt.Errorf("%s: HTTP %d: %s", c.name(), resp.StatusCode, c.redact(msg))
 	}
+	// Jev answers {"answers": …}; Workers AI wraps the same in {"result": …}.
 	var payload struct {
 		Answers map[string]Answer `json:"answers"`
+		Result  *struct {
+			Answers map[string]Answer `json:"answers"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil || payload.Answers == nil {
-		return nil, errors.New("jev: unexpected response (no answers)")
+	if err := json.Unmarshal(raw, &payload); err == nil && payload.Answers == nil && payload.Result != nil {
+		payload.Answers = payload.Result.Answers
+	}
+	if payload.Answers == nil {
+		return nil, fmt.Errorf("%s: unexpected response (no answers)", c.name())
 	}
 	for name, q := range questions {
 		a, ok := payload.Answers[name]
 		if !ok || !validAnswer(a, q) {
-			return nil, fmt.Errorf("jev: invalid answer for %q", name)
+			return nil, fmt.Errorf("%s: invalid answer for %q", c.name(), name)
 		}
 	}
 	return payload.Answers, nil

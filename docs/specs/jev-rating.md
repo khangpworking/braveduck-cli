@@ -11,6 +11,31 @@ decision model. It answers **multiple-choice questions** about a text
 (`state`) and returns a choice plus a probability for every option. It doesn't
 write text, so CVs and emails stay with the user's own AI.
 
+## Clef, the other decision model
+
+Owner choice (2026-11-20): Cloudflare's **Clef** can rate instead of Jev. Clef
+(`clef-flash`, the default, or the larger `clef`) runs on Workers AI at
+`https://api.cloudflare.com/client/v4/accounts/<account>/ai/run/@cf/cloudflare/<model>`
+and takes Jev's request and answer format, wrapped in Cloudflare's
+`{"result": …}`. braveduck asks it the same questions and scores the answers
+the same way; its reasons start with "Clef:".
+
+- **Switch:** ⚙ Settings → Rating → Rating model (Jev or Clef), or
+  `PUT /api/decision {"provider": "clef"}`. Switching provider or Clef model
+  replaces the decision model among the raters with the new one, keeping its
+  role (badge or challenger). A board with no saved rater config is left
+  alone; the scheduled run enables the chosen model once it has a key.
+- **Keys:** pasted per user in Settings (a TypeSafe key for Jev; a Cloudflare
+  API token with Workers AI permission plus the account ID for Clef). They are
+  sealed with the session vault (`internal/core/vault`, AES-GCM, bound to
+  their slot) before they reach the database, and no reply, log or MCP answer
+  carries them back: the board only learns whether one is saved. A pasted Jev
+  key wins over `TYPESAFE_API_KEY` and the key files.
+- **Daily cap:** `serve --users`'s `--jev-daily-limit` only counts calls paid
+  by the server's key (environment or key file); a user's own pasted key or
+  Clef token isn't capped.
+- The opt-out ("Don't send my profile…") covers both models.
+
 ## How braveduck rates with it
 
 - **State:** the user's profile (template scaffolding stripped), then the job:

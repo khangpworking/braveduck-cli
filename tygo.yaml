@@ -46,6 +46,7 @@ packages:
       - "apply.go"
       - "documents.go"
       - "rating.go"
+      - "decision.go"
       - "facebook.go"
       - "stats.go"
       - "sources.go"

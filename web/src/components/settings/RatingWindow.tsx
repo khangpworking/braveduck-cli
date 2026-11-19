@@ -1,5 +1,6 @@
-// How jobs get rated: one line, Jev's notice and opt-out where Jev rates,
-// and the raters (for whoever runs their own AI) under Advanced.
+// How jobs get rated: one line, the rating model (Jev or Clef) and its keys,
+// its notice and opt-out, and the raters (for whoever runs their own AI)
+// under Advanced.
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
@@ -11,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Body, CloseButton, Field, Footer, Loading, Problem, Win, useErr, useFresh, type WinProps } from './parts'
+import { DecisionModel } from './DecisionModel'
 
 export function RatingWindow(p: WinProps) {
   const { t } = useTranslation()
@@ -26,10 +28,12 @@ function RatingBody({ close }: { close: () => void }) {
   const err = useErr()
   const cfg = useFresh(Q.rating, S.rating)
   const jev = useFresh(Q.jev, S.jev)
+  const decision = useFresh(Q.decision, S.decision)
   return (
     <>
       <Body>
-        {jev.ready && <JevBlock jev={jev.data} />}
+        {decision.ready && <DecisionModel saved={decision.data} />}
+        {jev.ready && <JevBlock jev={jev.data} clef={decision.ready && decision.data.provider === 'clef'} />}
         {cfg.isError ? <Problem>{err(cfg.error)}</Problem> : cfg.ready ? <Raters saved={cfg.data} close={close} /> : <Loading />}
       </Body>
       <Footer>
@@ -42,7 +46,7 @@ function RatingBody({ close }: { close: () => void }) {
   )
 }
 
-function JevBlock({ jev }: { jev: Jev }) {
+function JevBlock({ jev, clef }: { jev: Jev; clef: boolean }) {
   const { t } = useTranslation()
   const err = useErr()
   const qc = useQueryClient()
@@ -55,10 +59,14 @@ function JevBlock({ jev }: { jev: Jev }) {
   const out = set.isPending ? set.variables : jev.opt_out
   return (
     <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
-      {!out && <p className="text-small text-muted-foreground">{t("Your profile and jobs are sent to TypeSafe's Jev to rate them.")}</p>}
+      {!out && (
+        <p className="text-small text-muted-foreground">
+          {clef ? t("Your profile and jobs are sent to Cloudflare's Clef to rate them.") : t("Your profile and jobs are sent to TypeSafe's Jev to rate them.")}
+        </p>
+      )}
       <label className="flex min-h-11 cursor-pointer items-center gap-3">
         <Checkbox className="size-5" checked={out} disabled={set.isPending} onCheckedChange={v => set.mutate(v === true)} />
-        {t("Don't send my profile to Jev")}
+        {clef ? t("Don't send my profile to Clef") : t("Don't send my profile to Jev")}
       </label>
     </div>
   )

@@ -106,8 +106,14 @@ deal-breakers. Rating stays off while the profile is empty.
 - **Jev (default).** braveduck sends your profile and the job's text to
   TypeSafe's Jev decision model (`api.typesafe.ai`) and stores the verdict —
   every 30 minutes for new jobs while the board runs. Key in
-  `~/.config/jev-route/typesafe.env`; `braveduck jev status` shows what is
-  sent. See `docs/specs/jev-rating.md`.
+  `~/.config/jev-route/typesafe.env`, or paste it on the board under
+  ⚙ Settings → Rating; `braveduck jev status` shows what is sent. See
+  `docs/specs/jev-rating.md`.
+- **Clef instead of Jev.** Cloudflare's Clef decision models (`clef-flash`,
+  fast, or `clef`, careful) answer the same questions on Workers AI. Paste a
+  Cloudflare API token with Workers AI permission and your account ID under
+  ⚙ Settings → Rating and switch the rating model to Clef; switching moves the
+  badge (or the challenger slot) to the new model.
 - **Your own AI.** From an agent over MCP, ask *"rate my unrated jobs"*
   (`get_rating_queue` → `submit_rating`). From any chat, `braveduck rate`
   prints a ready-to-paste brief and the AI answers with
