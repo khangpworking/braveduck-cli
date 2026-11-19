@@ -317,6 +317,7 @@ func TestAppRatingJevOptOut(t *testing.T) {
 	page.MustWait(`() => ![...document.querySelectorAll("[role=dialog] p")].some(p => p.textContent.includes("TypeSafe's Jev"))`)
 
 	tap(page, "[role=dialog] button", "^Advanced$")
+	page.MustElement("[role=dialog] #rater-choice").MustSelect("Another AI (type its model id)")
 	page.MustElement("[role=dialog] #rater-default").MustSelectAllText().MustInput("my-rater")
 	tap(page, "[role=dialog] [data-advanced] button", "^Save$")
 	waitUntil(t, func() bool { return must(svc.RatingConfig(ctx)).DefaultModel == "my-rater" }, "the rater wasn't saved")
