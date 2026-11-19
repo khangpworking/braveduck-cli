@@ -55,3 +55,33 @@ func TestAppRatingModelKeysAndSwitch(t *testing.T) {
 		t.Fatal("a pasted key is still on the page")
 	}
 }
+
+// Advanced → Default rater is a dropdown: picking Clef also switches the
+// rating model, so the badge and the model that rates agree; Another AI asks
+// for its model id.
+func TestAppDefaultRaterDropdown(t *testing.T) {
+	ctx := context.Background()
+	page, svc := settingsApp(t, appJobs(), 1280, func(svc *service.Service) {
+		dir := t.TempDir()
+		key := make([]byte, 32)
+		rand.Read(key)
+		os.WriteFile(filepath.Join(dir, "session.key"), key, 0o600) // never the real keychain
+		svc.SetDataDir(dir)
+	})
+	openWin(t, page, "^Rating$", "How jobs get rated")
+	tap(page, "[role=dialog] button", "^Advanced$")
+	page.MustElement("[role=dialog] #rater-choice").MustSelect("Clef, careful (clef)")
+	page.MustWait(`() => !document.querySelector("[role=dialog] #rater-default")`)
+	tap(page, "[role=dialog] [data-advanced] button", "^Save$")
+	waitUntil(t, func() bool {
+		d := must(svc.DecisionSettings(ctx))
+		return d.Provider == service.ProviderClef && d.ClefModel == "clef" && must(svc.RatingConfig(ctx)).DefaultModel == "clef"
+	}, "picking Clef didn't switch the rating model and the badge to clef")
+
+	openWin(t, page, "^Rating$", "How jobs get rated")
+	tap(page, "[role=dialog] button", "^Advanced$")
+	page.MustElement("[role=dialog] #rater-choice").MustSelect("Another AI (type its model id)")
+	page.MustElement("[role=dialog] #rater-default").MustInput("claude-opus-5-5")
+	tap(page, "[role=dialog] [data-advanced] button", "^Save$")
+	waitUntil(t, func() bool { return must(svc.RatingConfig(ctx)).DefaultModel == "claude-opus-5-5" }, "the typed rater wasn't saved")
+}

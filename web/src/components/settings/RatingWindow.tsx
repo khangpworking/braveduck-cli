@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
-import { Body, CloseButton, Field, Footer, Loading, Problem, Win, useErr, useFresh, type WinProps } from './parts'
+import { Body, CloseButton, Field, Footer, Loading, Problem, Select, Win, useErr, useFresh, type WinProps } from './parts'
 import { DecisionModel } from './DecisionModel'
 
 export function RatingWindow(p: WinProps) {
@@ -72,21 +72,37 @@ function JevBlock({ jev, clef }: { jev: Jev; clef: boolean }) {
   )
 }
 
+// The rating models the board runs itself; anything else is an AI the user
+// connects, typed by its model id.
+const BUILT_IN_RATERS = ['jev-1.13.0', 'clef-flash', 'clef'] as const
+type BuiltIn = (typeof BUILT_IN_RATERS)[number]
+const OTHER = 'other'
+const isBuiltIn = (m: string): m is BuiltIn => (BUILT_IN_RATERS as readonly string[]).includes(m)
+
 function Raters({ saved, close }: { saved: RatingConfig; close: () => void }) {
   const { t } = useTranslation()
   const err = useErr()
   const qc = useQueryClient()
   const [ab, setAB] = useState(saved.ab_mode)
-  const [def, setDef] = useState(saved.default_model)
+  const [choice, setChoice] = useState<string>(isBuiltIn(saved.default_model) ? saved.default_model : OTHER)
+  const [def, setDef] = useState(isBuiltIn(saved.default_model) ? '' : saved.default_model)
   const [rivals, setRivals] = useState(saved.models.filter(m => m !== saved.default_model).join(', '))
   const save = useMutation({
-    mutationFn: () => {
-      const d = def.trim()
+    mutationFn: async () => {
+      const d = choice === OTHER ? def.trim() : choice
+      // Jev or Clef rates on the board: switch the rating model to it first, so
+      // the badge and the model that rates agree.
+      if (isBuiltIn(d)) {
+        const clef = d !== 'jev-1.13.0'
+        await S.saveDecision(clef ? { provider: 'clef', clef_model: d } : { provider: 'jev' })
+      }
       const others = rivals.split(',').map(s => s.trim()).filter(s => s && s !== d)
       return S.saveRating({ default_model: d, ab_mode: ab, models: [d, ...new Set(others)] })
     },
     onSuccess: c => {
       qc.setQueryData(Q.rating, c)
+      void qc.invalidateQueries({ queryKey: Q.decision })
+      void qc.invalidateQueries({ queryKey: Q.jev })
       void qc.invalidateQueries({ queryKey: ['jobs'] })
       toast.success(t('Rating config updated!'))
       close()
@@ -107,16 +123,26 @@ function Raters({ saved, close }: { saved: RatingConfig; close: () => void }) {
           {t('Enable A/B Rating Mode (Score using multiple models simultaneously)')}
         </label>
         <p className="text-small text-muted-foreground">
-          {t('Raters are whichever AI you connect (e.g. Claude Code over MCP). Use the model id it reports when it submits ratings.')}
+          {t('Jev and Clef rate on the board itself. Another AI you connect (e.g. Claude Code over MCP) rates under the model id it reports when it submits ratings.')}
         </p>
-        <Field label={t('Default rater (owns the score badge)')} htmlFor="rater-default">
-          <Input id="rater-default" value={def} onChange={e => setDef(e.target.value)} placeholder={t('e.g. claude-opus-5-5')} className="h-11" />
+        <Field label={t('Default rater (owns the score badge)')} htmlFor="rater-choice">
+          <Select id="rater-choice" className="w-full" value={choice} onChange={e => setChoice(e.target.value)}>
+            <option value="jev-1.13.0">{t('Jev (TypeSafe)')}</option>
+            <option value="clef-flash">{t('Clef, fast (clef-flash)')}</option>
+            <option value="clef">{t('Clef, careful (clef)')}</option>
+            <option value={OTHER}>{t('Another AI (type its model id)')}</option>
+          </Select>
         </Field>
+        {choice === OTHER && (
+          <Field label={t('Model id of your AI')} htmlFor="rater-default">
+            <Input id="rater-default" value={def} onChange={e => setDef(e.target.value)} placeholder={t('e.g. claude-opus-5-5')} className="h-11" />
+          </Field>
+        )}
         <Field label={t('Challenger raters (A/B mode, up to 2, comma-separated)')} htmlFor="rater-rivals">
           <Input id="rater-rivals" value={rivals} onChange={e => setRivals(e.target.value)} placeholder={t('e.g. gpt-sol-6-1, gemini-3-8')} className="h-11" />
         </Field>
         {save.isError && <Problem>{err(save.error)}</Problem>}
-        <Button variant="secondary" className="h-11" disabled={save.isPending} onClick={() => save.mutate()}>
+        <Button variant="secondary" className="h-11" disabled={save.isPending || (choice === OTHER && !def.trim())} onClick={() => save.mutate()}>
           {save.isPending ? t('Saving…') : t('Save')}
         </Button>
       </div>
