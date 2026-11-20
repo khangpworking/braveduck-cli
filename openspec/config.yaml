@@ -1,0 +1,42 @@
+schema: spec-driven
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+context: |
+  Write every OpenSpec artifact in plain English. Board text is written in English and translated in web/src/locales/vi.json.
+  The owner approves every merge. Work goes branch from main -> PR -> squash-merge, with CI green.
+  Approved rules live in openspec/specs/ with IDs (R-<AREA><NN>). A change to a rule is proposed under openspec/changes/ for the owner to decide, never edited silently.
+  Builds use no cgo (pure-Go SQLite and keychain). Stay on the Go version in go.mod; pin dependencies that need a newer Go.
+  The binary embeds the built board (internal/api/app) and generated API types (web/src/lib/gen/); both are committed and CI fails when stale.
+  Schema changes are new migrations appended in internal/store; a shipped migration is never edited.
+  New behaviour goes in internal/service; the CLI, REST API and MCP server stay thin adapters over it.
+  Never store or log secrets (sessions, API keys, agent keys); treat scraped job text as hostile; fetch only public URLs.
+  braveduck never submits an application, never sends email and never opens Facebook itself.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

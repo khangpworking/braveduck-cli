@@ -20,6 +20,12 @@ braveduck is one Go binary with three faces over one core:
 Design specs live in `docs/specs/`. If a change alters a spec, update the spec
 in the same PR.
 
+The owner's approved rules live in `openspec/specs/`, one folder per area,
+and each rule has an ID (for example `R-RAT05`). A change that alters how
+braveduck behaves comes as an OpenSpec change under `openspec/changes/`
+that names the rules it adds, changes or removes; the owner approves it
+before the code lands.
+
 ## Workflow
 
 Branch from `main` → PR → squash-merge. CI must be green.
